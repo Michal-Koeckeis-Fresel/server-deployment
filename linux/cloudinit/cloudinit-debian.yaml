@@ -1,0 +1,40 @@
+#cloud-config
+# Author: Michal Koeckeis-Fresel
+# License: MIT
+
+# Update package cache and upgrade system
+package_update: true
+package_upgrade: true
+
+# Install required packages
+packages:
+  - rsyslog
+  - fail2ban
+  - logrotate
+
+# Run commands after package installation
+runcmd:
+  # Enable fail2ban service
+  - systemctl enable fail2ban
+  
+  # Download custom fail2ban jail.local configuration
+  - curl -o /etc/fail2ban/jail.local https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/main/linux/fail2ban/jail.local
+  
+  # Reload fail2ban to apply new configuration
+  - systemctl reload fail2ban
+  
+  # Download bash history configuration
+  - curl -o /etc/profile.d/history-config.sh https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/main/linux/cloudinit/history-config.sh
+  - chmod 644 /etc/profile.d/history-config.sh
+  
+  # Download and execute swap creation script
+  - curl -o /tmp/create_swap.sh https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/main/linux/cloudinit/create_swap.sh
+  - chmod +x /tmp/create_swap.sh
+  - /tmp/create_swap.sh
+
+# Reboot after all configuration is complete
+power_state:
+  mode: reboot
+  message: "Rebooting after initial setup"
+  timeout: 30
+  condition: true
