@@ -27,7 +27,6 @@ PACKAGE_MANAGER=""
 ARCH=""
 
 # Configuration variables
-SAFELINE_INSTALL_DIR="/data/safeline"
 SAFELINE_MGT_PORT="9443"
 MIN_MEMORY_GB=1
 MIN_DISK_GB=5
@@ -442,15 +441,6 @@ verify_docker_installation() {
 configure_system_for_safeline() {
     log_step "Configuring system for SafeLine..."
     
-    # Create SafeLine directory
-    if [ ! -d "$SAFELINE_INSTALL_DIR" ]; then
-        log_info "Creating SafeLine installation directory: $SAFELINE_INSTALL_DIR"
-        mkdir -p "$SAFELINE_INSTALL_DIR"
-        log_success "✓ Installation directory created"
-    else
-        log_warning "⚠ Installation directory already exists: $SAFELINE_INSTALL_DIR"
-    fi
-    
     # Check if management port is available
     if command_exists netstat; then
         if netstat -tuln | grep -q ":$SAFELINE_MGT_PORT "; then
@@ -530,29 +520,19 @@ configure_docker_user_access() {
     fi
 }
 
-# Download SafeLine installer
-download_safeline_installer() {
-    log_step "Downloading SafeLine installer..."
+# Show SafeLine installation instructions
+show_safeline_installation_instructions() {
+    log_step "SafeLine WAF Installation Instructions"
     
-    local installer_url="https://waf-ce.chaitin.cn/release/latest/setup.sh"
-    local installer_path="/tmp/safeline-installer.sh"
-    
-    if curl -fsSL "$installer_url" -o "$installer_path"; then
-        chmod +x "$installer_path"
-        log_success "✓ SafeLine installer downloaded to $installer_path"
-        
-        # Verify the installer
-        if head -1 "$installer_path" | grep -q "#!/"; then
-            log_success "✓ Installer script verified"
-            return 0
-        else
-            log_error "✗ Downloaded installer appears corrupted"
-            return 1
-        fi
-    else
-        log_error "✗ Failed to download SafeLine installer"
-        return 1
-    fi
+    echo
+    log_info "Your system is now ready for SafeLine WAF installation."
+    echo
+    echo -e "${YELLOW}To install SafeLine WAF, run the following command:${NC}"
+    echo
+    echo -e "   ${GREEN}bash -c \"\$(curl -fsSLk https://waf.chaitin.com/release/latest/manager.sh)\" -- --en${NC}"
+    echo
+    log_info "This will download and run the official SafeLine installer with English interface."
+    echo
 }
 
 # Show final instructions
@@ -568,21 +548,10 @@ show_final_instructions() {
     echo
     echo -e "${CYAN}Your system is now ready for SafeLine WAF installation.${NC}"
     echo
-    echo -e "${YELLOW}Next steps:${NC}"
-    
-    if [ -f "/tmp/safeline-installer.sh" ]; then
-        echo "1. Run the SafeLine installer:"
-        echo -e "   ${GREEN}bash /tmp/safeline-installer.sh${NC}"
-        echo
-        echo "2. Or download and run the latest installer:"
-    else
-        echo "1. Download and run the SafeLine installer:"
-    fi
-    
-    echo -e "   ${GREEN}curl -fsSL https://waf-ce.chaitin.cn/release/latest/setup.sh | bash${NC}"
+    echo -e "${YELLOW}To install SafeLine WAF:${NC}"
+    echo -e "   ${GREEN}bash -c \"\$(curl -fsSLk https://waf.chaitin.com/release/latest/manager.sh)\" -- --en${NC}"
     echo
     echo -e "${YELLOW}Configuration details:${NC}"
-    echo "• Installation directory: $SAFELINE_INSTALL_DIR"
     echo "• Default management port: $SAFELINE_MGT_PORT"
     echo "• Docker service: Active"
     echo
@@ -669,7 +638,7 @@ main() {
     verify_docker_installation
     configure_system_for_safeline
     configure_docker_user_access
-    download_safeline_installer
+    show_safeline_installation_instructions
     show_final_instructions
 }
 
