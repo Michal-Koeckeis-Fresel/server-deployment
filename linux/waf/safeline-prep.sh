@@ -673,8 +673,6 @@ main() {
     show_final_instructions
 }
 
-# Check if script is being sourced or executed
-# More reliable detection for piped execution
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]] || [[ -z "${BASH_SOURCE[0]}" ]]; then
-    main "$@"
-fi
+# Always run main function when script is executed
+# This script is designed to be run directly, not sourced
+main "$@"
