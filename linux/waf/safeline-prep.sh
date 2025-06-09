@@ -478,9 +478,9 @@ configure_system_for_safeline() {
                 if ufw status | grep -q "Status: active"; then
                     log_warning "⚠ UFW is active - you may need to allow SafeLine ports"
                     echo "  Suggested commands after SafeLine installation:"
-                    echo "  sudo ufw allow $SAFELINE_MGT_PORT/tcp  # Management interface"
-                    echo "  sudo ufw allow 80/tcp                 # HTTP traffic"
-                    echo "  sudo ufw allow 443/tcp                # HTTPS traffic"
+                    echo "  ufw allow $SAFELINE_MGT_PORT/tcp  # Management interface"
+                    echo "  ufw allow 80/tcp                 # HTTP traffic"
+                    echo "  ufw allow 443/tcp                # HTTPS traffic"
                 fi
             fi
             ;;
@@ -489,10 +489,10 @@ configure_system_for_safeline() {
                 log_info "Firewalld detected and active"
                 log_warning "⚠ You may need to configure firewall rules for SafeLine"
                 echo "  Suggested commands after SafeLine installation:"
-                echo "  sudo firewall-cmd --permanent --add-port=$SAFELINE_MGT_PORT/tcp"
-                echo "  sudo firewall-cmd --permanent --add-service=http"
-                echo "  sudo firewall-cmd --permanent --add-service=https"
-                echo "  sudo firewall-cmd --reload"
+                echo "  firewall-cmd --permanent --add-port=$SAFELINE_MGT_PORT/tcp"
+                echo "  firewall-cmd --permanent --add-service=http"
+                echo "  firewall-cmd --permanent --add-service=https"
+                echo "  firewall-cmd --reload"
             fi
             ;;
         suse)
@@ -500,16 +500,16 @@ configure_system_for_safeline() {
                 log_info "Firewalld detected and active"
                 log_warning "⚠ You may need to configure firewall rules for SafeLine"
                 echo "  Suggested commands after SafeLine installation:"
-                echo "  sudo firewall-cmd --permanent --add-port=$SAFELINE_MGT_PORT/tcp"
-                echo "  sudo firewall-cmd --permanent --add-service=http"
-                echo "  sudo firewall-cmd --permanent --add-service=https"
-                echo "  sudo firewall-cmd --reload"
+                echo "  firewall-cmd --permanent --add-port=$SAFELINE_MGT_PORT/tcp"
+                echo "  firewall-cmd --permanent --add-service=http"
+                echo "  firewall-cmd --permanent --add-service=https"
+                echo "  firewall-cmd --reload"
             elif systemctl is-active --quiet SuSEfirewall2; then
                 log_warning "⚠ SuSEfirewall2 detected - manual configuration required"
                 echo "  Consider switching to firewalld:"
-                echo "  sudo systemctl disable SuSEfirewall2"
-                echo "  sudo systemctl enable firewalld"
-                echo "  sudo systemctl start firewalld"
+                echo "  systemctl disable SuSEfirewall2"
+                echo "  systemctl enable firewalld"
+                echo "  systemctl start firewalld"
             fi
             ;;
     esac
@@ -572,14 +572,14 @@ show_final_instructions() {
     
     if [ -f "/tmp/safeline-installer.sh" ]; then
         echo "1. Run the SafeLine installer:"
-        echo -e "   ${GREEN}sudo bash /tmp/safeline-installer.sh${NC}"
+        echo -e "   ${GREEN}bash /tmp/safeline-installer.sh${NC}"
         echo
         echo "2. Or download and run the latest installer:"
     else
         echo "1. Download and run the SafeLine installer:"
     fi
     
-    echo -e "   ${GREEN}curl -fsSL https://waf-ce.chaitin.cn/release/latest/setup.sh | sudo bash${NC}"
+    echo -e "   ${GREEN}curl -fsSL https://waf-ce.chaitin.cn/release/latest/setup.sh | bash${NC}"
     echo
     echo -e "${YELLOW}Configuration details:${NC}"
     echo "• Installation directory: $SAFELINE_INSTALL_DIR"
