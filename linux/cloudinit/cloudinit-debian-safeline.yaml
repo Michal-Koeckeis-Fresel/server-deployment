@@ -1,0 +1,301 @@
+#cloud-config
+# Enhanced SafeLine WAF System Preparation (Fixed)
+# Author: Michal Koeckeis-Fresel
+# License: MIT
+# 
+# This cloud-init configuration prepares a Debian/Ubuntu system for SafeLine WAF
+# Includes Docker installation, security hardening, and all prerequisites
+
+# Update package cache and upgrade system
+package_update: true
+package_upgrade: true
+
+# Install required packages
+packages:
+  # Basic system packages
+  - rsyslog
+  - fail2ban
+  - logrotate
+  - curl
+  - wget
+  - sudo
+  - gnupg
+  - lsb-release
+  - ca-certificates
+  - apt-transport-https
+  - python3
+  - python3-pip
+  - net-tools
+  - software-properties-common
+
+# Create required directories and files
+write_files: []
+
+# Run commands after package installation
+runcmd:
+  # System requirements check
+  - echo "=== SafeLine WAF System Preparation Starting ==="
+  
+  # Create data directory
+  - mkdir -p /data
+  - chmod 755 /data
+  - echo "✓ Created /data directory"
+  
+  # Check system requirements
+  - |
+    # Memory check (minimum 1GB)
+    MEM_KB=$(grep MemAvailable /proc/meminfo | awk '{print $2}')
+    MEM_GB=$((MEM_KB / 1024 / 1024))
+    if [ $MEM_GB -lt 1 ]; then
+      echo "WARNING: Insufficient memory: ${MEM_GB}GB (minimum: 1GB)"
+    else
+      echo "✓ Memory check passed: ${MEM_GB}GB available"
+    fi
+  
+  # Disk space check (minimum 5GB)
+  - |
+    ROOT_SPACE_KB=$(df / | tail -1 | awk '{print $4}')
+    ROOT_SPACE_GB=$((ROOT_SPACE_KB / 1024 / 1024))
+    if [ $ROOT_SPACE_GB -lt 5 ]; then
+      echo "WARNING: Insufficient disk space: ${ROOT_SPACE_GB}GB (minimum: 5GB)"
+    else
+      echo "✓ Disk space check passed: ${ROOT_SPACE_GB}GB available"
+    fi
+
+  # SSSE3 instruction set check for x86_64 (fixed syntax)
+  - |
+    ARCH=$(uname -m)
+    if [ "$ARCH" = "x86_64" ]; then
+      if grep -q ssse3 /proc/cpuinfo; then
+        echo "✓ SSSE3 instruction set supported"
+      else
+        echo "WARNING: SSSE3 instruction set not supported"
+      fi
+    else
+      echo "ℹ Architecture: $ARCH (skipping SSSE3 check)"
+    fi
+
+  # Detect OS and set appropriate Docker repository
+  - echo "=== Detecting OS and installing Docker ==="
+  - |
+    # Detect OS ID and version
+    . /etc/os-release
+    OS_ID="$ID"
+    CODENAME=$(lsb_release -cs)
+    echo "Detected OS: $OS_ID $CODENAME"
+    
+    # Set Docker repository URL based on OS
+    if [ "$OS_ID" = "ubuntu" ]; then
+      DOCKER_REPO_URL="https://download.docker.com/linux/ubuntu"
+      echo "Using Ubuntu Docker repository"
+    elif [ "$OS_ID" = "debian" ]; then
+      DOCKER_REPO_URL="https://download.docker.com/linux/debian"
+      echo "Using Debian Docker repository"
+    else
+      echo "WARNING: Unsupported OS: $OS_ID"
+      DOCKER_REPO_URL="https://download.docker.com/linux/ubuntu"
+      echo "Falling back to Ubuntu repository"
+    fi
+  
+  # Add Docker's GPG key
+  - |
+    curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+    chmod a+r /usr/share/keyrings/docker-archive-keyring.gpg
+    echo "✓ Added Docker GPG key"
+  
+  # Add Docker repository with proper OS detection
+  - |
+    . /etc/os-release
+    OS_ID="$ID"
+    CODENAME=$(lsb_release -cs)
+    
+    if [ "$OS_ID" = "ubuntu" ]; then
+      DOCKER_REPO_URL="https://download.docker.com/linux/ubuntu"
+    elif [ "$OS_ID" = "debian" ]; then
+      DOCKER_REPO_URL="https://download.docker.com/linux/debian"
+    else
+      DOCKER_REPO_URL="https://download.docker.com/linux/ubuntu"
+    fi
+    
+    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] $DOCKER_REPO_URL $CODENAME stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+    echo "✓ Added Docker repository for $OS_ID $CODENAME"
+  
+  # Update package index
+  - apt-get update -qq
+  
+  # Install Docker with fallback to alternative methods
+  - |
+    echo "Attempting to install Docker..."
+    if apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin; then
+      echo "✓ Docker installed successfully from repository"
+    else
+      echo "Repository installation failed, trying alternative method..."
+      # Install Docker using convenience script as fallback
+      curl -fsSL https://get.docker.com -o get-docker.sh
+      sh get-docker.sh
+      echo "✓ Docker installed using convenience script"
+    fi
+  
+  # Configure Docker service
+  - echo "=== Configuring Docker service ==="
+  - systemctl enable docker
+  - systemctl start docker
+  
+  # Wait for Docker to be ready
+  - sleep 5
+  
+  # Test Docker installation
+  - |
+    if docker run --rm hello-world >/dev/null 2>&1; then
+      echo "✓ Docker installation test successful"
+    else
+      echo "✗ Docker installation test failed"
+      systemctl status docker --no-pager -l
+    fi
+  
+  # Check Docker Compose
+  - |
+    if docker compose version >/dev/null 2>&1; then
+      COMPOSE_VERSION=$(docker compose version --short 2>/dev/null || echo "unknown")
+      echo "✓ Docker Compose plugin available: $COMPOSE_VERSION"
+    elif command -v docker-compose >/dev/null 2>&1; then
+      COMPOSE_VERSION=$(docker-compose version --short 2>/dev/null || echo "unknown")
+      echo "✓ Docker Compose standalone available: $COMPOSE_VERSION"
+    else
+      echo "Installing Docker Compose as fallback..."
+      pip3 install docker-compose
+      echo "✓ Docker Compose installed via pip"
+    fi
+
+  # Security hardening with fail2ban
+  - echo "=== Configuring security hardening ==="
+  - |
+    # Start fail2ban first
+    systemctl start fail2ban
+    systemctl enable fail2ban
+    echo "✓ Started and enabled fail2ban"
+  
+  # Download custom fail2ban jail.local configuration
+  - |
+    if curl -o /etc/fail2ban/jail.local https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/main/linux/fail2ban/jail.local; then
+      echo "✓ Downloaded fail2ban configuration"
+      # Reload fail2ban to apply new configuration
+      systemctl reload fail2ban
+      echo "✓ Applied fail2ban configuration"
+    else
+      echo "⚠ Failed to download fail2ban configuration, using defaults"
+    fi
+  
+  # Download bash history configuration
+  - |
+    if curl -o /etc/profile.d/history-config.sh https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/main/linux/cloudinit/history-config.sh; then
+      chmod 644 /etc/profile.d/history-config.sh
+      echo "✓ Downloaded bash history configuration"
+    else
+      echo "⚠ Failed to download bash history configuration"
+    fi
+  
+  # Download and execute swap creation script
+  - |
+    if curl -o /tmp/create_swap.sh https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/main/linux/cloudinit/create_swap.sh; then
+      chmod +x /tmp/create_swap.sh
+      /tmp/create_swap.sh
+      echo "✓ Swap file configuration completed"
+    else
+      echo "⚠ Failed to download swap creation script"
+      # Create basic swap file as fallback
+      if [ ! -f /swapfile ]; then
+        fallocate -l 1G /swapfile
+        chmod 600 /swapfile
+        mkswap /swapfile
+        swapon /swapfile
+        echo '/swapfile none swap sw 0 0' >> /etc/fstab
+        echo "✓ Created 1GB swap file as fallback"
+      fi
+    fi
+
+  # Configure system for SafeLine
+  - echo "=== Configuring system for SafeLine WAF ==="
+  
+  # Check if management port 9443 is available
+  - |
+    if netstat -tuln 2>/dev/null | grep -q ":9443 "; then
+      echo "WARNING: Port 9443 is already in use - SafeLine installer will prompt for alternative"
+    else
+      echo "✓ Management port 9443 is available"
+    fi
+  
+  # Check and fix DNS configuration
+  - |
+    if [ -f "/etc/resolv.conf" ] && grep -q "nameserver.*%.*" "/etc/resolv.conf"; then
+      echo "WARNING: IPv6 nameservers with scope found - SafeLine installer will offer to fix this"
+    else
+      echo "✓ DNS configuration looks good"
+    fi
+
+  # Configure UFW firewall if present
+  - |
+    if command -v ufw >/dev/null 2>&1; then
+      if ufw status | grep -q "Status: active"; then
+        echo "INFO: UFW firewall is active"
+        echo "After SafeLine installation, you may need to run:"
+        echo "  ufw allow 22/tcp     # SSH access"
+        echo "  ufw allow 9443/tcp   # Management interface"
+        echo "  ufw allow 80/tcp     # HTTP traffic"
+        echo "  ufw allow 443/tcp    # HTTPS traffic"
+      else
+        echo "ℹ UFW firewall is installed but not active"
+      fi
+    else
+      echo "ℹ UFW firewall not installed"
+    fi
+
+  # System information summary
+  - echo "=== System Preparation Summary ==="
+  - |
+    echo "✓ System updated and security packages installed"
+    if command -v docker >/dev/null 2>&1; then
+      DOCKER_VERSION=$(docker --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+      echo "✓ Docker $DOCKER_VERSION installed and running"
+    else
+      echo "✗ Docker installation failed"
+    fi
+    
+    if docker compose version >/dev/null 2>&1 || command -v docker-compose >/dev/null 2>&1; then
+      echo "✓ Docker Compose available"
+    else
+      echo "✗ Docker Compose not available"
+    fi
+    
+    if systemctl is-active --quiet fail2ban; then
+      echo "✓ Fail2ban configured and running"
+    else
+      echo "⚠ Fail2ban may not be running properly"
+    fi
+    
+    if [ -f /swapfile ] || swapon --show | grep -q swap; then
+      echo "✓ Swap configured"
+    else
+      echo "⚠ Swap may not be configured"
+    fi
+    
+    echo "✓ System ready for SafeLine WAF installation"
+    echo ""
+    echo "To install SafeLine WAF, run:"
+    echo 'bash -c "$(curl -fsSLk https://waf.chaitin.com/release/latest/manager.sh)" -- --en'
+    echo ""
+    echo "Default management interface will be available at: https://YOUR_SERVER_IP:9443"
+
+# Final system reboot to ensure all changes take effect
+power_state:
+  mode: reboot
+  message: "Rebooting after SafeLine WAF system preparation"
+  timeout: 60
+  condition: true
+
+# Package repositories configuration (auto-detected)
+apt:
+  sources:
+    docker.list:
+      source: "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/$DISTRIB_ID $DISTRIB_CODENAME stable"
+      keyid: 9DC858229FC7DD38854AE2D88D81803C0EBFCD88
