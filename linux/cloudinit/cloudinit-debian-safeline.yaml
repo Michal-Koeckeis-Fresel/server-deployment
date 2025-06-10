@@ -1,0 +1,191 @@
+#cloud-config
+# Enhanced SafeLine WAF System Preparation
+# Author: Michal Koeckeis-Fresel
+# License: MIT
+# 
+# This cloud-init configuration prepares a Debian/Ubuntu system for SafeLine WAF
+# Includes Docker installation, security hardening, and all prerequisites
+
+# Update package cache and upgrade system
+package_update: true
+package_upgrade: true
+
+# Install required packages
+packages:
+  # Basic system packages
+  - rsyslog
+  - fail2ban
+  - logrotate
+  - curl
+  - wget
+  - sudo
+  - gnupg
+  - lsb-release
+  - ca-certificates
+  - apt-transport-https
+  - python3
+  - python3-pip
+  - net-tools
+  - software-properties-common
+
+# Create required directories and files
+write_files: []
+
+# Run commands after package installation
+runcmd:
+  # System requirements check
+  - echo "=== SafeLine WAF System Preparation Starting ==="
+  
+  # Create data directory
+  - mkdir -p /data
+  - chmod 755 /data
+  - echo "✓ Created /data directory"
+  
+  # Check system requirements
+  - |
+    # Memory check (minimum 1GB)
+    MEM_KB=$(grep MemAvailable /proc/meminfo | awk '{print $2}')
+    MEM_GB=$((MEM_KB / 1024 / 1024))
+    if [ $MEM_GB -lt 1 ]; then
+      echo "WARNING: Insufficient memory: ${MEM_GB}GB (minimum: 1GB)"
+    else
+      echo "✓ Memory check passed: ${MEM_GB}GB available"
+    fi
+  
+  # Disk space check (minimum 5GB)
+  - |
+    ROOT_SPACE_KB=$(df / | tail -1 | awk '{print $4}')
+    ROOT_SPACE_GB=$((ROOT_SPACE_KB / 1024 / 1024))
+    if [ $ROOT_SPACE_GB -lt 5 ]; then
+      echo "WARNING: Insufficient disk space: ${ROOT_SPACE_GB}GB (minimum: 5GB)"
+    else
+      echo "✓ Disk space check passed: ${ROOT_SPACE_GB}GB available"
+    fi
+
+  # SSSE3 instruction set check for x86_64
+  - |
+    ARCH=$(uname -m)
+    if [ "$ARCH" == "x86_64" ]; then
+      if grep -q ssse3 /proc/cpuinfo; then
+        echo "✓ SSSE3 instruction set supported"
+      else
+        echo "WARNING: SSSE3 instruction set not supported"
+      fi
+    fi
+
+  # Install Docker from official repository
+  - echo "=== Installing Docker from official repository ==="
+  
+  # Add Docker's GPG key
+  - curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+  - chmod a+r /usr/share/keyrings/docker-archive-keyring.gpg
+  
+  # Add Docker repository
+  - |
+    CODENAME=$(lsb_release -cs)
+    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $CODENAME stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+  
+  # Update package index
+  - apt-get update -qq
+  
+  # Install Docker
+  - apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+  
+  # Configure Docker service
+  - echo "=== Configuring Docker service ==="
+  - systemctl enable docker
+  - systemctl start docker
+  
+  # Test Docker installation
+  - |
+    if docker run --rm hello-world >/dev/null 2>&1; then
+      echo "✓ Docker installation test successful"
+    else
+      echo "✗ Docker installation test failed"
+    fi
+  
+  # Check Docker Compose
+  - |
+    if docker compose version >/dev/null 2>&1; then
+      COMPOSE_VERSION=$(docker compose version)
+      echo "✓ Docker Compose plugin available: $COMPOSE_VERSION"
+    else
+      echo "✗ Docker Compose not available"
+    fi
+
+  # Security hardening with fail2ban
+  - echo "=== Configuring security hardening ==="
+  - systemctl enable fail2ban
+  
+  # Download custom fail2ban jail.local configuration
+  - curl -o /etc/fail2ban/jail.local https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/main/linux/fail2ban/jail.local
+  
+  # Reload fail2ban to apply new configuration
+  - systemctl reload fail2ban
+  
+  # Download bash history configuration
+  - curl -o /etc/profile.d/history-config.sh https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/main/linux/cloudinit/history-config.sh
+  - chmod 644 /etc/profile.d/history-config.sh
+  
+  # Download and execute swap creation script
+  - curl -o /tmp/create_swap.sh https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/main/linux/cloudinit/create_swap.sh
+  - chmod +x /tmp/create_swap.sh
+  - /tmp/create_swap.sh
+
+  # Configure system for SafeLine
+  - echo "=== Configuring system for SafeLine WAF ==="
+  
+  # Check if management port 9443 is available
+  - |
+    if netstat -tuln 2>/dev/null | grep -q ":9443 "; then
+      echo "WARNING: Port 9443 is already in use - SafeLine installer will prompt for alternative"
+    else
+      echo "✓ Management port 9443 is available"
+    fi
+  
+  # Check and fix DNS configuration
+  - |
+    if [ -f "/etc/resolv.conf" ] && grep -q "nameserver.*%.*" "/etc/resolv.conf"; then
+      echo "WARNING: IPv6 nameservers with scope found - SafeLine installer will offer to fix this"
+    fi
+
+  # Configure UFW firewall if present
+  - |
+    if command -v ufw >/dev/null 2>&1; then
+      if ufw status | grep -q "Status: active"; then
+        echo "INFO: UFW firewall is active"
+        echo "After SafeLine installation, you may need to run:"
+        echo "  ufw allow 9443/tcp  # Management interface"
+        echo "  ufw allow 80/tcp    # HTTP traffic"
+        echo "  ufw allow 443/tcp   # HTTPS traffic"
+      fi
+    fi
+
+  # System information summary
+  - echo "=== System Preparation Summary ==="
+  - |
+    echo "✓ System updated and security packages installed"
+    echo "✓ Docker $(docker --version | grep -oE '[0-9]+\.[0-9]+' | head -1) installed and running"
+    echo "✓ Docker Compose plugin available"
+    echo "✓ Fail2ban configured and running"
+    echo "✓ Swap file created"
+    echo "✓ System ready for SafeLine WAF installation"
+    echo ""
+    echo "To install SafeLine WAF, run:"
+    echo 'bash -c "$(curl -fsSLk https://waf.chaitin.com/release/latest/manager.sh)" -- --en'
+    echo ""
+    echo "Default management interface will be available at: https://YOUR_SERVER_IP:9443"
+
+# Final system reboot to ensure all changes take effect
+power_state:
+  mode: reboot
+  message: "Rebooting after SafeLine WAF system preparation"
+  timeout: 60
+  condition: true
+
+# Package repositories configuration (for future updates)
+apt:
+  sources:
+    docker.list:
+      source: "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $RELEASE stable"
+      keyid: 9DC858229FC7DD38854AE2D88D81803C0EBFCD88
