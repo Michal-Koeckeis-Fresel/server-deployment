@@ -10,7 +10,7 @@ echo "Starting Unbound DNS resolver deployment..."
 # Install unbound package
 echo "Installing unbound package..."
 apt update
-apt install -y unbound
+apt install -y unbound unbound-anchor
 
 # Create backup of original unbound configuration
 echo "Creating backup of original unbound configuration..."
@@ -23,6 +23,8 @@ curl -o /etc/unbound/unbound.conf https://raw.githubusercontent.com/Michal-Koeck
 # Setup unbound control
 echo "Setting up unbound control..."
 unbound-control-setup
+
+unbound-anchor -a /var/lib/unbound/root.key
 
 # Enable and start unbound service
 echo "Enabling and starting unbound service..."
