@@ -24,7 +24,9 @@ curl -o /etc/unbound/unbound.conf https://raw.githubusercontent.com/Michal-Koeck
 echo "Setting up unbound control..."
 unbound-control-setup
 
-unbound-anchor -a /var/lib/unbound/root.key
+mkdir -p /var/lib/unbound
+#unbound-anchor -a /var/lib/unbound/root.key
+curl -o /var/lib/unbound/root.key https://www.internic.net/domain/named.root
 
 # Enable and start unbound service
 echo "Enabling and starting unbound service..."
