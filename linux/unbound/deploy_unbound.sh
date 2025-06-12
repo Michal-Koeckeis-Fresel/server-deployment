@@ -10,7 +10,10 @@ echo "Starting Unbound DNS resolver deployment..."
 # Install unbound package
 echo "Installing unbound package..."
 apt update
-apt install -y unbound unbound-anchor
+
+mkdir -p /var/lib/unbound
+#unbound-anchor -a /var/lib/unbound/root.key
+curl -o /var/lib/unbound/root.key https://www.internic.net/domain/named.root
 
 # Create backup of original unbound configuration
 echo "Creating backup of original unbound configuration..."
@@ -18,15 +21,18 @@ cp /etc/unbound/unbound.conf /etc/unbound/unbound.conf.backup.$(date +%Y%m%d_%H%
 
 # Download optimized unbound configuration
 echo "Downloading optimized unbound configuration..."
-curl -o /etc/unbound/unbound.conf https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/main/linux/unbound/unbound_optimized_config.conf
+curl -o /tmp/unbound.conf https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/main/linux/unbound/unbound_optimized_config.conf
 
+
+
+apt install -y unbound unbound-anchor
+
+cp /tmp/unbound.conf /etc/unbound/unbound.conf
 # Setup unbound control
 echo "Setting up unbound control..."
 unbound-control-setup
 
-mkdir -p /var/lib/unbound
-#unbound-anchor -a /var/lib/unbound/root.key
-curl -o /var/lib/unbound/root.key https://www.internic.net/domain/named.root
+
 
 # Enable and start unbound service
 echo "Enabling and starting unbound service..."
