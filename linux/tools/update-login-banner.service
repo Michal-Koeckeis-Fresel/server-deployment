@@ -1,0 +1,11 @@
+[Unit]
+Description=Update login banner with hostname and IP
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/update-login-banner.sh
+
+[Install]
+WantedBy=multi-user.target

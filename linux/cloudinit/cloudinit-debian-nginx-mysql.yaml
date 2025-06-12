@@ -23,6 +23,7 @@ packages:
   - php-zip
   - php-intl
   - php-bcmath
+  - unbound
 
 # Run commands after package installation
 runcmd:
