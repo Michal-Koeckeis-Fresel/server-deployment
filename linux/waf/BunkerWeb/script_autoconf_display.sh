@@ -10,7 +10,8 @@
 set -e
 
 INSTALL_DIR="/data/BunkerWeb"
-SETUP_MODE="wizard"  # Default to wizard mode
+SETUP_MODE="automated"  # Default to automated mode
+ADMIN_USERNAME="admin"  # Default admin username
 
 # Colors for output
 RED='\033[0;31m'
@@ -21,17 +22,23 @@ NC='\033[0m' # No Color
 
 # Function to display usage
 show_usage() {
-    echo -e "${BLUE}Usage: $0 --type <autoconf|basic|integrated>${NC}"
+    echo -e "${BLUE}Usage: $0 --type <autoconf|basic|integrated> [OPTIONS]${NC}"
     echo ""
-    echo -e "${YELLOW}Options:${NC}"
+    echo -e "${YELLOW}Required Options:${NC}"
     echo -e "  --type autoconf     Use template_autoconf_display.yml"
     echo -e "  --type basic        Use template_basic_display.yml"
     echo -e "  --type integrated   Use template_ui_integrated_display.yml"
     echo ""
+    echo -e "${YELLOW}Optional Parameters:${NC}"
+    echo -e "  --wizard            Enable setup wizard mode (default: automated setup)"
+    echo -e "  --admin-name NAME   Set admin username (default: admin)"
+    echo -e "  -h, --help          Show this help message"
+    echo ""
     echo -e "${YELLOW}Examples:${NC}"
     echo -e "  sudo $0 --type autoconf"
-    echo -e "  sudo $0 --type basic"
-    echo -e "  sudo $0 --type integrated"
+    echo -e "  sudo $0 --type basic --wizard"
+    echo -e "  sudo $0 --type integrated --admin-name myuser"
+    echo -e "  sudo $0 --type autoconf --wizard --admin-name administrator"
     echo ""
 }
 
@@ -42,6 +49,14 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         --type)
             DEPLOYMENT_TYPE="$2"
+            shift 2
+            ;;
+        --wizard)
+            SETUP_MODE="wizard"
+            shift
+            ;;
+        --admin-name)
+            ADMIN_USERNAME="$2"
             shift 2
             ;;
         -h|--help)
@@ -98,6 +113,8 @@ echo -e "${BLUE}================================================${NC}"
 echo ""
 echo -e "${GREEN}Deployment Type:${NC} $DEPLOYMENT_NAME"
 echo -e "${GREEN}Template File:${NC} $TEMPLATE_FILE"
+echo -e "${GREEN}Setup Mode:${NC} $(if [[ $SETUP_MODE == "automated" ]]; then echo "Automated"; else echo "Setup Wizard"; fi)"
+echo -e "${GREEN}Admin Username:${NC} $ADMIN_USERNAME"
 echo ""
 
 # Check if running as root
@@ -154,19 +171,12 @@ echo -e "${GREEN}✓ MySQL password generated${NC}"
 TOTP_SECRET=$(generate_password)
 echo -e "${GREEN}✓ TOTP secret generated${NC}"
 
-# Display setup options
-echo -e "${BLUE}================================================${NC}"
-echo -e "${BLUE}          Setup Configuration${NC}"
-echo -e "${BLUE}================================================${NC}"
-echo ""
-echo -e "${YELLOW}Choose your setup method:${NC}"
-echo ""
-echo -e "${GREEN}1. Setup Wizard (Default)${NC} - Manual configuration via web interface"
-echo -e "${GREEN}2. Automated Setup${NC} - Skip wizard with pre-configured admin account"
-echo ""
-echo -e "${BLUE}Selection (1/2) [1]:${NC}"
-read -n 1 -r SETUP_CHOICE
-echo ""
+# Generate admin password and Flask secret (always generated for both modes)
+ADMIN_PASSWORD=$(generate_password)
+echo -e "${GREEN}✓ Admin password generated${NC}"
+
+FLASK_SECRET=$(generate_password)
+echo -e "${GREEN}✓ Flask secret generated${NC}"
 
 # Create credentials file for backup
 CREDS_FILE="$INSTALL_DIR/credentials.txt"
@@ -174,51 +184,37 @@ cat > "$CREDS_FILE" << EOF
 # BunkerWeb Generated Credentials
 # Deployment Type: $DEPLOYMENT_NAME
 # Template Used: $TEMPLATE_FILE
+# Setup Mode: $(if [[ $SETUP_MODE == "automated" ]]; then echo "Automated"; else echo "Setup Wizard"; fi)
 # Generated on: $(date)
 # Keep this file secure and backed up!
 
 MySQL Database Password: $MYSQL_PASSWORD
 TOTP Secret Key: $TOTP_SECRET
 
+# Web UI Setup (passwords always generated)
+Admin Username: $ADMIN_USERNAME
+Admin Password: $ADMIN_PASSWORD
+Flask Secret: $FLASK_SECRET
+
 # Database Connection String:
 # mariadb+pymysql://bunkerweb:$MYSQL_PASSWORD@bw-db:3306/db
 EOF
 
-if [[ $SETUP_CHOICE == "2" ]]; then
-    # Automated setup
-    echo -e "${BLUE}Setting up automated configuration...${NC}"
+if [[ $SETUP_MODE == "automated" ]]; then
+    # Automated setup - enable automated configuration
+    echo -e "${BLUE}Configuring automated setup...${NC}"
     
-    # Generate additional passwords for automated setup
-    ADMIN_PASSWORD=$(generate_password)
-    FLASK_SECRET=$(generate_password)
-    
-    # Prompt for admin username
-    echo -e "${BLUE}Enter admin username [admin]:${NC}"
-    read ADMIN_USERNAME
-    ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
-    
-    # Update credentials file with admin info
-    cat >> "$CREDS_FILE" << EOF
-
-# Automated Web UI Setup
-Admin Username: $ADMIN_USERNAME
-Admin Password: $ADMIN_PASSWORD
-Flask Secret: $FLASK_SECRET
-EOF
-    
-    # Enable automated setup in docker-compose.yml
+    # Enable automated setup in docker-compose.yml (uncomment the lines)
     sed -i 's|# OVERRIDE_ADMIN_CREDS: "yes"|OVERRIDE_ADMIN_CREDS: "yes"|' "$COMPOSE_FILE"
     sed -i 's|# ADMIN_USERNAME: "admin"|ADMIN_USERNAME: "'$ADMIN_USERNAME'"|' "$COMPOSE_FILE"
     sed -i 's|# ADMIN_PASSWORD: "REPLACEME_ADMIN"|ADMIN_PASSWORD: "'$ADMIN_PASSWORD'"|' "$COMPOSE_FILE"
     sed -i 's|# FLASK_SECRET: "REPLACEME_FLASK"|FLASK_SECRET: "'$FLASK_SECRET'"|' "$COMPOSE_FILE"
     
-    echo -e "${GREEN}✓ Automated setup configured${NC}"
-    echo -e "${GREEN}✓ Admin credentials updated${NC}"
-    
-    SETUP_MODE="automated"
+    echo -e "${GREEN}✓ Automated setup configured and enabled${NC}"
+    echo -e "${GREEN}✓ Admin credentials activated${NC}"
 else
-    echo -e "${BLUE}Using traditional setup wizard${NC}"
-    SETUP_MODE="wizard"
+    echo -e "${BLUE}Configuring setup wizard mode...${NC}"
+    echo -e "${BLUE}Admin credentials generated but setup wizard enabled${NC}"
 fi
 
 # Secure the credentials file
@@ -236,38 +232,28 @@ echo -e "${GREEN}✓ MySQL passwords updated${NC}"
 sed -i "s|REPLACEME_DEFAULT|$TOTP_SECRET|g" "$COMPOSE_FILE"
 echo -e "${GREEN}✓ TOTP secret updated${NC}"
 
-# If automated setup was chosen, replace additional placeholders
-if [[ $SETUP_MODE == "automated" ]]; then
-    sed -i "s|REPLACEME_ADMIN|$ADMIN_PASSWORD|g" "$COMPOSE_FILE"
-    sed -i "s|REPLACEME_FLASK|$FLASK_SECRET|g" "$COMPOSE_FILE"
-    echo -e "${GREEN}✓ Admin password updated${NC}"
-    echo -e "${GREEN}✓ Flask secret updated${NC}"
-fi
+# Always replace admin password and Flask secret placeholders
+sed -i "s|REPLACEME_ADMIN|$ADMIN_PASSWORD|g" "$COMPOSE_FILE"
+sed -i "s|REPLACEME_FLASK|$FLASK_SECRET|g" "$COMPOSE_FILE"
+echo -e "${GREEN}✓ Admin password updated${NC}"
+echo -e "${GREEN}✓ Flask secret updated${NC}"
 
 # Verify replacements
 echo -e "${BLUE}Verifying configuration...${NC}"
 
-# Check for required placeholders based on setup mode
-if [[ $SETUP_MODE == "automated" ]]; then
-    # In automated mode, all placeholders should be replaced
-    REMAINING_PLACEHOLDERS=$(grep -o "REPLACEME_[A-Z_]*" "$COMPOSE_FILE" || true)
-else
-    # In wizard mode, only check for critical placeholders (exclude admin/flask which should remain in comments)
-    REMAINING_PLACEHOLDERS=$(grep -o "REPLACEME_MYSQL\|REPLACEME_DEFAULT" "$COMPOSE_FILE" || true)
-fi
+# Check for any remaining placeholders (all should be replaced now)
+REMAINING_PLACEHOLDERS=$(grep -o "REPLACEME_[A-Z_]*" "$COMPOSE_FILE" || true)
 
 if [[ -n "$REMAINING_PLACEHOLDERS" ]]; then
-    echo -e "${RED}Error: Some required placeholders were not replaced!${NC}"
+    echo -e "${RED}Error: Some placeholders were not replaced!${NC}"
     echo "Remaining placeholders: $REMAINING_PLACEHOLDERS"
     echo -e "${YELLOW}Restoring backup...${NC}"
     cp "$BACKUP_FILE" "$COMPOSE_FILE"
     exit 1
 else
-    if [[ $SETUP_MODE == "automated" ]]; then
-        echo -e "${GREEN}✓ All placeholders successfully replaced${NC}"
-    else
-        echo -e "${GREEN}✓ Required placeholders successfully replaced${NC}"
-        echo -e "${BLUE}ℹ Admin credentials remain in comments for wizard setup${NC}"
+    echo -e "${GREEN}✓ All placeholders successfully replaced${NC}"
+    if [[ $SETUP_MODE == "wizard" ]]; then
+        echo -e "${BLUE}ℹ Automated setup remains disabled - use setup wizard${NC}"
     fi
 fi
 
@@ -323,12 +309,14 @@ else
         echo "2. cd $INSTALL_DIR"
         echo "3. docker compose up -d"
         echo "4. Navigate to http://your-server-ip/setup"
-        echo "5. Complete the setup wizard"
+        echo "5. Complete the setup wizard (or use pre-generated credentials)"
+        echo "   Username: $ADMIN_USERNAME | Password: $ADMIN_PASSWORD"
     else
         echo "1. cd $INSTALL_DIR"
         echo "2. docker compose up -d"
         echo "3. Navigate to http://your-server-ip/setup"
-        echo "4. Complete the setup wizard"
+        echo "4. Complete the setup wizard (or use pre-generated credentials)"
+        echo "   Username: $ADMIN_USERNAME | Password: $ADMIN_PASSWORD"
     fi
 fi
 echo ""
@@ -402,6 +390,8 @@ if [[ $RUNNING_CONTAINERS -gt 0 ]]; then
         echo -e "${BLUE}Web Interface:${NC} http://$SERVER_IP (after setup)"
         echo ""
         echo -e "${YELLOW}Complete the setup wizard to finish configuration!${NC}"
+        echo -e "${BLUE}💡 Pre-generated admin credentials available in: $CREDS_FILE${NC}"
+        echo -e "${BLUE}💡 Username: $ADMIN_USERNAME | Password: $ADMIN_PASSWORD${NC}"
     fi
 else
     echo -e "${RED}Warning: Some services may not have started properly${NC}"
