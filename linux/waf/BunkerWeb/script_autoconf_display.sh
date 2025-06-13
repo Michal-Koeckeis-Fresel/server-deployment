@@ -247,15 +247,28 @@ fi
 # Verify replacements
 echo -e "${BLUE}Verifying configuration...${NC}"
 
-REMAINING_PLACEHOLDERS=$(grep -o "REPLACEME_[A-Z_]*" "$COMPOSE_FILE" || true)
+# Check for required placeholders based on setup mode
+if [[ $SETUP_MODE == "automated" ]]; then
+    # In automated mode, all placeholders should be replaced
+    REMAINING_PLACEHOLDERS=$(grep -o "REPLACEME_[A-Z_]*" "$COMPOSE_FILE" || true)
+else
+    # In wizard mode, only check for critical placeholders (exclude admin/flask which should remain in comments)
+    REMAINING_PLACEHOLDERS=$(grep -o "REPLACEME_MYSQL\|REPLACEME_DEFAULT" "$COMPOSE_FILE" || true)
+fi
+
 if [[ -n "$REMAINING_PLACEHOLDERS" ]]; then
-    echo -e "${RED}Error: Some placeholders were not replaced!${NC}"
+    echo -e "${RED}Error: Some required placeholders were not replaced!${NC}"
     echo "Remaining placeholders: $REMAINING_PLACEHOLDERS"
     echo -e "${YELLOW}Restoring backup...${NC}"
     cp "$BACKUP_FILE" "$COMPOSE_FILE"
     exit 1
 else
-    echo -e "${GREEN}✓ All placeholders successfully replaced${NC}"
+    if [[ $SETUP_MODE == "automated" ]]; then
+        echo -e "${GREEN}✓ All placeholders successfully replaced${NC}"
+    else
+        echo -e "${GREEN}✓ Required placeholders successfully replaced${NC}"
+        echo -e "${BLUE}ℹ Admin credentials remain in comments for wizard setup${NC}"
+    fi
 fi
 
 # Create required directories
