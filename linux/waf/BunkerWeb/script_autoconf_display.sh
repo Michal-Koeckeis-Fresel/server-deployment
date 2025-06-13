@@ -326,6 +326,29 @@ echo -e "${RED}• Backup your installation regularly${NC}"
 echo -e "${RED}• The backup file can restore original template: $BACKUP_FILE${NC}"
 echo ""
 
+# Fix specific container user permissions before starting
+echo -e "${BLUE}Setting container-specific permissions...${NC}"
+
+# Fix permissions for the storage directory (nginx user)
+chown -R nginx:nginx "$INSTALL_DIR/storage" 2>/dev/null || {
+    echo -e "${YELLOW}Warning: nginx user not found, using numeric UID 101${NC}"
+    chown -R 101:101 "$INSTALL_DIR/storage"
+}
+chmod -R 755 "$INSTALL_DIR/storage"
+echo -e "${GREEN}✓ Storage directory permissions set for nginx${NC}"
+
+# Fix database permissions (mysql user)
+chown -R mysql:mysql "$INSTALL_DIR/database" 2>/dev/null || {
+    echo -e "${YELLOW}Warning: mysql user not found, using numeric UID 999${NC}"
+    chown -R 999:999 "$INSTALL_DIR/database"
+}
+chmod -R 755 "$INSTALL_DIR/database"
+echo -e "${GREEN}✓ Database directory permissions set for mysql${NC}"
+
+# Make sure the main directory is accessible
+chmod 755 "$INSTALL_DIR"
+echo -e "${GREEN}✓ Main directory permissions verified${NC}"
+
 # Automatically start BunkerWeb
 echo -e "${BLUE}Starting BunkerWeb automatically...${NC}"
 cd "$INSTALL_DIR"
