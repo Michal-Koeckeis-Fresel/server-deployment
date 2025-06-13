@@ -161,9 +161,9 @@ restart_ssh() {
     fi
 }
 
-# Create a timer for periodic updates (optional)
+# Create a timer for periodic updates
 create_timer() {
-    print_status "Creating timer for periodic banner updates..."
+    print_status "Creating timer for automatic hourly banner updates..."
     
     cat > "/etc/systemd/system/update-login-banner.timer" << 'EOF'
 [Unit]
@@ -196,22 +196,22 @@ install() {
     test_ssh_config
     enable_service
     restart_ssh
-    
-    # Ask if user wants periodic updates
-    echo
-    read -p "Do you want to enable automatic hourly banner updates? [y/N]: " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        create_timer
-    fi
+    create_timer
     
     print_success "Installation completed successfully!"
+    echo
+    print_status "Installed features:"
+    echo "• SSH login banner with hostname and IP address"
+    echo "• Automatic hourly banner updates"
+    echo "• Console login banner (/etc/issue)"
+    echo "• SSH login banner (/etc/issue.net)"
     echo
     print_status "Next steps:"
     echo "1. Test SSH connection to verify banner appears"
     echo "2. Manually run 'systemctl start update-login-banner.service' to update banner"
     echo "3. Check banner content at: $ISSUE_PATH (console) and $ISSUE_NET_PATH (SSH)"
     echo "4. View service logs with: 'journalctl -u update-login-banner.service'"
+    echo "5. Check timer status with: 'systemctl status update-login-banner.timer'"
     echo
     print_status "Current banner content:"
     echo "----------------------------------------"
@@ -255,7 +255,7 @@ usage() {
     echo "Usage: $0 [install|uninstall|help]"
     echo
     echo "Commands:"
-    echo "  install     Install the login banner update system"
+    echo "  install     Install the login banner update system (with hourly updates)"
     echo "  uninstall   Remove the login banner update system"
     echo "  help        Show this help message"
     echo
@@ -263,6 +263,7 @@ usage() {
     echo
     echo "The login banner system automatically updates /etc/issue and /etc/issue.net"
     echo "with current hostname and IP address information for console and SSH logins."
+    echo "Banner updates run automatically every hour."
 }
 
 # Main script logic
