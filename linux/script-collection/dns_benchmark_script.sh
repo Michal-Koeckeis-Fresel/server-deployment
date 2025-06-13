@@ -15,7 +15,7 @@ NC='\033[0m' # No Color
 
 # Configuration files
 DNS_SERVERS_FILE="/root/unbound-dns-servers.txt"
-DNS_SERVERS_URL="https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/refs/heads/main/linux/unbound/dns_servers_list.txt"
+DNS_SERVERS_URL="https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/refs/heads/main/linux/configs/unbound/dns_servers_list.txt"
 UNBOUND_CONFIG="/etc/unbound/unbound.conf"
 BACKUP_CONFIG="/etc/unbound/unbound.conf.backup.$(date +%Y%m%d_%H%M%S)"
 
