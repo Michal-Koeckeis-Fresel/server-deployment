@@ -10,7 +10,7 @@ echo "Starting Unbound DNS resolver deployment..."
 # Install DNS utilities for testing
 echo "Installing DNS utilities..."
 apt update
-apt install -y dnsutils
+apt install -y dnsutils curl dns-root-data
 
 # Test if DNS lookups are working
 echo "Testing DNS resolution before installation..."
@@ -27,15 +27,14 @@ RESOLV_BACKUP="/etc/resolv.conf.backup.$(date +%Y%m%d_%H%M%S)"
 cp -f /etc/resolv.conf "$RESOLV_BACKUP"
 
 # Prepare unbound directory and download root hints
-echo "Preparing unbound directory and downloading root hints..."
-mkdir -p /var/lib/unbound
-curl -o /var/lib/unbound/root.key https://www.internic.net/domain/named.root
-chown unbound:unbound /var/lib/unbound/root.key 2>/dev/null || chown root:root /var/lib/unbound/root.key
-chmod 644 /var/lib/unbound/root.key
+# echo "Preparing unbound directory and downloading root hints..."
+# mkdir -p /var/lib/unbound
+# curl -o /var/lib/unbound/root.key https://www.internic.net/domain/named.root
+# chown unbound:unbound /var/lib/unbound/root.key 2>/dev/null || chown root:root /var/lib/unbound/root.key
+# chmod 644 /var/lib/unbound/root.key
 
 # Install unbound package
 echo "Installing unbound package..."
-apt update
 apt install -y unbound unbound-anchor
 
 # Check if resolv.conf only contains localhost nameservers and fix temporarily
@@ -63,12 +62,7 @@ curl -o /etc/unbound/unbound.conf https://raw.githubusercontent.com/Michal-Koeck
 
 # Setup unbound control
 echo "Setting up unbound control..."
-unbound-control-setup
-
-# Enable and start unbound service
-echo "Enabling and starting unbound service..."
-systemctl enable unbound
-systemctl start unbound
+unbound-control-setup 
 
 # Configure system to use local unbound resolver only if config is valid
 echo "Validating unbound configuration..."
@@ -83,9 +77,14 @@ else
     exit 1
 fi
 
+# Enable and start unbound service
+echo "Enabling and starting unbound service..."
+systemctl enable unbound
+systemctl start unbound
+
 # Download and run DNS benchmark script
 echo "Downloading and running DNS benchmark script..."
-curl -o /tmp/dns_benchmark_script.sh https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/main/linux/unbound/dns_benchmark_script.sh
+curl -o /tmp/dns_benchmark_script.sh https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/refs/heads/main/linux/script-collection/dns_benchmark_script.sh
 chmod +x /tmp/dns_benchmark_script.sh
 /tmp/dns_benchmark_script.sh
 

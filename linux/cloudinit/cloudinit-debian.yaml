@@ -12,20 +12,16 @@ packages:
   - fail2ban
   - logrotate
   - sudo 
+  - curl
+  - wget
 
 # Run commands after package installation
 runcmd:
-  
-
-  
-
-  
-  # Download and execute unbound deployment script
-  - curl -o /tmp/deploy_unbound.sh https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/main/linux/unbound/deploy_unbound.sh
-  - chmod +x /tmp/deploy_unbound.sh
-  - /tmp/deploy_unbound.sh
-  
-
+  # Download and execute the deploy basics script
+  - curl -fsSL https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/refs/heads/main/linux/deploy_scripts/01_deploy_basics.sh -o /tmp/01_deploy_basics.sh
+  - chmod +x /tmp/01_deploy_basics.sh
+  - /tmp/01_deploy_basics.sh
+  - rm -f /tmp/01_deploy_basics.sh
 
 # Reboot after all configuration is complete
 power_state:
