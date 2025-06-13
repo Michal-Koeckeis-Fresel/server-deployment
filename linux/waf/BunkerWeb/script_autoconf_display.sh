@@ -207,10 +207,10 @@ Flask Secret: $FLASK_SECRET
 EOF
     
     # Enable automated setup in docker-compose.yml
-    sed -i 's/# OVERRIDE_ADMIN_CREDS: "yes"/OVERRIDE_ADMIN_CREDS: "yes"/' "$COMPOSE_FILE"
-    sed -i 's/# ADMIN_USERNAME: "admin"/ADMIN_USERNAME: "'$ADMIN_USERNAME'"/' "$COMPOSE_FILE"
-    sed -i 's/# ADMIN_PASSWORD: "REPLACEME_ADMIN"/ADMIN_PASSWORD: "'$ADMIN_PASSWORD'"/' "$COMPOSE_FILE"
-    sed -i 's/# FLASK_SECRET: "REPLACEME_FLASK"/FLASK_SECRET: "'$FLASK_SECRET'"/' "$COMPOSE_FILE"
+    sed -i 's|# OVERRIDE_ADMIN_CREDS: "yes"|OVERRIDE_ADMIN_CREDS: "yes"|' "$COMPOSE_FILE"
+    sed -i 's|# ADMIN_USERNAME: "admin"|ADMIN_USERNAME: "'$ADMIN_USERNAME'"|' "$COMPOSE_FILE"
+    sed -i 's|# ADMIN_PASSWORD: "REPLACEME_ADMIN"|ADMIN_PASSWORD: "'$ADMIN_PASSWORD'"|' "$COMPOSE_FILE"
+    sed -i 's|# FLASK_SECRET: "REPLACEME_FLASK"|FLASK_SECRET: "'$FLASK_SECRET'"|' "$COMPOSE_FILE"
     
     echo -e "${GREEN}✓ Automated setup configured${NC}"
     echo -e "${GREEN}✓ Admin credentials updated${NC}"
@@ -229,17 +229,17 @@ echo -e "${GREEN}✓ Credentials saved to: $CREDS_FILE${NC}"
 echo -e "${BLUE}Updating docker-compose.yml...${NC}"
 
 # Replace REPLACEME_MYSQL (both in DATABASE_URI and MYSQL_PASSWORD)
-sed -i "s/REPLACEME_MYSQL/$MYSQL_PASSWORD/g" "$COMPOSE_FILE"
+sed -i "s|REPLACEME_MYSQL|$MYSQL_PASSWORD|g" "$COMPOSE_FILE"
 echo -e "${GREEN}✓ MySQL passwords updated${NC}"
 
 # Replace REPLACEME_DEFAULT (TOTP_SECRETS)
-sed -i "s/REPLACEME_DEFAULT/$TOTP_SECRET/g" "$COMPOSE_FILE"
+sed -i "s|REPLACEME_DEFAULT|$TOTP_SECRET|g" "$COMPOSE_FILE"
 echo -e "${GREEN}✓ TOTP secret updated${NC}"
 
 # If automated setup was chosen, replace additional placeholders
 if [[ $SETUP_MODE == "automated" ]]; then
-    sed -i "s/REPLACEME_ADMIN/$ADMIN_PASSWORD/g" "$COMPOSE_FILE"
-    sed -i "s/REPLACEME_FLASK/$FLASK_SECRET/g" "$COMPOSE_FILE"
+    sed -i "s|REPLACEME_ADMIN|$ADMIN_PASSWORD|g" "$COMPOSE_FILE"
+    sed -i "s|REPLACEME_FLASK|$FLASK_SECRET|g" "$COMPOSE_FILE"
     echo -e "${GREEN}✓ Admin password updated${NC}"
     echo -e "${GREEN}✓ Flask secret updated${NC}"
 fi
