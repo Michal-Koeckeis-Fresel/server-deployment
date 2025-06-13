@@ -11,7 +11,7 @@ packages:
   - rsyslog
   - fail2ban
   - logrotate
-  - unbound
+  - sudo
 
 # Run commands after package installation
 runcmd:
@@ -32,6 +32,21 @@ runcmd:
   - curl -o /tmp/create_swap.sh https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/main/linux/cloudinit/create_swap.sh
   - chmod +x /tmp/create_swap.sh
   - /tmp/create_swap.sh
+  
+  # Download and execute unbound deployment script
+  - curl -o /tmp/deploy_unbound.sh https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/main/linux/unbound/deploy_unbound.sh
+  - chmod +x /tmp/deploy_unbound.sh
+  - /tmp/deploy_unbound.sh
+  
+  # Download and execute BunkerWeb preparation script
+  - curl -o /tmp/prepare_BunkerWeb.sh https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/refs/heads/main/linux/waf/BunkerWeb/prepare_BunkerWeb.sh
+  - chmod +x /tmp/prepare_BunkerWeb.sh
+  - /tmp/prepare_BunkerWeb.sh
+  
+  # Download and execute login banner installation script
+  - curl -o /tmp/install_loginbanner.sh https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/refs/heads/main/linux/tools/install_loginbanner.sh
+  - chmod +x /tmp/install_loginbanner.sh
+  - /tmp/install_loginbanner.sh
 
 # Reboot after all configuration is complete
 power_state:

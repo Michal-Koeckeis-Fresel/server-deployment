@@ -24,6 +24,7 @@ packages:
   - php-intl
   - php-bcmath
   - unbound
+  - sudo
 
 # Run commands after package installation
 runcmd:
