@@ -5,6 +5,9 @@
 
 # Deploy basic system settings
 
+apt-get update 
+apt-get install -y fail2ban curl wget rsyslog logrotate sudo
+
 # Download and execute swap creation script
 curl -o /tmp/deploy_swap.sh https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/refs/heads/main/linux/deploy_scripts/deploy_swap.sh
 chmod +x /tmp/deploy_swap.sh
