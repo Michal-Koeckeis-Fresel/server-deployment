@@ -1,0 +1,35 @@
+#cloud-config
+# Author: Michal Koeckeis-Fresel
+# License: MIT
+
+# Update package cache and upgrade system
+package_update: true
+package_upgrade: true
+
+# Install required packages
+packages:
+  - rsyslog
+  - fail2ban
+  - logrotate
+  - sudo 
+
+# Run commands after package installation
+runcmd:
+  
+
+  
+
+  
+  # Download and execute unbound deployment script
+  - curl -o /tmp/deploy_unbound.sh https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/main/linux/unbound/deploy_unbound.sh
+  - chmod +x /tmp/deploy_unbound.sh
+  - /tmp/deploy_unbound.sh
+  
+
+
+# Reboot after all configuration is complete
+power_state:
+  mode: reboot
+  message: "Rebooting after initial setup"
+  timeout: 30
+  condition: true

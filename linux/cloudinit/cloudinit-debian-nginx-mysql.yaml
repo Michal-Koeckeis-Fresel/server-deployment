@@ -1,0 +1,159 @@
+#cloud-config
+# Author: Michal Koeckeis-Fresel
+# License: MIT
+
+# Update package cache and upgrade system
+package_update: true
+package_upgrade: true
+
+# Install required packages
+packages:
+  - rsyslog
+  - fail2ban
+  - logrotate
+  - nginx
+  - mysql-server
+  - mysql-client
+  - php-fpm
+  - php-mysql
+  - php-curl
+  - php-gd
+  - php-xml
+  - php-mbstring
+  - php-zip
+  - php-intl
+  - php-bcmath
+  - unbound
+  - sudo
+
+# Run commands after package installation
+runcmd:
+  # Enable fail2ban service
+  - systemctl enable fail2ban
+  
+  # Download custom fail2ban jail.local configuration
+  - curl -o /etc/fail2ban/jail.local https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/main/linux/fail2ban/jail.local
+  
+  # Reload fail2ban to apply new configuration
+  - systemctl reload fail2ban
+  
+  # Download bash history configuration
+  - curl -o /etc/profile.d/history-config.sh https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/main/linux/cloudinit/history-config.sh
+  - chmod 644 /etc/profile.d/history-config.sh
+  
+  # Download and execute swap creation script
+  - curl -o /tmp/create_swap.sh https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/main/linux/cloudinit/create_swap.sh
+  - chmod +x /tmp/create_swap.sh
+  - /tmp/create_swap.sh
+  
+  # Configure nginx
+  - systemctl enable nginx
+  - systemctl start nginx
+  
+  # Configure PHP-FPM
+  - systemctl enable php*-fpm
+  - systemctl start php*-fpm
+  
+  # Create nginx configuration with dynamic PHP version detection
+  - |
+    PHP_VERSION=$(php -r "echo PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;")
+    cat > /etc/nginx/sites-available/default << EOF
+    server {
+        listen 80 default_server;
+        listen [::]:80 default_server;
+        
+        root /var/www/html;
+        index index.php index.html index.htm index.nginx-debian.html;
+        
+        server_name _;
+        
+        location / {
+            try_files \$uri \$uri/ =404;
+        }
+        
+        # PHP processing
+        location ~ \.php\$ {
+            include snippets/fastcgi-php.conf;
+            fastcgi_pass unix:/var/run/php/php\$PHP_VERSION-fpm.sock;
+        }
+        
+        # Deny access to .htaccess files
+        location ~ /\.ht {
+            deny all;
+        }
+    }
+    EOF
+  - chmod 644 /etc/nginx/sites-available/default
+  - systemctl reload nginx
+  
+  # Create basic nginx configuration
+  - |
+    cat > /var/www/html/index.nginx-debian.html << 'EOF'
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Welcome to nginx!</title>
+    </head>
+    <body>
+        <h1>Welcome to nginx!</h1>
+        <p>If you see this page, the nginx web server is successfully installed and working.</p>
+        <p>Server is ready for configuration.</p>
+    </body>
+    </html>
+    EOF
+  
+  # Configure MySQL
+  - systemctl enable mysql
+  - systemctl start mysql
+  
+  # Generate random MySQL root password and configure MySQL
+  - |
+    MYSQL_ROOT_PASSWORD=$(openssl rand -base64 24)
+    # Create /root/.my.cnf with the generated password
+    cat > /root/.my.cnf << EOF
+    [client]
+    user=root
+    password=$MYSQL_ROOT_PASSWORD
+    EOF
+    chmod 600 /root/.my.cnf
+    # Set the MySQL root password
+    mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$MYSQL_ROOT_PASSWORD';"
+  - mysql -e "DELETE FROM mysql.user WHERE User='';"
+  - mysql -e "DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');"
+  - mysql -e "DROP DATABASE IF EXISTS test;"
+  - mysql -e "DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';"
+  - mysql -e "FLUSH PRIVILEGES;"
+  
+  # Set proper permissions
+  - chown -R www-data:www-data /var/www/html
+  - chmod -R 755 /var/www/html
+
+# Write configuration files
+write_files:
+  - path: /etc/mysql/mysql.conf.d/custom.cnf
+    content: |
+      [mysqld]
+      # Basic settings
+      bind-address = 127.0.0.1
+      
+      # Security settings
+      local-infile = 0
+      
+      # Performance settings
+      innodb_buffer_pool_size = 256M
+      max_connections = 100
+      
+      # Logging
+      general_log = 0
+      slow_query_log = 1
+      slow_query_log_file = /var/log/mysql/mysql-slow.log
+      long_query_time = 2
+    permissions: '0644'
+    owner: root:root
+
+# Reboot after all configuration is complete
+power_state:
+  mode: reboot
+  message: "Rebooting after initial setup with nginx, MySQL, and PHP"
+  timeout: 30
+  condition: true

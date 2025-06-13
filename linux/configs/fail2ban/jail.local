@@ -1,0 +1,49 @@
+[DEFAULT]
+
+# "bantime.increment" allows to use database for searching of previously banned ip's to increase a 
+bantime.increment = true
+
+# "bantime.rndtime" is the max number of seconds using for mixing with random time 
+bantime.rndtime = 5
+
+# "bantime.maxtime" is the max number of seconds using the ban time can reach (doesn't grow further)
+bantime.maxtime = 3600
+
+# "bantime.multipliers" used to calculate next value of ban time instead of formula, corresponding
+# previously ban count and given "bantime.factor" (for multipliers default is 1);
+bantime.multipliers = 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192
+bantime.formula = ban.Time * math.exp(float(ban.Count+1)*banFactor)/math.exp(1*banFactor)
+
+# "bantime.overalljails" (if true) specifies the search of IP in the database will be executed 
+# cross over all jails, if false (default), only current jail of the ban IP will be searched
+bantime.overalljails = true
+
+# "ignoreself" specifies whether the local resp. own IP addresses should be ignored
+# (default is true). Fail2ban will not ban a host which matches such addresses.
+ignoreself = true
+
+# "ignoreip" can be a list of IP addresses, CIDR masks or DNS hosts. Fail2ban
+# will not ban a host which matches an address in this list. Several addresses
+# can be defined using space (and/or comma) separator.
+ignoreip = 127.0.0.1/8 
+
+# time is in seconds. 3600 = 1 hour, 86400 = 24 hours (1 day)
+findtime    = 86400
+
+# initial ban will be 1 second and will grow
+bantime     = 1
+maxretry    = 5
+
+
+#
+# local jail configuration
+#
+
+
+[sshd]
+enabled = true
+name = sshd
+filter = sshd
+service = sshd
+maxretry = 2
+mode = aggressive
