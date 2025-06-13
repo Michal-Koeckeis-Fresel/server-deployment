@@ -58,7 +58,7 @@ cp -f /etc/unbound/unbound.conf /etc/unbound/unbound.conf.backup.$(date +%Y%m%d_
 
 # Download optimized unbound configuration
 echo "Downloading optimized unbound configuration..."
-curl -o /etc/unbound/unbound.conf https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/main/linux/unbound/unbound_optimized_config.conf
+curl -o /etc/unbound/unbound.conf https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/refs/heads/main/linux/configs/unbound/unbound_optimized_config.conf
 
 # Setup unbound control
 echo "Setting up unbound control..."
