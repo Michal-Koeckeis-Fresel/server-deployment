@@ -5,13 +5,11 @@
 
 # BunkerWeb Setup Script
 # This script generates random passwords and replaces placeholders in docker-compose.yml
-# MUST BE RUN AS ROOT: sudo ./setup-bunkerweb.sh
+# MUST BE RUN AS ROOT: sudo ./setup-bunkerweb.sh --type <autoconf|basic|integrated>
 
 set -e
 
 INSTALL_DIR="/data/BunkerWeb"
-COMPOSE_FILE="$INSTALL_DIR/docker-compose.yml"
-BACKUP_FILE="$INSTALL_DIR/docker-compose.yml.backup"
 SETUP_MODE="wizard"  # Default to wizard mode
 
 # Colors for output
@@ -21,24 +19,108 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# Function to display usage
+show_usage() {
+    echo -e "${BLUE}Usage: $0 --type <autoconf|basic|integrated>${NC}"
+    echo ""
+    echo -e "${YELLOW}Options:${NC}"
+    echo -e "  --type autoconf     Use template_autoconf_display.yml"
+    echo -e "  --type basic        Use template_basic_display.yml"
+    echo -e "  --type integrated   Use template_ui_integrated_display.yml"
+    echo ""
+    echo -e "${YELLOW}Examples:${NC}"
+    echo -e "  sudo $0 --type autoconf"
+    echo -e "  sudo $0 --type basic"
+    echo -e "  sudo $0 --type integrated"
+    echo ""
+}
+
+# Parse command line arguments
+DEPLOYMENT_TYPE=""
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --type)
+            DEPLOYMENT_TYPE="$2"
+            shift 2
+            ;;
+        -h|--help)
+            show_usage
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}Error: Unknown option '$1'${NC}"
+            show_usage
+            exit 1
+            ;;
+    esac
+done
+
+# Validate that --type was provided
+if [[ -z "$DEPLOYMENT_TYPE" ]]; then
+    echo -e "${RED}Error: --type parameter is required${NC}"
+    echo ""
+    show_usage
+    exit 1
+fi
+
+# Validate deployment type and set template file
+case "$DEPLOYMENT_TYPE" in
+    autoconf)
+        TEMPLATE_FILE="template_autoconf_display.yml"
+        DEPLOYMENT_NAME="Autoconf Display"
+        ;;
+    basic)
+        TEMPLATE_FILE="template_basic_display.yml"
+        DEPLOYMENT_NAME="Basic Display"
+        ;;
+    integrated)
+        TEMPLATE_FILE="template_ui_integrated_display.yml"
+        DEPLOYMENT_NAME="UI Integrated Display"
+        ;;
+    *)
+        echo -e "${RED}Error: Invalid deployment type '$DEPLOYMENT_TYPE'${NC}"
+        echo -e "${YELLOW}Valid types: autoconf, basic, integrated${NC}"
+        echo ""
+        show_usage
+        exit 1
+        ;;
+esac
+
+# Set compose file path
+COMPOSE_FILE="$INSTALL_DIR/docker-compose.yml"
+TEMPLATE_PATH="$INSTALL_DIR/$TEMPLATE_FILE"
+BACKUP_FILE="$INSTALL_DIR/docker-compose.yml.backup"
+
 echo -e "${BLUE}================================================${NC}"
 echo -e "${BLUE}          BunkerWeb Setup Script${NC}"
 echo -e "${BLUE}================================================${NC}"
+echo ""
+echo -e "${GREEN}Deployment Type:${NC} $DEPLOYMENT_NAME"
+echo -e "${GREEN}Template File:${NC} $TEMPLATE_FILE"
 echo ""
 
 # Check if running as root
 if [[ $EUID -ne 0 ]]; then
    echo -e "${RED}This script must be run as root${NC}"
-   echo -e "${YELLOW}Please run: sudo $0${NC}"
+   echo -e "${YELLOW}Please run: sudo $0 --type $DEPLOYMENT_TYPE${NC}"
    exit 1
 fi
 
-# Check if docker-compose.yml exists
-if [[ ! -f "$COMPOSE_FILE" ]]; then
-    echo -e "${RED}Error: docker-compose.yml not found at $COMPOSE_FILE${NC}"
-    echo -e "${YELLOW}Please download the template first!${NC}"
+# Check if template file exists
+if [[ ! -f "$TEMPLATE_PATH" ]]; then
+    echo -e "${RED}Error: Template file not found at $TEMPLATE_PATH${NC}"
+    echo -e "${YELLOW}Available templates should be:${NC}"
+    echo -e "  - $INSTALL_DIR/template_autoconf_display.yml"
+    echo -e "  - $INSTALL_DIR/template_basic_display.yml"
+    echo -e "  - $INSTALL_DIR/template_ui_integrated_display.yml"
     exit 1
 fi
+
+# Copy template to docker-compose.yml
+echo -e "${BLUE}Copying template to docker-compose.yml...${NC}"
+cp "$TEMPLATE_PATH" "$COMPOSE_FILE"
+echo -e "${GREEN}✓ Template copied: $TEMPLATE_FILE → docker-compose.yml${NC}"
 
 # Check if template contains placeholders
 if ! grep -q "REPLACEME_" "$COMPOSE_FILE"; then
@@ -74,7 +156,7 @@ echo -e "${GREEN}✓ TOTP secret generated${NC}"
 
 # Display setup options
 echo -e "${BLUE}================================================${NC}"
-echo -e "${BLUE}          Setup Complete!${NC}"
+echo -e "${BLUE}          Setup Configuration${NC}"
 echo -e "${BLUE}================================================${NC}"
 echo ""
 echo -e "${YELLOW}Choose your setup method:${NC}"
@@ -85,6 +167,22 @@ echo ""
 echo -e "${BLUE}Selection (1/2) [1]:${NC}"
 read -n 1 -r SETUP_CHOICE
 echo ""
+
+# Create credentials file for backup
+CREDS_FILE="$INSTALL_DIR/credentials.txt"
+cat > "$CREDS_FILE" << EOF
+# BunkerWeb Generated Credentials
+# Deployment Type: $DEPLOYMENT_NAME
+# Template Used: $TEMPLATE_FILE
+# Generated on: $(date)
+# Keep this file secure and backed up!
+
+MySQL Database Password: $MYSQL_PASSWORD
+TOTP Secret Key: $TOTP_SECRET
+
+# Database Connection String:
+# mariadb+pymysql://bunkerweb:$MYSQL_PASSWORD@bw-db:3306/db
+EOF
 
 if [[ $SETUP_CHOICE == "2" ]]; then
     # Automated setup
@@ -122,20 +220,6 @@ else
     echo -e "${BLUE}Using traditional setup wizard${NC}"
     SETUP_MODE="wizard"
 fi
-
-# Create credentials file for backup
-CREDS_FILE="$INSTALL_DIR/credentials.txt"
-cat > "$CREDS_FILE" << EOF
-# BunkerWeb Generated Credentials
-# Generated on: $(date)
-# Keep this file secure and backed up!
-
-MySQL Database Password: $MYSQL_PASSWORD
-TOTP Secret Key: $TOTP_SECRET
-
-# Database Connection String:
-# mariadb+pymysql://bunkerweb:$MYSQL_PASSWORD@bw-db:3306/db
-EOF
 
 # Secure the credentials file
 chmod 600 "$CREDS_FILE"
@@ -203,6 +287,8 @@ echo -e "${GREEN}================================================${NC}"
 echo -e "${GREEN}          Setup Complete!${NC}"
 echo -e "${GREEN}================================================${NC}"
 echo ""
+echo -e "${YELLOW}Deployment Type:${NC} $DEPLOYMENT_NAME"
+echo -e "${YELLOW}Template Used:${NC} $TEMPLATE_FILE"
 echo -e "${YELLOW}Installation Directory:${NC} $INSTALL_DIR"
 echo -e "${YELLOW}Credentials File:${NC} $CREDS_FILE"
 echo -e "${YELLOW}Backup File:${NC} $BACKUP_FILE"
@@ -210,11 +296,11 @@ echo ""
 echo -e "${BLUE}Next Steps:${NC}"
 if [[ $SETUP_MODE == "automated" ]]; then
     if [[ -n "$SUDO_USER" ]]; then
-        echo "1. Navigate to http://$SERVER_IP"
+        echo "1. Navigate to http://\$SERVER_IP"
         echo "2. Login with username: $ADMIN_USERNAME"
         echo "3. Start protecting applications with autoconf labels"
     else
-        echo "1. Navigate to http://$SERVER_IP"
+        echo "1. Navigate to http://\$SERVER_IP"
         echo "2. Login with username: $ADMIN_USERNAME"
         echo "3. Start protecting applications with autoconf labels"
     fi
