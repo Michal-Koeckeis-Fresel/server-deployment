@@ -1,7 +1,13 @@
 #!/bin/bash
-
-# Author: Michal Koeckeis-Fresel
-# License: MIT
+#
+# Copyright (c) 2025 Michal Koeckeis-Fresel
+# 
+# This software is dual-licensed under your choice of:
+# - MIT License (see LICENSE-MIT)
+# - GNU Affero General Public License v3.0 (see LICENSE-AGPL)
+# 
+# SPDX-License-Identifier: MIT OR AGPL-3.0-or-later
+#
 
 # BunkerWeb Setup Script
 # This script generates random passwords and replaces placeholders in docker-compose.yml
@@ -157,7 +163,7 @@ echo -e "${GREEN}Backup created: $BACKUP_FILE${NC}"
 
 # Generate passwords function using Method 1: Base64 (32 characters)
 generate_password() {
-    openssl rand -base64 32 | head -c 32 && echo
+    openssl rand -base64 32 | head -c 15 && echo
 }
 
 # Generate passwords

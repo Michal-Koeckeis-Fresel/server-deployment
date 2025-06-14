@@ -1,10 +1,19 @@
 #!/bin/bash
+#
+# Copyright (c) 2025 Michal Koeckeis-Fresel
+# 
+# This software is dual-licensed under your choice of:
+# - MIT License (see LICENSE-MIT)
+# - GNU Affero General Public License v3.0 (see LICENSE-AGPL)
+# 
+# SPDX-License-Identifier: MIT OR AGPL-3.0-or-later
+#
 
 # DNS Performance Benchmark Script for Unbound Configuration
 # Tests google.com lookup on multiple DNS servers, ranks by performance, and configures DoT/DoH encryption
 # Features: Performance testing, DoT/DoH support detection, encryption-aware Unbound configuration
-# Author: Michal Koeckeis-Fresel
-# License: MIT
+
+
 
 # Colors for output
 RED='\033[0;31m'
