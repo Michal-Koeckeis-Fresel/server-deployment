@@ -60,6 +60,9 @@ main() {
         "template_autoconf_display.yml"
         "template_basic_display.yml"
         "template_ui_integrated_display.yml"
+        "BunkerWeb.conf"
+        "autoconf_script.sh"
+        "uninstall_BunkerWeb.sh"
     )
     
     # Check if wget or curl is available
@@ -90,6 +93,8 @@ main() {
     log_step "Setting executable permissions on shell scripts..."
     chmod +x script_autoconf_display.sh
     chmod +x script_password_reset_display.sh
+    chmod +x autoconf_script.sh
+    chmod +x uninstall_BunkerWeb.sh
     
     log_success "BunkerWeb deployment completed successfully!"
     echo ""
