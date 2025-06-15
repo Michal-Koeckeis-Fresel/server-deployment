@@ -46,6 +46,13 @@ SYSLOG_ADDRESS="127.0.0.1"  # Syslog server address (default: localhost)
 SYSLOG_PORT="514"       # Syslog port (default: 514)
 SYSLOG_NETWORK="127.0.0.1/32"  # Syslog network (default: localhost only)
 
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
 # Load configuration from BunkerWeb.conf if it exists
 CONFIG_FILE="$INSTALL_DIR/BunkerWeb.conf"
 if [[ -f "$CONFIG_FILE" ]]; then
@@ -285,13 +292,6 @@ EOF
     echo -e "${RED}=================================================================================${NC}"
 fi
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
 # Function to display usage
 show_usage() {
     echo -e "${BLUE}Usage: $0 --type <autoconf|basic|integrated> [OPTIONS]${NC}"
@@ -515,31 +515,6 @@ if [[ -z "$FQDN" ]]; then
     fi
 fi
 
-# Add Redis container if enabled
-if [[ "$REDIS_ENABLED" == "yes" ]]; then
-    echo -e "${BLUE}Adding Redis container to docker-compose.yml...${NC}"
-    
-    # Add Redis service definition if not present
-    if ! grep -q "bw-redis:" "$COMPOSE_FILE"; then
-        cat >> "$COMPOSE_FILE" << EOF
-
-  bw-redis:
-    image: redis:7-alpine
-    command: redis-server --requirepass $REDIS_PASSWORD --appendonly yes
-    environment:
-      REDIS_PASSWORD: "$REDIS_PASSWORD"
-    volumes:
-      - /data/BunkerWeb/redis:/data
-    ports:
-      - "127.0.0.1:6379:6379"
-    restart: unless-stopped
-    networks:
-      - bw-universe
-EOF
-        echo -e "${GREEN}✓ Redis container added to compose file${NC}"
-    fi
-fi
-
 # Validate deployment type and set template file
 case "$DEPLOYMENT_TYPE" in
     autoconf)
@@ -639,7 +614,7 @@ if [[ -n "$AUTO_CERT_TYPE" ]]; then
     esac
 fi
 
-# Set compose file path
+# Set compose file path - MOVED HERE TO DEFINE EARLY
 COMPOSE_FILE="$INSTALL_DIR/docker-compose.yml"
 TEMPLATE_PATH="$INSTALL_DIR/$TEMPLATE_FILE"
 BACKUP_FILE="$INSTALL_DIR/docker-compose.yml.backup"
@@ -958,49 +933,85 @@ if grep -q "REPLACEME_SYSLOG_NETWORK" "$COMPOSE_FILE"; then
     echo -e "${GREEN}✓ Syslog network updated to: $SYSLOG_NETWORK${NC}"
 fi
 
+# NOW add Redis and Syslog containers if they don't exist and are enabled
+# (This must happen AFTER the compose file exists and AFTER placeholder replacement)
+
+if [[ "$REDIS_ENABLED" == "yes" ]]; then
+    if ! grep -q "bw-redis:" "$COMPOSE_FILE"; then
+        echo -e "${BLUE}Adding Redis container to docker-compose.yml...${NC}"
+        cat >> "$COMPOSE_FILE" << EOF
+
+  bw-redis:
+    image: redis:7-alpine
+    command: >
+      redis-server
+      --requirepass "$REDIS_PASSWORD"
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save 900 1 300 10 60 10000
+      --appendonly yes
+      --appendfsync everysec
+      --auto-aof-rewrite-percentage 100
+      --auto-aof-rewrite-min-size 64mb
+      --tcp-keepalive 300
+      --timeout 300
+    volumes:
+      - /data/BunkerWeb/redis:/data
+    restart: unless-stopped
+    networks:
+      - bw-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+EOF
+        echo -e "${GREEN}✓ Redis container added to compose file${NC}"
+    else
+        echo -e "${GREEN}✓ Redis container already exists in compose file${NC}"
+    fi
+fi
+
+# Handle syslog configuration - template already contains rsyslog service
+if [[ "$SYSLOG_ENABLED" == "yes" ]]; then
+    echo -e "${GREEN}✓ Syslog service already configured in template (rsyslog/rsyslog:latest)${NC}"
+    
+    # Remove any problematic syslog config file mounts from existing templates (cleanup)
+    if grep -q "/etc/syslog-ng/syslog-ng.conf" "$COMPOSE_FILE"; then
+        echo -e "${BLUE}Removing problematic syslog config file mount...${NC}"
+        sed -i '/\/etc\/syslog-ng\/syslog-ng.conf/d' "$COMPOSE_FILE"
+        echo -e "${GREEN}✓ Removed problematic mount${NC}"
+    fi
+    
+    # Remove any problematic balabit/syslog-ng references (cleanup)
+    if grep -q "balabit/syslog-ng" "$COMPOSE_FILE"; then
+        echo -e "${BLUE}Replacing balabit/syslog-ng with rsyslog...${NC}"
+        sed -i 's|balabit/syslog-ng:.*|rsyslog/rsyslog:latest|' "$COMPOSE_FILE"
+        echo -e "${GREEN}✓ Updated to official rsyslog image${NC}"
+    fi
+    
+elif [[ "$SYSLOG_ENABLED" == "no" ]]; then
+    # Remove syslog service if disabled
+    if grep -q "bw-syslog:" "$COMPOSE_FILE"; then
+        echo -e "${BLUE}Removing syslog service (disabled)...${NC}"
+        # Remove the entire bw-syslog service section
+        sed -i '/bw-syslog:/,/^  [a-zA-Z]/{ /^  [a-zA-Z]/!d; }' "$COMPOSE_FILE"
+        # Remove syslog dependencies
+        sed -i '/- bw-syslog/d' "$COMPOSE_FILE"
+        sed -i '/- bw-syslog$/d' "$COMPOSE_FILE"
+        # Remove syslog networks
+        sed -i '/- bw-syslog$/d' "$COMPOSE_FILE"
+        sed -i '/bw-syslog$/d' "$COMPOSE_FILE"
+        echo -e "${GREEN}✓ Syslog service removed${NC}"
+    fi
+fi
+
 # Display syslog configuration summary
 if [[ "$SYSLOG_ENABLED" == "yes" ]]; then
     echo -e "${GREEN}✓ Syslog configuration: $SYSLOG_ADDRESS:$SYSLOG_PORT (network: $SYSLOG_NETWORK)${NC}"
 else
     echo -e "${BLUE}ℹ Syslog disabled - using local logging only${NC}"
-fi
-
-# Add syslog container if enabled
-if [[ "$SYSLOG_ENABLED" == "yes" ]]; then
-    echo -e "${BLUE}Adding syslog container to docker-compose.yml...${NC}"
-    
-    # Add syslog service definition if not present
-    if ! grep -q "bw-syslog:" "$COMPOSE_FILE"; then
-        cat >> "$COMPOSE_FILE" << 'EOF'
-
-  bw-syslog:
-    image: rsyslog/syslog_appliance_alpine:latest
-    ports:
-      - "514:514/tcp"
-      - "514:514/udp"
-    environment:
-      RSYSLOG_CONF: |
-        # Basic syslog configuration
-        module(load="imudp")
-        input(type="imudp" port="514")
-        module(load="imtcp")
-        input(type="imtcp" port="514")
-        
-        # Log everything to files
-        *.info /var/log/messages
-        *.warn /var/log/syslog
-        *.err /var/log/error.log
-        
-        # Also log to console for Docker logs
-        *.* /dev/stdout
-    volumes:
-      - /data/BunkerWeb/logs:/var/log
-    restart: unless-stopped
-    networks:
-      - bw-universe
-EOF
-        echo -e "${GREEN}✓ Syslog container added to compose file${NC}"
-    fi
 fi
 
 # Handle SSL certificate configuration
@@ -1114,200 +1125,6 @@ else
     echo -e "${BLUE}✓ Domain configured: $FQDN${NC}"
 fi
 
-# Configure Multisite mode
-echo -e "${BLUE}Configuring multisite mode...${NC}"
-if grep -q "MULTISITE:" "$COMPOSE_FILE"; then
-    sed -i "s|MULTISITE: \".*\"|MULTISITE: \"$MULTISITE\"|g" "$COMPOSE_FILE"
-    echo -e "${GREEN}✓ Multisite mode: $MULTISITE${NC}"
-else
-    # Add MULTISITE setting if not present (append to scheduler environment)
-    sed -i '/bw-scheduler:/,/environment:/{
-        /environment:/a\
-      MULTISITE: "'$MULTISITE'"
-    }' "$COMPOSE_FILE"
-    echo -e "${GREEN}✓ Multisite mode added: $MULTISITE${NC}"
-fi
-
-if [[ "$MULTISITE" == "yes" ]]; then
-    echo -e "${BLUE}ℹ Multisite mode enabled - supports multiple domains with individual configurations${NC}"
-    echo -e "${BLUE}ℹ Use SERVER_NAME prefixes for domain-specific settings (e.g., domain.com_USE_ANTIBOT=captcha)${NC}"
-else
-    echo -e "${BLUE}ℹ Multisite mode disabled - single domain configuration${NC}"
-fi
-
-# Configure additional BunkerWeb settings
-echo -e "${BLUE}Configuring BunkerWeb settings...${NC}"
-
-# Set SERVER_NAME (use FQDN if SERVER_NAME not explicitly set)
-if [[ -z "$SERVER_NAME" && -n "$FQDN" ]]; then
-    SERVER_NAME="$FQDN"
-fi
-
-# Configure all the new settings
-SETTINGS_TO_ADD=""
-
-if [[ -n "$SERVER_NAME" ]]; then
-    if ! grep -q "SERVER_NAME:" "$COMPOSE_FILE"; then
-        SETTINGS_TO_ADD="${SETTINGS_TO_ADD}      SERVER_NAME: \"$SERVER_NAME\"\n"
-    else
-        sed -i "s|SERVER_NAME: \".*\"|SERVER_NAME: \"$SERVER_NAME\"|g" "$COMPOSE_FILE"
-    fi
-    echo -e "${GREEN}✓ Server name: $SERVER_NAME${NC}"
-fi
-
-if [[ -n "$BUNKERWEB_INSTANCES" ]]; then
-    if ! grep -q "BUNKERWEB_INSTANCES:" "$COMPOSE_FILE"; then
-        SETTINGS_TO_ADD="${SETTINGS_TO_ADD}      BUNKERWEB_INSTANCES: \"$BUNKERWEB_INSTANCES\"\n"
-    else
-        sed -i "s|BUNKERWEB_INSTANCES: \".*\"|BUNKERWEB_INSTANCES: \"$BUNKERWEB_INSTANCES\"|g" "$COMPOSE_FILE"
-    fi
-    echo -e "${GREEN}✓ BunkerWeb instances: $BUNKERWEB_INSTANCES${NC}"
-fi
-
-if [[ -n "$SECURITY_MODE" ]]; then
-    if ! grep -q "SECURITY_MODE:" "$COMPOSE_FILE"; then
-        SETTINGS_TO_ADD="${SETTINGS_TO_ADD}      SECURITY_MODE: \"$SECURITY_MODE\"\n"
-    else
-        sed -i "s|SECURITY_MODE: \".*\"|SECURITY_MODE: \"$SECURITY_MODE\"|g" "$COMPOSE_FILE"
-    fi
-    echo -e "${GREEN}✓ Security mode: $SECURITY_MODE${NC}"
-fi
-
-if [[ -n "$SERVER_TYPE" ]]; then
-    if ! grep -q "SERVER_TYPE:" "$COMPOSE_FILE"; then
-        SETTINGS_TO_ADD="${SETTINGS_TO_ADD}      SERVER_TYPE: \"$SERVER_TYPE\"\n"
-    else
-        sed -i "s|SERVER_TYPE: \".*\"|SERVER_TYPE: \"$SERVER_TYPE\"|g" "$COMPOSE_FILE"
-    fi
-    echo -e "${GREEN}✓ Server type: $SERVER_TYPE${NC}"
-fi
-
-# Configure greylist settings
-if [[ "$USE_GREYLIST" == "yes" ]]; then
-    if ! grep -q "USE_GREYLIST:" "$COMPOSE_FILE"; then
-        SETTINGS_TO_ADD="${SETTINGS_TO_ADD}      USE_GREYLIST: \"$USE_GREYLIST\"\n"
-    else
-        sed -i "s|USE_GREYLIST: \".*\"|USE_GREYLIST: \"$USE_GREYLIST\"|g" "$COMPOSE_FILE"
-    fi
-    echo -e "${GREEN}✓ Greylist enabled: $USE_GREYLIST${NC}"
-    
-    if [[ -n "$GREYLIST_IP" ]]; then
-        if ! grep -q "GREYLIST_IP:" "$COMPOSE_FILE"; then
-            SETTINGS_TO_ADD="${SETTINGS_TO_ADD}      GREYLIST_IP: \"$GREYLIST_IP\"\n"
-        else
-            sed -i "s|GREYLIST_IP: \".*\"|GREYLIST_IP: \"$GREYLIST_IP\"|g" "$COMPOSE_FILE"
-        fi
-        echo -e "${GREEN}✓ Greylist IPs: $GREYLIST_IP${NC}"
-    fi
-    
-    if [[ -n "$GREYLIST_RDNS" ]]; then
-        if ! grep -q "GREYLIST_RDNS:" "$COMPOSE_FILE"; then
-            SETTINGS_TO_ADD="${SETTINGS_TO_ADD}      GREYLIST_RDNS: \"$GREYLIST_RDNS\"\n"
-        else
-            sed -i "s|GREYLIST_RDNS: \".*\"|GREYLIST_RDNS: \"$GREYLIST_RDNS\"|g" "$COMPOSE_FILE"
-        fi
-        echo -e "${GREEN}✓ Greylist RDNS: $GREYLIST_RDNS${NC}"
-    fi
-else
-    echo -e "${BLUE}ℹ Greylist disabled - admin interface accessible from any IP${NC}"
-fi
-
-# Add any new settings that weren't found in the file
-if [[ -n "$SETTINGS_TO_ADD" ]]; then
-    # Add new settings to scheduler environment
-    sed -i '/bw-scheduler:/,/environment:/{
-        /environment:/a\
-'"$SETTINGS_TO_ADD"'
-    }' "$COMPOSE_FILE"
-    echo -e "${GREEN}✓ Additional BunkerWeb settings configured${NC}"
-fi
-
-# Configure container dependencies for proper startup order
-echo -e "${BLUE}Configuring container dependencies...${NC}"
-
-# Apply dependencies to docker-compose.yml
-echo -e "${BLUE}Applying container dependencies...${NC}"
-
-# Function to add depends_on to a service
-add_depends_on() {
-    local service_name="$1"
-    local dependencies="$2"
-    
-    if grep -q "${service_name}:" "$COMPOSE_FILE" && [[ -n "$dependencies" && "$dependencies" != "[]" ]]; then
-        # Remove any existing depends_on for this service
-        sed -i "/${service_name}:/,/^  [a-zA-Z]/ {/depends_on:/d; /^    - /d}" "$COMPOSE_FILE"
-        
-        # Convert dependencies to array format and add to compose file
-        local dep_list=""
-        IFS=',' read -ra DEPS <<< "$dependencies"
-        for dep in "${DEPS[@]}"; do
-            dep=$(echo "$dep" | xargs)  # trim whitespace
-            dep_list="${dep_list}      - ${dep}\n"
-        done
-        
-        # Add depends_on section after service name
-        sed -i "/${service_name}:/a\\    depends_on:\n${dep_list}" "$COMPOSE_FILE"
-        echo -e "${GREEN}  ✓ ${service_name} depends on: ${dependencies}${NC}"
-    fi
-}
-
-# Apply each dependency based on enabled services
-echo -e "${BLUE}Setting up container dependencies...${NC}"
-
-if [[ "$SYSLOG_ENABLED" == "yes" ]]; then
-    add_depends_on "bw-db" "bw-syslog"
-    if [[ "$REDIS_ENABLED" == "yes" ]]; then
-        add_depends_on "bw-redis" "bw-syslog"
-        add_depends_on "bw-scheduler" "bw-db,bw-redis"
-        add_depends_on "bunkerweb" "bw-scheduler,bw-redis"
-    else
-        add_depends_on "bw-scheduler" "bw-db"
-        add_depends_on "bunkerweb" "bw-scheduler"
-    fi
-else
-    if [[ "$REDIS_ENABLED" == "yes" ]]; then
-        add_depends_on "bw-scheduler" "bw-db,bw-redis"
-        add_depends_on "bunkerweb" "bw-scheduler,bw-redis"
-    else
-        add_depends_on "bw-scheduler" "bw-db"
-        add_depends_on "bunkerweb" "bw-scheduler"
-    fi
-fi
-
-# Always add these dependencies
-add_depends_on "bw-ui" "bw-scheduler"
-
-# Add autoconf dependencies if present
-if grep -q "bw-autoconf:" "$COMPOSE_FILE"; then
-    add_depends_on "bw-autoconf" "bw-docker,bw-scheduler"
-fi
-
-echo -e "${GREEN}✓ Container dependencies configured${NC}"
-echo -e "${BLUE}Startup order:${NC}"
-if [[ "$SYSLOG_ENABLED" == "yes" ]]; then
-    echo -e "${BLUE}  1. bw-syslog (syslog server)${NC}"
-    echo -e "${BLUE}  2. bw-db (database)${NC}"
-    if [[ "$REDIS_ENABLED" == "yes" ]]; then
-        echo -e "${BLUE}  3. bw-redis (cache)${NC}"
-        echo -e "${BLUE}  4. bw-scheduler + bw-docker${NC}"
-    else
-        echo -e "${BLUE}  3. bw-scheduler + bw-docker${NC}"
-    fi
-else
-    echo -e "${BLUE}  1. bw-db (database)${NC}"
-    if [[ "$REDIS_ENABLED" == "yes" ]]; then
-        echo -e "${BLUE}  2. bw-redis (cache)${NC}"
-        echo -e "${BLUE}  3. bw-scheduler + bw-docker${NC}"
-    else
-        echo -e "${BLUE}  2. bw-scheduler + bw-docker${NC}"
-    fi
-fi
-echo -e "${BLUE}  →. bunkerweb (main proxy)${NC}"
-echo -e "${BLUE}  →. bw-ui (web interface)${NC}"
-if grep -q "bw-autoconf:" "$COMPOSE_FILE"; then
-    echo -e "${BLUE}  →. bw-autoconf (configuration)${NC}"
-fi
-
 # Verify replacements
 echo -e "${BLUE}Verifying configuration...${NC}"
 
@@ -1396,7 +1213,6 @@ chmod 600 "$CREDS_FILE"  # Keep credentials file secure
 chmod 755 "$INSTALL_DIR/apps"
 echo -e "${GREEN}✓ All directories created and permissions properly set${NC}"
 
-# Display summary
 echo ""
 echo -e "${GREEN}================================================${NC}"
 echo -e "${GREEN}          Setup Complete!${NC}"
@@ -1409,211 +1225,13 @@ echo -e "${YELLOW}Credentials File:${NC} $CREDS_FILE"
 echo -e "${YELLOW}Backup File:${NC} $BACKUP_FILE"
 echo -e "${YELLOW}Redis Enabled:${NC} $REDIS_ENABLED"
 echo -e "${YELLOW}Syslog Enabled:${NC} $SYSLOG_ENABLED"
-if [[ "$SYSLOG_ENABLED" == "yes" ]]; then
-    echo -e "${YELLOW}Syslog Directory:${NC} $INSTALL_DIR/logs"
-fi
-if [[ "$REDIS_ENABLED" == "yes" ]]; then
-    echo -e "${YELLOW}Redis Directory:${NC} $INSTALL_DIR/redis"
-fi
 echo ""
-echo -e "${BLUE}Container Startup Order:${NC}"
-if [[ "$SYSLOG_ENABLED" == "yes" ]]; then
-    echo -e "${BLUE}  1. Syslog Server (bw-syslog) - starts first${NC}"
-    echo -e "${BLUE}  2. Database (bw-db) - depends on syslog${NC}"
-    if [[ "$REDIS_ENABLED" == "yes" ]]; then
-        echo -e "${BLUE}  3. Redis Cache (bw-redis) - depends on syslog${NC}"
-        echo -e "${BLUE}  4. Core Services (bw-scheduler, bw-docker)${NC}"
-    else
-        echo -e "${BLUE}  3. Core Services (bw-scheduler, bw-docker)${NC}"
-    fi
-else
-    echo -e "${BLUE}  1. Database (bw-db) - starts first${NC}"
-    if [[ "$REDIS_ENABLED" == "yes" ]]; then
-        echo -e "${BLUE}  2. Redis Cache (bw-redis)${NC}"
-        echo -e "${BLUE}  3. Core Services (bw-scheduler, bw-docker)${NC}"
-    else
-        echo -e "${BLUE}  2. Core Services (bw-scheduler, bw-docker)${NC}"
-    fi
-fi
-echo -e "${BLUE}  →. Main Proxy (bunkerweb)${NC}"
-echo -e "${BLUE}  →. Web Interface (bw-ui)${NC}"
-if grep -q "bw-autoconf:" "$COMPOSE_FILE" 2>/dev/null; then
-    echo -e "${BLUE}  →. Auto-config (bw-autoconf)${NC}"
-fi
-echo ""
-echo -e "${BLUE}Next Steps:${NC}"
+
 if [[ $SETUP_MODE == "automated" ]]; then
-    if [[ -n "$SUDO_USER" ]]; then
-        echo "1. Navigate to http://\$SERVER_IP"
-        echo "2. Login with username: $ADMIN_USERNAME"
-        echo "3. Start protecting applications with autoconf labels"
-    else
-        echo "1. Navigate to http://\$SERVER_IP"
-        echo "2. Login with username: $ADMIN_USERNAME"
-        echo "3. Start protecting applications with autoconf labels"
-    fi
+    echo -e "${BLUE}🚀 Configuration completed! Redis: $REDIS_ENABLED, Syslog: $SYSLOG_ENABLED${NC}"
+    echo -e "${GREEN}You can now start BunkerWeb with: cd $INSTALL_DIR && docker compose up -d${NC}"
 else
-    if [[ -n "$SUDO_USER" ]]; then
-        echo "1. su - $SUDO_USER"
-        echo "2. cd $INSTALL_DIR"
-        echo "3. docker compose up -d"
-        echo "4. Navigate to http://your-server-ip/setup"
-        echo "5. Complete the setup wizard (or use pre-generated credentials)"
-        echo "   Username: $ADMIN_USERNAME | Password: $ADMIN_PASSWORD"
-    else
-        echo "1. cd $INSTALL_DIR"
-        echo "2. docker compose up -d"
-        echo "3. Navigate to http://your-server-ip/setup"
-        echo "4. Complete the setup wizard (or use pre-generated credentials)"
-        echo "   Username: $ADMIN_USERNAME | Password: $ADMIN_PASSWORD"
-    fi
-fi
-echo ""
-echo -e "${RED}IMPORTANT:${NC}"
-echo -e "${RED}• Keep the credentials file secure: $CREDS_FILE${NC}"
-echo -e "${RED}• Backup your installation regularly${NC}"
-echo -e "${RED}• The backup file can restore original template: $BACKUP_FILE${NC}"
-echo -e "${BLUE}• Configuration file: $CONFIG_FILE${NC}"
-echo -e "${BLUE}• Credentials are preserved between script runs - delete credentials.txt to regenerate${NC}"
-if [[ "$REDIS_ENABLED" == "yes" ]]; then
-    echo -e "${GREEN}• Redis caching enabled with secure password${NC}"
-    echo -e "${GREEN}• Redis data directory: $INSTALL_DIR/redis${NC}"
-    echo -e "${BLUE}• Redis access: docker exec -it bw-redis redis-cli -a '[password from credentials]'${NC}"
-fi
-if [[ "$SYSLOG_ENABLED" == "yes" ]]; then
-    echo -e "${GREEN}• External syslog logging enabled: $SYSLOG_ADDRESS:$SYSLOG_PORT${NC}"
-    echo -e "${GREEN}• Syslog directory: $INSTALL_DIR/logs${NC}"
-    echo -e "${BLUE}• View logs: docker exec -it bw-syslog tail -f /var/log/messages${NC}"
-fi
-echo -e "${BLUE}• Container dependencies configured for optimal startup order${NC}"
-echo ""
-
-# Automatically start BunkerWeb
-echo -e "${BLUE}Starting BunkerWeb automatically...${NC}"
-cd "$INSTALL_DIR"
-
-# Check if we have docker compose
-if command -v docker-compose &> /dev/null; then
-    DOCKER_CMD="docker-compose"
-elif command -v docker &> /dev/null && docker compose version &> /dev/null; then
-    DOCKER_CMD="docker compose"
-else
-    echo -e "${RED}Error: docker compose not found${NC}"
-    echo "Please install Docker and Docker Compose"
-    echo -e "${YELLOW}You can start BunkerWeb manually later with:${NC}"
-    echo "cd $INSTALL_DIR && docker compose up -d"
-    exit 1
+    echo -e "${BLUE}🔧 Setup wizard mode configured! Complete setup via web interface.${NC}"
 fi
 
-# If we have SUDO_USER, run docker as that user
-if [[ -n "$SUDO_USER" ]]; then
-    echo -e "${YELLOW}Running Docker as user: $SUDO_USER${NC}"
-    su - "$SUDO_USER" -c "cd $INSTALL_DIR && $DOCKER_CMD up -d"
-else
-    $DOCKER_CMD up -d
-fi
-
-# Wait a moment for services to start
-echo -e "${BLUE}Waiting for services to start...${NC}"
-sleep 5
-
-# Check if services are running
-echo -e "${BLUE}Checking service status...${NC}"
-if [[ -n "$SUDO_USER" ]]; then
-    RUNNING_CONTAINERS=$(su - "$SUDO_USER" -c "cd $INSTALL_DIR && $DOCKER_CMD ps --services --filter 'status=running'" | wc -l)
-else
-    RUNNING_CONTAINERS=$($DOCKER_CMD ps --services --filter 'status=running' | wc -l)
-fi
-
-if [[ $RUNNING_CONTAINERS -gt 0 ]]; then
-    echo -e "${GREEN}✓ BunkerWeb started successfully!${NC}"
-    echo -e "${GREEN}✓ $RUNNING_CONTAINERS services are running${NC}"
-    
-    # Get server IP for easy access
-    SERVER_IP=$(hostname -I | awk '{print $1}')
-    echo ""
-    echo -e "${GREEN}================================================${NC}"
-    echo -e "${GREEN}          BunkerWeb is Ready!${NC}"
-    echo -e "${GREEN}================================================${NC}"
-    echo ""
-    
-    if [[ $SETUP_MODE == "automated" ]]; then
-        echo -e "${BLUE}🚀 Automated Setup Complete!${NC}"
-        if [[ -n "$AUTO_CERT_TYPE" && "$FQDN" != "localhost" ]]; then
-            echo -e "${GREEN}Web Interface:${NC} https://$FQDN (SSL enabled)"
-            echo -e "${GREEN}Fallback Access:${NC} http://$SERVER_IP"
-        else
-            echo -e "${GREEN}Web Interface:${NC} http://$SERVER_IP"
-            if [[ "$FQDN" != "localhost" ]]; then
-                echo -e "${GREEN}Domain Access:${NC} http://$FQDN"
-            fi
-        fi
-        echo ""
-        echo -e "${YELLOW}Login Credentials:${NC}"
-        echo -e "${YELLOW}Username:${NC} $ADMIN_USERNAME"
-        echo -e "${YELLOW}Password:${NC} $ADMIN_PASSWORD"
-        echo ""
-        echo -e "${GREEN}✓ No setup wizard required - ready to use!${NC}"
-        echo -e "${BLUE}💡 All credentials saved in: $CREDS_FILE${NC}"
-        if [[ "$REDIS_ENABLED" == "yes" ]]; then
-            echo -e "${BLUE}🔴 Redis caching enabled for improved performance${NC}"
-            echo -e "${BLUE}💾 Redis data: $INSTALL_DIR/redis${NC}"
-        fi
-        if [[ "$SYSLOG_ENABLED" == "yes" ]]; then
-            echo -e "${BLUE}📋 Centralized logging to: $SYSLOG_ADDRESS:$SYSLOG_PORT${NC}"
-            echo -e "${BLUE}📁 Log files: $INSTALL_DIR/logs${NC}"
-        fi
-        if [[ -n "$AUTO_CERT_TYPE" ]]; then
-            echo -e "${BLUE}🔒 SSL certificates will be automatically issued for: $FQDN${NC}"
-            if [[ "$LETS_ENCRYPT_STAGING" == "yes" ]]; then
-                echo -e "${YELLOW}🔬 Using staging environment (certificates will not be browser-trusted)${NC}"
-                echo -e "${BLUE}💡 For production, add --LE_STAGING no${NC}"
-            fi
-        fi
-        if [[ "$MULTISITE" == "yes" ]]; then
-            echo -e "${BLUE}🌐 Multisite mode enabled - you can host multiple domains${NC}"
-            echo -e "${BLUE}💡 Add additional domains using autoconf labels in docker-compose.yml${NC}"
-        fi
-    else
-        if [[ -n "$AUTO_CERT_TYPE" && "$FQDN" != "localhost" ]]; then
-            echo -e "${BLUE}Setup Wizard:${NC} https://$FQDN/setup (SSL enabled)"
-            echo -e "${BLUE}Web Interface:${NC} https://$FQDN (after setup)"
-            echo -e "${BLUE}Fallback Access:${NC} http://$SERVER_IP/setup"
-        else
-            echo -e "${BLUE}Setup Wizard:${NC} http://$SERVER_IP/setup"
-            echo -e "${BLUE}Web Interface:${NC} http://$SERVER_IP (after setup)"
-            if [[ "$FQDN" != "localhost" ]]; then
-                echo -e "${BLUE}Domain Access:${NC} http://$FQDN"
-            fi
-        fi
-        echo ""
-        echo -e "${YELLOW}Complete the setup wizard to finish configuration!${NC}"
-        echo -e "${BLUE}💡 Pre-generated admin credentials available in: $CREDS_FILE${NC}"
-        echo -e "${BLUE}💡 Username: $ADMIN_USERNAME | Password: $ADMIN_PASSWORD${NC}"
-        if [[ "$REDIS_ENABLED" == "yes" ]]; then
-            echo -e "${BLUE}🔴 Redis caching enabled for improved performance${NC}"
-            echo -e "${BLUE}💾 Redis data: $INSTALL_DIR/redis${NC}"
-        fi
-        if [[ "$SYSLOG_ENABLED" == "yes" ]]; then
-            echo -e "${BLUE}📋 Centralized logging to: $SYSLOG_ADDRESS:$SYSLOG_PORT${NC}"
-            echo -e "${BLUE}📁 Log files: $INSTALL_DIR/logs${NC}"
-        fi
-        if [[ -n "$AUTO_CERT_TYPE" ]]; then
-            echo -e "${BLUE}🔒 SSL certificates will be automatically issued for: $FQDN${NC}"
-            if [[ "$LETS_ENCRYPT_STAGING" == "yes" ]]; then
-                echo -e "${YELLOW}🔬 Using staging environment (certificates will not be browser-trusted)${NC}"
-                echo -e "${BLUE}💡 For production, add --LE_STAGING no${NC}"
-            fi
-        fi
-        if [[ "$MULTISITE" == "yes" ]]; then
-            echo -e "${BLUE}🌐 Multisite mode enabled - you can host multiple domains${NC}"
-            echo -e "${BLUE}💡 Configure additional domains via the web interface${NC}"
-        fi
-    fi
-else
-    echo -e "${RED}Warning: Some services may not have started properly${NC}"
-    echo -e "${YELLOW}Check logs with: cd $INSTALL_DIR && docker compose logs${NC}"
-fi
-
-echo ""
 echo -e "${GREEN}Setup script completed successfully!${NC}"
