@@ -1,14 +1,3 @@
-#!/bin/bash
-#
-# Copyright (c) 2025 Michal Koeckeis-Fresel
-# 
-# This software is dual-licensed under your choice of:
-# - MIT License (see LICENSE-MIT)
-# - GNU Affero General Public License v3.0 (see LICENSE-AGPL)
-# 
-# SPDX-License-Identifier: MIT OR AGPL-3.0-or-later
-#
-
 # BunkerWeb Autoconf Docker Compose Template with Redis and Syslog
 
 x-ui-env: &bw-ui-env
@@ -30,13 +19,6 @@ x-redis-env: &redis-env
   REDIS_KEEPALIVE_IDLE: "30000"
   REDIS_KEEPALIVE_POOL: "10"
 
-x-syslog-config: &syslog-config
-  # Syslog configuration
-  logging:
-    driver: syslog
-    options:
-      syslog-address: "udp://REPLACEME_SYSLOG_ADDRESS:REPLACEME_SYSLOG_PORT"
-
 services:
   bunkerweb:
     image: bunkerity/bunkerweb:1.6.1
@@ -53,13 +35,11 @@ services:
     restart: "unless-stopped"
     depends_on:
       - bw-redis
-      - bw-syslog
+      - bw-db
     networks:
       - bw-universe
       - bw-services
       - bw-redis
-      - bw-syslog
-    <<: *syslog-config
 
   bw-scheduler:
     image: bunkerity/bunkerweb-scheduler:1.6.1
@@ -76,20 +56,16 @@ services:
     depends_on:
       - bw-redis
       - bw-db
-      - bw-syslog
     networks:
       - bw-universe
       - bw-db
       - bw-redis
-      - bw-syslog
-    <<: *syslog-config
 
   bw-autoconf:
     image: bunkerity/bunkerweb-autoconf:1.6.1
     depends_on:
       - bw-docker
-      - bw-redis
-      - bw-syslog
+      - bw-scheduler
     environment:
       <<: [*bw-ui-env, *redis-env]
       DOCKER_HOST: "tcp://bw-docker:2375"
@@ -99,8 +75,6 @@ services:
       - bw-docker
       - bw-db
       - bw-redis
-      - bw-syslog
-    <<: *syslog-config
 
   bw-docker:
     image: tecnativa/docker-socket-proxy:nightly
@@ -126,30 +100,10 @@ services:
     depends_on:
       - bw-redis
       - bw-db
-      - bw-syslog
     networks:
       - bw-universe
       - bw-db
       - bw-redis
-      - bw-syslog
-    <<: *syslog-config
-
-  bw-syslog:
-    image: rsyslog/rsyslog:latest
-    ports:
-      - "514:514/tcp"
-      - "514:514/udp"
-    volumes:
-      - /data/BunkerWeb/logs:/var/log
-    restart: unless-stopped
-    networks:
-      - bw-universe
-    healthcheck:
-      test: ["CMD", "pgrep", "rsyslogd"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
 
   bw-redis:
     image: redis:7-alpine
@@ -190,8 +144,6 @@ services:
     networks:
       - bw-db
 
-# volumes: # Using host directories instead of named volumes
-
 networks:
   bw-universe:
     name: bw-universe
@@ -207,9 +159,3 @@ networks:
     name: bw-db
   bw-redis:
     name: bw-redis
-  bw-syslog:
-    name: bw-syslog
-    ipam:
-      driver: default
-      config:
-        - subnet: REPLACEME_SYSLOG_NETWORK
