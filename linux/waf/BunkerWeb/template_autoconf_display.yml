@@ -43,7 +43,7 @@ services:
       MULTISITE: "yes"
       UI_HOST: "http://bw-ui:7000" # Change it if needed
     volumes:
-      - /data/BunkerWeb/storage:/data # This is used to persist the cache and other data like the backups
+      - bw-storage:/data # This is used to persist the cache and other data like the backups
     restart: "unless-stopped"
     networks:
       - bw-universe
@@ -95,12 +95,14 @@ services:
       MYSQL_USER: "bunkerweb"
       MYSQL_PASSWORD: "REPLACEME_MYSQL"
     volumes:
-      - /data/BunkerWeb/database:/var/lib/mysql
+      - bw-data:/var/lib/mysql
     restart: "unless-stopped"
     networks:
       - bw-db
 
-# volumes: # Using host directories instead of named volumes
+volumes:
+  bw-data:
+  bw-storage:
 
 networks:
   bw-universe:
