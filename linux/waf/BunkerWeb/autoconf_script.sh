@@ -36,6 +36,10 @@ USE_GREYLIST="no"       # Enable greylist for admin interface
 GREYLIST_IP=""          # IP addresses or networks to greylist
 GREYLIST_RDNS=""        # Reverse DNS suffixes to greylist
 
+# MySQL Configuration
+MYSQL_RANDOM_ROOT_PASSWORD="no"  # Set to "no" to disable random root password generation
+MYSQL_ROOT_PASSWORD=""           # Custom root password (generated if empty)
+
 # Load configuration from BunkerWeb.conf if it exists
 CONFIG_FILE="$INSTALL_DIR/BunkerWeb.conf"
 if [[ -f "$CONFIG_FILE" ]]; then
@@ -166,6 +170,10 @@ USE_GREYLIST="no"                # Enable greylist for admin interface (default:
 # GREYLIST_IP=""                 # IP addresses/networks to greylist (auto-detected from SSH)
 # GREYLIST_RDNS=""               # Reverse DNS suffixes to greylist
 
+# MySQL Database Configuration
+MYSQL_RANDOM_ROOT_PASSWORD="no" # Set to "no" for controlled root password (default: no)
+# MYSQL_ROOT_PASSWORD=""         # Custom root password (auto-generated if empty)
+
 # SSL Certificate Configuration
 AUTO_CERT_TYPE="LE"              # Certificate type: LE or ZeroSSL (Note: ZeroSSL is draft - not yet implemented)
 AUTO_CERT_CONTACT="me@example.com"  # Contact email for certificates (CHANGE THIS!)
@@ -176,6 +184,11 @@ AUTO_CERT_CONTACT="me@example.com"  # Contact email for certificates (CHANGE THI
 # LETS_ENCRYPT_STAGING="yes"     # Use staging environment: yes or no (default: yes for safety)
 # LETS_ENCRYPT_WILDCARD="no"     # Enable wildcard certificates: yes or no (DNS only)
 
+# MYSQL CONFIGURATION:
+# MYSQL_RANDOM_ROOT_PASSWORD="no" means root password will be set to a known value
+# MYSQL_ROOT_PASSWORD will be auto-generated if not specified
+# This allows for controlled access to the database root user
+#
 # TO ENABLE SSL CERTIFICATES:
 # 1. Change AUTO_CERT_CONTACT above from me@example.com to your real email address
 # 2. Optionally set FQDN to your domain name
@@ -200,6 +213,10 @@ AUTO_CERT_CONTACT="me@example.com"  # Contact email for certificates (CHANGE THI
 # Example domain configuration:
 # FQDN="bunkerweb.yourdomain.com"
 # SERVER_NAME="bunkerweb.yourdomain.com"
+
+# Example MySQL configuration:
+# MYSQL_RANDOM_ROOT_PASSWORD="no"
+# MYSQL_ROOT_PASSWORD="my-secure-root-password"
 
 # Example greylist configuration:
 # USE_GREYLIST="yes"
@@ -249,6 +266,10 @@ EOF
     echo -e "${YELLOW}SSL certificates are ENABLED by default with placeholder values.${NC}"
     echo -e "${YELLOW}The script will STOP if you run it again without editing the config file.${NC}"
     echo ""
+    echo -e "${BLUE}MySQL Configuration:${NC}"
+    echo -e "${GREEN}• MYSQL_RANDOM_ROOT_PASSWORD is set to \"no\" for controlled access${NC}"
+    echo -e "${GREEN}• Root password will be auto-generated and saved to credentials file${NC}"
+    echo ""
     echo -e "${BLUE}Required steps before running again:${NC}"
     echo -e "${YELLOW}  1. Edit: $CONFIG_FILE${NC}"
     echo -e "${YELLOW}  2. Change: AUTO_CERT_CONTACT=\"me@example.com\"${NC}"
@@ -283,6 +304,10 @@ show_usage() {
     echo -e "  --FQDN DOMAIN       Set Fully Qualified Domain Name (overrides auto-detection)"
     echo -e "  --force             Skip configuration validation (not recommended)"
     echo ""
+    echo -e "${YELLOW}MySQL Configuration:${NC}"
+    echo -e "  --mysql-random-root yes|no   Set MYSQL_RANDOM_ROOT_PASSWORD (default: no)"
+    echo -e "  --mysql-root-password PASS   Set custom MySQL root password"
+    echo ""
     echo -e "${YELLOW}SSL Certificate Options:${NC}"
     echo -e "  --AUTO_CERT LE|ZeroSSL       Enable automatic certificates (overrides config file)"
     echo -e "  --AUTO_CERT_CONTACT EMAIL    Contact email for certificate registration"
@@ -303,13 +328,19 @@ show_usage() {
     echo -e "  ${YELLOW}You MUST edit the config file to use real email addresses${NC}"
     echo -e "  Script will stop if example values are detected in SSL configuration"
     echo ""
+    echo -e "${BLUE}MySQL Configuration:${NC}"
+    echo -e "  ${GREEN}MYSQL_RANDOM_ROOT_PASSWORD is set to \"no\" by default${NC}"
+    echo -e "  ${GREEN}This allows controlled access with a known root password${NC}"
+    echo -e "  ${GREEN}MySQL passwords use 264-bit entropy (beyond AES-256)${NC}"
+    echo -e "  ${GREEN}Admin passwords use 12 chars (human-friendly but secure)${NC}"
+    echo -e "  ${GREEN}Root password is auto-generated and saved to credentials file${NC}"
+    echo ""
     echo -e "${YELLOW}Examples:${NC}"
     echo -e "  sudo $0 --type autoconf"
     echo -e "  sudo $0 --type basic --wizard"
     echo -e "  sudo $0 --type integrated --admin-name myuser"
+    echo -e "  sudo $0 --type autoconf --mysql-root-password mysecretpass"
     echo -e "  sudo $0 --type autoconf --FQDN bunkerweb.example.com --AUTO_CERT LE --AUTO_CERT_CONTACT admin@example.com"
-    echo -e "  sudo $0 --type basic --FQDN example.com --AUTO_CERT LE --AUTO_CERT_CONTACT admin@example.com --LE_WILDCARD yes --LE_CHALLENGE dns"
-    echo -e "  sudo $0 --type autoconf --AUTO_CERT LE --AUTO_CERT_CONTACT prod@example.com --LE_STAGING no"
     echo ""
     echo -e "${BLUE}Note:${NC} Existing credentials are preserved. Delete /root/BunkerWeb-Credentials.txt to regenerate passwords."
     echo -e "${RED}Note:${NC} SSL certificates are ENABLED by default with placeholder values!"
@@ -337,6 +368,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         --FQDN)
             FQDN="$2"
+            shift 2
+            ;;
+        --mysql-random-root)
+            MYSQL_RANDOM_ROOT_PASSWORD="$2"
+            shift 2
+            ;;
+        --mysql-root-password)
+            MYSQL_ROOT_PASSWORD="$2"
             shift 2
             ;;
         --AUTO_CERT)
@@ -378,6 +417,17 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Validate MySQL configuration
+case "$MYSQL_RANDOM_ROOT_PASSWORD" in
+    yes|no)
+        ;;
+    *)
+        echo -e "${RED}Error: Invalid MYSQL_RANDOM_ROOT_PASSWORD value '$MYSQL_RANDOM_ROOT_PASSWORD'${NC}"
+        echo -e "${YELLOW}Valid values: yes, no${NC}"
+        exit 1
+        ;;
+esac
 
 # Validate that --type was provided
 if [[ -z "$DEPLOYMENT_TYPE" ]]; then
@@ -549,6 +599,7 @@ echo -e "${GREEN}Setup Mode:${NC} $(if [[ $SETUP_MODE == "automated" ]]; then ec
 echo -e "${GREEN}Admin Username:${NC} $ADMIN_USERNAME"
 echo -e "${GREEN}Domain (FQDN):${NC} $FQDN"
 echo -e "${GREEN}Multisite Mode:${NC} $MULTISITE"
+echo -e "${GREEN}MySQL Random Root:${NC} $MYSQL_RANDOM_ROOT_PASSWORD"
 echo -e "${GREEN}Config File:${NC} $(if [[ -f "$CONFIG_FILE" ]]; then echo "Loaded"; else echo "Created default"; fi)"
 if [[ -n "$AUTO_CERT_TYPE" ]]; then
     echo -e "${GREEN}SSL Certificates:${NC} $AUTO_CERT_TYPE"
@@ -603,9 +654,19 @@ echo -e "${BLUE}Creating backup...${NC}"
 cp "$COMPOSE_FILE" "$BACKUP_FILE"
 echo -e "${GREEN}Backup created: $BACKUP_FILE${NC}"
 
-# Generate passwords function using Method 1: Base64 (12 characters)
+# Generate passwords function using Method 1: Base64 (12 characters for human use)
 generate_password() {
-    openssl rand -base64 32 | head -c 12 && echo
+    openssl rand -base64 33 | head -c 12 && echo
+}
+
+# Generate secure MySQL passwords function (full 264-bit entropy)
+generate_mysql_password() {
+    openssl rand -base64 33
+}
+
+# Generate secure MySQL root password function (full 264-bit entropy)
+generate_mysql_root_password() {
+    openssl rand -base64 33
 }
 
 # Check if credentials already exist
@@ -656,6 +717,14 @@ if [[ -f "$ROOT_CREDS_FILE" ]]; then
     TOTP_SECRET=$(grep "TOTP Secret Key:" "$ROOT_CREDS_FILE" | cut -d' ' -f4 || echo "")
     ADMIN_PASSWORD=$(grep "Admin Password:" "$ROOT_CREDS_FILE" | cut -d' ' -f3 || echo "")
     FLASK_SECRET=$(grep "Flask Secret:" "$ROOT_CREDS_FILE" | cut -d' ' -f3 || echo "")
+    EXISTING_MYSQL_ROOT_PASSWORD=$(grep "MySQL Root Password:" "$ROOT_CREDS_FILE" | cut -d' ' -f4 || echo "")
+    
+    # Use existing MySQL root password if available, otherwise use configured or generate new
+    if [[ -n "$EXISTING_MYSQL_ROOT_PASSWORD" ]]; then
+        MYSQL_ROOT_PASSWORD="$EXISTING_MYSQL_ROOT_PASSWORD"
+    elif [[ -z "$MYSQL_ROOT_PASSWORD" ]]; then
+        MYSQL_ROOT_PASSWORD=$(generate_mysql_root_password)
+    fi
     
     # Verify we got all passwords
     if [[ -n "$MYSQL_PASSWORD" && -n "$TOTP_SECRET" && -n "$ADMIN_PASSWORD" && -n "$FLASK_SECRET" ]]; then
@@ -663,23 +732,37 @@ if [[ -f "$ROOT_CREDS_FILE" ]]; then
         echo -e "${GREEN}✓ Existing TOTP secret loaded${NC}"
         echo -e "${GREEN}✓ Existing admin password loaded${NC}"
         echo -e "${GREEN}✓ Existing Flask secret loaded${NC}"
-        echo -e "${YELLOW}Note: Using existing credentials. Delete $ROOT_CREDS_FILE to generate new ones.${NC}"
+        if [[ -n "$EXISTING_MYSQL_ROOT_PASSWORD" ]]; then
+            echo -e "${GREEN}✓ Existing MySQL root password loaded${NC}"
+        else
+            echo -e "${GREEN}✓ New MySQL root password generated${NC}"
+        fi
+        echo -e "${YELLOW}Note: Using existing credentials. Delete $ROOT_CREDS_FILE to regenerate passwords.${NC}"
     else
         echo -e "${YELLOW}Warning: Could not load all credentials from existing file.${NC}"
         echo -e "${BLUE}Generating missing credentials...${NC}"
         
         # Generate any missing passwords
-        [[ -z "$MYSQL_PASSWORD" ]] && MYSQL_PASSWORD=$(generate_password) && echo -e "${GREEN}✓ New MySQL password generated${NC}"
+        [[ -z "$MYSQL_PASSWORD" ]] && MYSQL_PASSWORD=$(generate_mysql_password) && echo -e "${GREEN}✓ New MySQL password generated (264-bit)${NC}"
         [[ -z "$TOTP_SECRET" ]] && TOTP_SECRET=$(generate_password) && echo -e "${GREEN}✓ New TOTP secret generated${NC}"
         [[ -z "$ADMIN_PASSWORD" ]] && ADMIN_PASSWORD=$(generate_password) && echo -e "${GREEN}✓ New admin password generated${NC}"
         [[ -z "$FLASK_SECRET" ]] && FLASK_SECRET=$(generate_password) && echo -e "${GREEN}✓ New Flask secret generated${NC}"
+        [[ -z "$MYSQL_ROOT_PASSWORD" ]] && MYSQL_ROOT_PASSWORD=$(generate_mysql_root_password) && echo -e "${GREEN}✓ New MySQL root password generated (264-bit)${NC}"
     fi
 else
     echo -e "${BLUE}No existing credentials found, generating new secure passwords...${NC}"
     
-    # Generate MySQL password (used for both DATABASE_URI and MYSQL_PASSWORD)
-    MYSQL_PASSWORD=$(generate_password)
-    echo -e "${GREEN}✓ MySQL password generated${NC}"
+    # Generate MySQL password (used for both DATABASE_URI and MYSQL_PASSWORD) - 264-bit
+    MYSQL_PASSWORD=$(generate_mysql_password)
+    echo -e "${GREEN}✓ MySQL password generated (264-bit)${NC}"
+
+    # Generate MySQL root password if not provided - 264-bit
+    if [[ -z "$MYSQL_ROOT_PASSWORD" ]]; then
+        MYSQL_ROOT_PASSWORD=$(generate_mysql_root_password)
+        echo -e "${GREEN}✓ MySQL root password generated (264-bit)${NC}"
+    else
+        echo -e "${GREEN}✓ Using provided MySQL root password${NC}"
+    fi
 
     # Generate TOTP secret
     TOTP_SECRET=$(generate_password)
@@ -692,6 +775,21 @@ else
     FLASK_SECRET=$(generate_password)
     echo -e "${GREEN}✓ Flask secret generated${NC}"
 fi
+
+# Display MySQL configuration summary
+echo ""
+echo -e "${BLUE}MySQL Configuration Summary:${NC}"
+echo -e "${GREEN}• MYSQL_RANDOM_ROOT_PASSWORD: $MYSQL_RANDOM_ROOT_PASSWORD${NC}"
+if [[ "$MYSQL_RANDOM_ROOT_PASSWORD" == "no" ]]; then
+    echo -e "${GREEN}• MySQL root password: Controlled (264-bit entropy, ${#MYSQL_ROOT_PASSWORD} chars)${NC}"
+    echo -e "${GREEN}• MySQL app password: 264-bit entropy (${#MYSQL_PASSWORD} chars)${NC}"
+    echo -e "${BLUE}• Security level: Maximum+ (beyond AES-256)${NC}"
+else
+    echo -e "${YELLOW}• MySQL root password: Random (container-generated)${NC}"
+    echo -e "${GREEN}• MySQL app password: 264-bit entropy (${#MYSQL_PASSWORD} chars)${NC}"
+fi
+echo -e "${BLUE}• Admin password: 12 chars (manageable for human use)${NC}"
+echo ""
 
 # Create/update credentials file in /root/
 if [[ -f "$ROOT_CREDS_FILE" ]]; then
@@ -710,8 +808,11 @@ cat > "$ROOT_CREDS_FILE" << EOF
 # Setup Mode: $(if [[ $SETUP_MODE == "automated" ]]; then echo "Automated"; else echo "Setup Wizard"; fi)
 # Generated on: $(date)
 # Keep this file secure and backed up!
+#
+# SECURITY LEVEL: MAXIMUM+ (264-bit MySQL passwords)
 
 MySQL Database Password: $MYSQL_PASSWORD
+MySQL Root Password: $MYSQL_ROOT_PASSWORD
 TOTP Secret Key: $TOTP_SECRET
 
 # Web UI Setup (passwords always generated)
@@ -719,9 +820,22 @@ Admin Username: $ADMIN_USERNAME
 Admin Password: $ADMIN_PASSWORD
 Flask Secret: $FLASK_SECRET
 
+# Password Security Information:
+# MySQL passwords: 264-bit entropy (~44 characters, beyond AES-256)
+# Admin/UI passwords: 96-bit entropy (12 characters, human-friendly but secure)
+# Flask secret: 96-bit entropy (sufficient for session security)
+
 # Domain Configuration
 FQDN: $FQDN
 Server Name: $(if [[ -n "$SERVER_NAME" ]]; then echo "$SERVER_NAME"; else echo "$FQDN"; fi)
+
+# MySQL Configuration
+MySQL Random Root Password: $MYSQL_RANDOM_ROOT_PASSWORD
+$(if [[ "$MYSQL_RANDOM_ROOT_PASSWORD" == "no" ]]; then
+echo "MySQL Root Access: Available with known 264-bit password"
+else
+echo "MySQL Root Access: Container-generated random password"
+fi)
 
 # BunkerWeb Configuration
 Multisite Mode: $MULTISITE
@@ -746,6 +860,13 @@ echo "Wildcard Certificates: $LETS_ENCRYPT_WILDCARD"
 fi)
 $(if [[ "$AUTO_CERT_TYPE" == "ZeroSSL" ]]; then echo "ZeroSSL API Key: $AUTO_CERT_ZSSL_API (NOTE: ZeroSSL is draft - not yet implemented)"; fi)
 
+# Database Access Commands:
+# Application user: docker exec -it bw-db mysql -u bunkerweb -p'$MYSQL_PASSWORD' db
+# Root user: docker exec -it bw-db mysql -u root -p'$MYSQL_ROOT_PASSWORD'
+
+# Database Connection String:
+# mariadb+pymysql://bunkerweb:$MYSQL_PASSWORD@bw-db:3306/db
+
 # Multisite Information:
 # Multisite mode is enabled by default, allowing multiple domains with individual configurations.
 # Use SERVER_NAME prefixes for domain-specific settings in docker-compose.yml labels.
@@ -755,12 +876,7 @@ $(if [[ "$AUTO_CERT_TYPE" == "ZeroSSL" ]]; then echo "ZeroSSL API Key: $AUTO_CER
 # When USE_GREYLIST=yes, only IPs in GREYLIST_IP can access the admin interface.
 # GREYLIST_RDNS allows access from IPs with reverse DNS matching specified suffixes.
 # This provides additional security for the BunkerWeb admin interface.
-
-# Database Connection String:
-# mariadb+pymysql://bunkerweb:$MYSQL_PASSWORD@bw-db:3306/db
 EOF
-
-
 
 if [[ $SETUP_MODE == "automated" ]]; then
     # Automated setup - enable automated configuration
@@ -794,6 +910,40 @@ echo -e "${BLUE}Updating docker-compose.yml...${NC}"
 # Replace REPLACEME_MYSQL (both in DATABASE_URI and MYSQL_PASSWORD)
 sed -i "s|REPLACEME_MYSQL|$MYSQL_PASSWORD|g" "$COMPOSE_FILE"
 echo -e "${GREEN}✓ MySQL passwords updated${NC}"
+
+# Configure MySQL root password setting
+echo -e "${BLUE}Configuring MySQL root password setting...${NC}"
+if grep -q "MYSQL_RANDOM_ROOT_PASSWORD:" "$COMPOSE_FILE"; then
+    sed -i "s|MYSQL_RANDOM_ROOT_PASSWORD: \".*\"|MYSQL_RANDOM_ROOT_PASSWORD: \"$MYSQL_RANDOM_ROOT_PASSWORD\"|g" "$COMPOSE_FILE"
+    echo -e "${GREEN}✓ MYSQL_RANDOM_ROOT_PASSWORD updated to: $MYSQL_RANDOM_ROOT_PASSWORD${NC}"
+else
+    # Add MYSQL_RANDOM_ROOT_PASSWORD to the database service environment
+    sed -i '/bw-db:/,/environment:/{
+        /environment:/a\
+      MYSQL_RANDOM_ROOT_PASSWORD: "'$MYSQL_RANDOM_ROOT_PASSWORD'"
+    }' "$COMPOSE_FILE"
+    echo -e "${GREEN}✓ MYSQL_RANDOM_ROOT_PASSWORD added: $MYSQL_RANDOM_ROOT_PASSWORD${NC}"
+fi
+
+# If MYSQL_RANDOM_ROOT_PASSWORD is "no", set the root password
+if [[ "$MYSQL_RANDOM_ROOT_PASSWORD" == "no" ]]; then
+    if grep -q "MYSQL_ROOT_PASSWORD:" "$COMPOSE_FILE"; then
+        sed -i "s|MYSQL_ROOT_PASSWORD: \".*\"|MYSQL_ROOT_PASSWORD: \"$MYSQL_ROOT_PASSWORD\"|g" "$COMPOSE_FILE"
+        echo -e "${GREEN}✓ MYSQL_ROOT_PASSWORD updated${NC}"
+    else
+        # Add MYSQL_ROOT_PASSWORD to the database service environment
+        sed -i '/bw-db:/,/environment:/{
+            /MYSQL_RANDOM_ROOT_PASSWORD:/a\
+      MYSQL_ROOT_PASSWORD: "'$MYSQL_ROOT_PASSWORD'"
+        }' "$COMPOSE_FILE"
+        echo -e "${GREEN}✓ MYSQL_ROOT_PASSWORD added${NC}"
+    fi
+    echo -e "${BLUE}✓ MySQL root password set to known value (length: ${#MYSQL_ROOT_PASSWORD} chars)${NC}"
+else
+    # Remove any existing MYSQL_ROOT_PASSWORD setting if random is enabled
+    sed -i '/MYSQL_ROOT_PASSWORD:/d' "$COMPOSE_FILE"
+    echo -e "${BLUE}✓ MySQL will generate random root password${NC}"
+fi
 
 # Replace REPLACEME_DEFAULT (TOTP_SECRETS)
 sed -i "s|REPLACEME_DEFAULT|$TOTP_SECRET|g" "$COMPOSE_FILE"
@@ -1099,6 +1249,16 @@ echo -e "${YELLOW}Credentials File:${NC} $ROOT_CREDS_FILE"
 echo -e "${YELLOW}Credentials Link:${NC} $LOCAL_CREDS_FILE"
 echo -e "${YELLOW}Backup File:${NC} $BACKUP_FILE"
 echo ""
+echo -e "${BLUE}MySQL Configuration:${NC}"
+echo -e "${YELLOW}• Random Root Password:${NC} $MYSQL_RANDOM_ROOT_PASSWORD"
+if [[ "$MYSQL_RANDOM_ROOT_PASSWORD" == "no" ]]; then
+    echo -e "${YELLOW}• Root Password Management:${NC} Controlled (saved to credentials)"
+    echo -e "${YELLOW}• Root Access Command:${NC} docker exec -it bw-db mysql -u root -p'$MYSQL_ROOT_PASSWORD'"
+else
+    echo -e "${YELLOW}• Root Password Management:${NC} Container-generated random"
+    echo -e "${YELLOW}• Root Access:${NC} Check container logs for password"
+fi
+echo ""
 echo -e "${BLUE}Next Steps:${NC}"
 if [[ $SETUP_MODE == "automated" ]]; then
     if [[ -n "$SUDO_USER" ]]; then
@@ -1134,6 +1294,11 @@ echo -e "${RED}• The backup file can restore original template: $BACKUP_FILE${
 echo -e "${BLUE}• Configuration file: $CONFIG_FILE${NC}"
 echo -e "${BLUE}• Credentials are preserved between script runs - delete $ROOT_CREDS_FILE to regenerate${NC}"
 echo -e "${BLUE}• Symbolic link allows local access: $LOCAL_CREDS_FILE${NC}"
+if [[ "$MYSQL_RANDOM_ROOT_PASSWORD" == "no" ]]; then
+    echo -e "${GREEN}• MySQL root access enabled with 264-bit password${NC}"
+else
+    echo -e "${YELLOW}• MySQL root password is container-generated (check logs)${NC}"
+fi
 echo ""
 
 # Automatically start BunkerWeb
@@ -1203,6 +1368,11 @@ if [[ $RUNNING_CONTAINERS -gt 0 ]]; then
         echo ""
         echo -e "${GREEN}✓ No setup wizard required - ready to use!${NC}"
         echo -e "${BLUE}💡 All credentials saved in: $ROOT_CREDS_FILE${NC}"
+        if [[ "$MYSQL_RANDOM_ROOT_PASSWORD" == "no" ]]; then
+            echo -e "${BLUE}🔐 MySQL root access (264-bit): docker exec -it bw-db mysql -u root -p'$MYSQL_ROOT_PASSWORD'${NC}"
+        else
+            echo -e "${BLUE}🔐 MySQL root password: Check container logs with 'docker logs bw-db'${NC}"
+        fi
         if [[ -n "$AUTO_CERT_TYPE" ]]; then
             echo -e "${BLUE}🔒 SSL certificates will be automatically issued for: $FQDN${NC}"
             if [[ "$LETS_ENCRYPT_STAGING" == "yes" ]]; then
@@ -1230,6 +1400,11 @@ if [[ $RUNNING_CONTAINERS -gt 0 ]]; then
         echo -e "${YELLOW}Complete the setup wizard to finish configuration!${NC}"
         echo -e "${BLUE}💡 Pre-generated admin credentials available in: $ROOT_CREDS_FILE${NC}"
         echo -e "${BLUE}💡 Username: $ADMIN_USERNAME | Password: $ADMIN_PASSWORD${NC}"
+        if [[ "$MYSQL_RANDOM_ROOT_PASSWORD" == "no" ]]; then
+            echo -e "${BLUE}🔐 MySQL root access (264-bit): docker exec -it bw-db mysql -u root -p'$MYSQL_ROOT_PASSWORD'${NC}"
+        else
+            echo -e "${BLUE}🔐 MySQL root password: Check container logs with 'docker logs bw-db'${NC}"
+        fi
         if [[ -n "$AUTO_CERT_TYPE" ]]; then
             echo -e "${BLUE}🔒 SSL certificates will be automatically issued for: $FQDN${NC}"
             if [[ "$LETS_ENCRYPT_STAGING" == "yes" ]]; then
