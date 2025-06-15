@@ -13,12 +13,6 @@
 
 set -e  # Exit on any error
 
-# Enable debugging if DEBUG environment variable is set
-if [[ "${DEBUG:-}" == "1" || "${DEBUG:-}" == "true" ]]; then
-    set -x
-    log_info "Debug mode enabled"
-fi
-
 # Logging functions
 log_info() {
     echo -e "\033[34m[INFO]\033[0m $1"
