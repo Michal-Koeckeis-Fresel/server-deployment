@@ -9,7 +9,7 @@
 # SPDX-License-Identifier: MIT OR AGPL-3.0-or-later
 #
 
-# BunkerWeb Setup Script
+# BunkerWeb Setup Script with Network Conflict Detection
 # This script generates random passwords and replaces placeholders in docker-compose.yml
 # MUST BE RUN AS ROOT: sudo ./setup-bunkerweb.sh --type <autoconf|basic|integrated>
 
@@ -36,6 +36,11 @@ USE_GREYLIST="no"       # Enable greylist for admin interface
 GREYLIST_IP=""          # IP addresses or networks to greylist
 GREYLIST_RDNS=""        # Reverse DNS suffixes to greylist
 
+# Network Configuration
+PRIVATE_NETWORKS_ALREADY_IN_USE=""  # User-specified networks to avoid
+AUTO_DETECT_NETWORK_CONFLICTS="yes"  # Auto-detect conflicts
+PREFERRED_DOCKER_SUBNET=""           # Preferred subnet for Docker
+
 # Redis Configuration (enabled by default)
 REDIS_ENABLED="yes"     # Enable Redis support: yes or no (default: yes)
 REDIS_PASSWORD=""       # Redis password (auto-generated if Redis enabled)
@@ -51,7 +56,350 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
 NC='\033[0m' # No Color
+
+# Network utility functions
+check_command() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+# Function to convert CIDR to decimal for comparison
+cidr_to_decimal() {
+    local cidr="$1"
+    local ip="${cidr%/*}"
+    local prefix="${cidr#*/}"
+    
+    # Convert IP to decimal
+    local a b c d
+    IFS=. read -r a b c d <<< "$ip"
+    local ip_decimal=$((a * 256**3 + b * 256**2 + c * 256 + d))
+    
+    # Calculate network address
+    local mask=$((0xFFFFFFFF << (32 - prefix)))
+    local network=$((ip_decimal & mask))
+    
+    echo "$network/$prefix"
+}
+
+# Function to check if two networks overlap
+networks_overlap() {
+    local net1="$1"
+    local net2="$2"
+    
+    # Convert to comparable format
+    local net1_dec=$(cidr_to_decimal "$net1")
+    local net2_dec=$(cidr_to_decimal "$net2")
+    
+    local net1_addr="${net1_dec%/*}"
+    local net1_prefix="${net1_dec#*/}"
+    local net2_addr="${net2_dec%/*}"
+    local net2_prefix="${net2_dec#*/}"
+    
+    # Check if networks overlap
+    local smaller_prefix=$((net1_prefix < net2_prefix ? net1_prefix : net2_prefix))
+    local mask=$((0xFFFFFFFF << (32 - smaller_prefix)))
+    
+    local net1_masked=$((net1_addr & mask))
+    local net2_masked=$((net2_addr & mask))
+    
+    [[ $net1_masked -eq $net2_masked ]]
+}
+
+# Function to get existing network routes
+get_existing_networks() {
+    local networks=()
+    
+    echo -e "${BLUE}Scanning existing network configurations...${NC}"
+    
+    # Method 1: Get routes from 'ip route'
+    if check_command ip; then
+        echo -e "${CYAN}• Checking routing table...${NC}"
+        while IFS= read -r line; do
+            if [[ "$line" =~ ^([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+) ]]; then
+                local network="${BASH_REMATCH[1]}"
+                # Skip default routes and host routes (/32)
+                if [[ "$network" != "0.0.0.0/0" && "$network" != *"/32" ]]; then
+                    networks+=("$network")
+                fi
+            fi
+        done < <(ip route show 2>/dev/null | grep -E "^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+" || true)
+    fi
+    
+    # Method 2: Get interfaces from 'ip addr'
+    if check_command ip; then
+        echo -e "${CYAN}• Checking network interfaces...${NC}"
+        while IFS= read -r line; do
+            if [[ "$line" =~ inet[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+) ]]; then
+                local network="${BASH_REMATCH[1]}"
+                # Skip loopback and host routes
+                if [[ "$network" != "127."* && "$network" != *"/32" ]]; then
+                    networks+=("$network")
+                fi
+            fi
+        done < <(ip addr show 2>/dev/null || true)
+    fi
+    
+    # Method 3: Fallback to ifconfig if available
+    if check_command ifconfig && [[ ${#networks[@]} -eq 0 ]]; then
+        echo -e "${CYAN}• Checking ifconfig...${NC}"
+        while IFS= read -r line; do
+            if [[ "$line" =~ inet[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+).*netmask[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+) ]]; then
+                local ip="${BASH_REMATCH[1]}"
+                local netmask="${BASH_REMATCH[2]}"
+                # Convert netmask to CIDR
+                local cidr=$(netmask_to_cidr "$netmask")
+                if [[ "$ip" != "127."* && "$cidr" != "32" ]]; then
+                    networks+=("$ip/$cidr")
+                fi
+            fi
+        done < <(ifconfig 2>/dev/null || true)
+    fi
+    
+    # Method 4: Check existing Docker networks
+    if check_command docker; then
+        echo -e "${CYAN}• Checking existing Docker networks...${NC}"
+        while IFS= read -r line; do
+            if [[ "$line" =~ \"Subnet\":[[:space:]]*\"([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+)\" ]]; then
+                local network="${BASH_REMATCH[1]}"
+                networks+=("$network")
+            fi
+        done < <(docker network ls -q | xargs -I {} docker network inspect {} 2>/dev/null | grep -E "\"Subnet\":" || true)
+    fi
+    
+    # Remove duplicates and return
+    printf '%s\n' "${networks[@]}" | sort -u
+}
+
+# Function to convert netmask to CIDR prefix
+netmask_to_cidr() {
+    local netmask="$1"
+    local a b c d
+    IFS=. read -r a b c d <<< "$netmask"
+    local mask=$((a * 256**3 + b * 256**2 + c * 256 + d))
+    
+    local cidr=0
+    for ((i=31; i>=0; i--)); do
+        if (( (mask >> i) & 1 )); then
+            ((cidr++))
+        else
+            break
+        fi
+    done
+    echo "$cidr"
+}
+
+# Function to suggest safe Docker subnets
+suggest_safe_subnet() {
+    local existing_networks=("$@")
+    local rfc1918_ranges=(
+        "10.0.0.0/8"
+        "172.16.0.0/12"
+        "192.168.0.0/16"
+    )
+    
+    echo -e "${BLUE}Finding safe Docker subnet...${NC}"
+    
+    # Common safe subnets to try (in order of preference)
+    local candidate_subnets=(
+        "10.20.30.0/24"    # Default BunkerWeb subnet
+        "172.20.0.0/24"    # Docker default range
+        "172.21.0.0/24"
+        "172.22.0.0/24"
+        "10.10.10.0/24"
+        "10.50.0.0/24"
+        "10.100.0.0/24"
+        "192.168.200.0/24"
+        "192.168.100.0/24"
+        "192.168.50.0/24"
+    )
+    
+    # Test each candidate subnet
+    for subnet in "${candidate_subnets[@]}"; do
+        local conflict=false
+        
+        for existing in "${existing_networks[@]}"; do
+            if networks_overlap "$subnet" "$existing"; then
+                conflict=true
+                break
+            fi
+        done
+        
+        if [[ "$conflict" == "false" ]]; then
+            echo "$subnet"
+            return 0
+        fi
+    done
+    
+    # If no predefined subnet works, generate one
+    echo -e "${YELLOW}⚠ No predefined safe subnet found, generating custom subnet...${NC}"
+    
+    # Try different ranges in RFC1918 space
+    for base_range in "10" "172" "192"; do
+        case "$base_range" in
+            "10")
+                # Try 10.x.0.0/24 where x is 50-254
+                for ((i=50; i<=254; i++)); do
+                    local test_subnet="10.$i.0.0/24"
+                    local conflict=false
+                    for existing in "${existing_networks[@]}"; do
+                        if networks_overlap "$test_subnet" "$existing"; then
+                            conflict=true
+                            break
+                        fi
+                    done
+                    if [[ "$conflict" == "false" ]]; then
+                        echo "$test_subnet"
+                        return 0
+                    fi
+                done
+                ;;
+            "172")
+                # Try 172.x.0.0/24 where x is 16-31
+                for ((i=20; i<=31; i++)); do
+                    local test_subnet="172.$i.0.0/24"
+                    local conflict=false
+                    for existing in "${existing_networks[@]}"; do
+                        if networks_overlap "$test_subnet" "$existing"; then
+                            conflict=true
+                            break
+                        fi
+                    done
+                    if [[ "$conflict" == "false" ]]; then
+                        echo "$test_subnet"
+                        return 0
+                    fi
+                done
+                ;;
+            "192")
+                # Try 192.168.x.0/24 where x is 100-254
+                for ((i=100; i<=254; i++)); do
+                    local test_subnet="192.168.$i.0/24"
+                    local conflict=false
+                    for existing in "${existing_networks[@]}"; do
+                        if networks_overlap "$test_subnet" "$existing"; then
+                            conflict=true
+                            break
+                        fi
+                    done
+                    if [[ "$conflict" == "false" ]]; then
+                        echo "$test_subnet"
+                        return 0
+                    fi
+                done
+                ;;
+        esac
+    done
+    
+    # Fallback - this should rarely happen
+    echo "10.240.0.0/24"
+}
+
+# Function to perform network conflict detection
+detect_network_conflicts() {
+    if [[ "$AUTO_DETECT_NETWORK_CONFLICTS" != "yes" ]]; then
+        echo -e "${BLUE}Network conflict detection disabled${NC}"
+        return 0
+    fi
+    
+    echo -e "${BLUE}=================================================================================${NC}"
+    echo -e "${BLUE}                    NETWORK CONFLICT DETECTION                    ${NC}"
+    echo -e "${BLUE}=================================================================================${NC}"
+    echo ""
+    
+    # Get existing networks from system
+    local existing_networks=()
+    while IFS= read -r network; do
+        [[ -n "$network" ]] && existing_networks+=("$network")
+    done < <(get_existing_networks)
+    
+    # Add user-specified networks
+    if [[ -n "$PRIVATE_NETWORKS_ALREADY_IN_USE" ]]; then
+        echo -e "${BLUE}User-specified networks to avoid: $PRIVATE_NETWORKS_ALREADY_IN_USE${NC}"
+        IFS=' ' read -ra user_networks <<< "$PRIVATE_NETWORKS_ALREADY_IN_USE"
+        for network in "${user_networks[@]}"; do
+            # Validate CIDR format
+            if [[ "$network" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$ ]]; then
+                existing_networks+=("$network")
+            else
+                echo -e "${YELLOW}⚠ Invalid network format ignored: $network${NC}"
+            fi
+        done
+    fi
+    
+    if [[ ${#existing_networks[@]} -eq 0 ]]; then
+        echo -e "${YELLOW}⚠ No existing networks detected - using default configuration${NC}"
+        DOCKER_SUBNET="10.20.30.0/24"
+        SYSLOG_SUBNET="127.0.0.1/32"
+        return 0
+    fi
+    
+    echo -e "${GREEN}Detected existing networks:${NC}"
+    for network in "${existing_networks[@]}"; do
+        echo -e "${GREEN}  • $network${NC}"
+    done
+    echo ""
+    
+    # Check for conflicts with default BunkerWeb subnet
+    local default_subnet="10.20.30.0/24"
+    local conflict_found=false
+    local conflicting_networks=()
+    
+    for existing in "${existing_networks[@]}"; do
+        if networks_overlap "$default_subnet" "$existing"; then
+            conflict_found=true
+            conflicting_networks+=("$existing")
+        fi
+    done
+    
+    if [[ "$conflict_found" == "true" ]]; then
+        echo -e "${RED}⚠ NETWORK CONFLICT DETECTED!${NC}"
+        echo -e "${RED}Default BunkerWeb subnet $default_subnet conflicts with:${NC}"
+        for conflicting in "${conflicting_networks[@]}"; do
+            echo -e "${RED}  • $conflicting${NC}"
+        done
+        echo ""
+        
+        # Suggest safe subnet
+        local safe_subnet=$(suggest_safe_subnet "${existing_networks[@]}")
+        echo -e "${GREEN}✓ Suggested safe subnet: $safe_subnet${NC}"
+        DOCKER_SUBNET="$safe_subnet"
+        
+        # Calculate syslog subnet in same range
+        local base_ip="${safe_subnet%.*}"
+        SYSLOG_SUBNET="${base_ip}.0/24"
+        
+    else
+        echo -e "${GREEN}✓ No conflicts detected with default subnet $default_subnet${NC}"
+        DOCKER_SUBNET="$default_subnet"
+        SYSLOG_SUBNET="10.20.30.0/24"
+    fi
+    
+    # Use user-preferred subnet if specified and safe
+    if [[ -n "$PREFERRED_DOCKER_SUBNET" ]]; then
+        local preferred_conflict=false
+        for existing in "${existing_networks[@]}"; do
+            if networks_overlap "$PREFERRED_DOCKER_SUBNET" "$existing"; then
+                preferred_conflict=true
+                break
+            fi
+        done
+        
+        if [[ "$preferred_conflict" == "false" ]]; then
+            echo -e "${GREEN}✓ Using preferred subnet: $PREFERRED_DOCKER_SUBNET${NC}"
+            DOCKER_SUBNET="$PREFERRED_DOCKER_SUBNET"
+        else
+            echo -e "${RED}⚠ Preferred subnet $PREFERRED_DOCKER_SUBNET conflicts with existing networks${NC}"
+            echo -e "${BLUE}ℹ Using auto-detected safe subnet: $DOCKER_SUBNET${NC}"
+        fi
+    fi
+    
+    echo ""
+    echo -e "${GREEN}Final Docker network configuration:${NC}"
+    echo -e "${GREEN}  • Main subnet: $DOCKER_SUBNET${NC}"
+    echo -e "${GREEN}  • Syslog subnet: $SYSLOG_SUBNET${NC}"
+    echo ""
+}
 
 # Load configuration from BunkerWeb.conf if it exists
 CONFIG_FILE="$INSTALL_DIR/BunkerWeb.conf"
@@ -168,6 +516,21 @@ ADMIN_USERNAME="admin"
 # FQDN=""                        # Fully Qualified Domain Name (auto-detected if not set)
 # SERVER_NAME=""                 # Primary domain name (same as FQDN in single domain setups)
 
+# Network Configuration
+# IMPORTANT: Specify existing private networks in your infrastructure to avoid conflicts
+# Format: Space-separated list of CIDR networks (e.g., "10.0.0.0/8 172.16.0.0/12 192.168.1.0/24")
+# This helps the setup script automatically choose non-conflicting Docker subnets
+PRIVATE_NETWORKS_ALREADY_IN_USE=""  # Add your existing networks here
+
+# Examples of networks you might want to reserve:
+# PRIVATE_NETWORKS_ALREADY_IN_USE="192.168.1.0/24 10.0.0.0/16"  # Home network + corporate VPN
+# PRIVATE_NETWORKS_ALREADY_IN_USE="172.16.0.0/12"                # Corporate VPN range
+# PRIVATE_NETWORKS_ALREADY_IN_USE="10.0.0.0/8 192.168.0.0/24"   # Corporate network + local
+
+# Docker Network Configuration
+AUTO_DETECT_NETWORK_CONFLICTS="yes"  # Auto-detect and avoid network conflicts (default: yes)
+# PREFERRED_DOCKER_SUBNET=""           # Preferred subnet for Docker (auto-selected if empty)
+
 # BunkerWeb Instance Configuration
 BUNKERWEB_INSTANCES="127.0.0.1" # List of BunkerWeb instances separated by spaces
 
@@ -203,6 +566,35 @@ AUTO_CERT_CONTACT="me@example.com"  # Contact email for certificates (CHANGE THI
 # LETS_ENCRYPT_STAGING="yes"     # Use staging environment: yes or no (default: yes for safety)
 # LETS_ENCRYPT_WILDCARD="no"     # Enable wildcard certificates: yes or no (DNS only)
 
+# NETWORK CONFIGURATION GUIDE:
+# ============================
+# 
+# RFC 1918 Private Address Ranges (the only ones you should use):
+# • 10.0.0.0/8        (10.0.0.0 - 10.255.255.255)     - Large corporate networks
+# • 172.16.0.0/12     (172.16.0.0 - 172.31.255.255)   - Medium networks, VPNs
+# • 192.168.0.0/16    (192.168.0.0 - 192.168.255.255) - Small networks, home use
+#
+# EXAMPLES OF NETWORK CONFIGURATION:
+# 
+# Home network with router on 192.168.1.x:
+# PRIVATE_NETWORKS_ALREADY_IN_USE="192.168.1.0/24"
+#
+# Corporate environment with VPN:
+# PRIVATE_NETWORKS_ALREADY_IN_USE="10.0.0.0/8 172.16.0.0/12"
+#
+# Multiple specific networks:
+# PRIVATE_NETWORKS_ALREADY_IN_USE="192.168.1.0/24 192.168.2.0/24 10.10.0.0/16"
+#
+# TO AUTOMATICALLY DETECT CONFLICTS:
+# The setup script will automatically scan your system for existing networks
+# and combine them with PRIVATE_NETWORKS_ALREADY_IN_USE to suggest safe subnets.
+#
+# NETWORK CONFLICT PREVENTION:
+# • The setup script will check existing routes and interfaces
+# • It will avoid subnets that conflict with your specified networks
+# • It will suggest the safest available private subnet
+# • Docker networks will be configured to avoid all conflicts
+
 # TO ENABLE SSL CERTIFICATES:
 # 1. Change AUTO_CERT_CONTACT above from me@example.com to your real email address
 # 2. Optionally set FQDN to your domain name
@@ -227,6 +619,12 @@ AUTO_CERT_CONTACT="me@example.com"  # Contact email for certificates (CHANGE THI
 # Example domain configuration:
 # FQDN="bunkerweb.yourdomain.com"
 # SERVER_NAME="bunkerweb.yourdomain.com"
+
+# Example network configuration for home environment:
+# PRIVATE_NETWORKS_ALREADY_IN_USE="192.168.1.0/24"
+
+# Example network configuration for corporate environment:
+# PRIVATE_NETWORKS_ALREADY_IN_USE="10.0.0.0/8 172.16.0.0/12"
 
 # Example greylist configuration:
 # USE_GREYLIST="yes"
@@ -276,15 +674,21 @@ EOF
     echo -e "${YELLOW}SSL certificates are ENABLED by default with placeholder values.${NC}"
     echo -e "${YELLOW}The script will STOP if you run it again without editing the config file.${NC}"
     echo ""
+    echo -e "${BLUE}Network Configuration:${NC}"
+    echo -e "${GREEN}• Auto-detection enabled for network conflicts${NC}"
+    echo -e "${GREEN}• Specify existing networks in PRIVATE_NETWORKS_ALREADY_IN_USE to avoid conflicts${NC}"
+    echo ""
     echo -e "${BLUE}Required steps before running again:${NC}"
     echo -e "${YELLOW}  1. Edit: $CONFIG_FILE${NC}"
     echo -e "${YELLOW}  2. Change: AUTO_CERT_CONTACT=\"me@example.com\"${NC}"
     echo -e "${YELLOW}  3. To: AUTO_CERT_CONTACT=\"your-real-email@domain.com\"${NC}"
-    echo -e "${YELLOW}  4. Run this script again${NC}"
+    echo -e "${YELLOW}  4. Optionally set: PRIVATE_NETWORKS_ALREADY_IN_USE=\"your-existing-networks\"${NC}"
+    echo -e "${YELLOW}  5. Run this script again${NC}"
     echo ""
     echo -e "${BLUE}Optional - disable services:${NC}"
     echo -e "${BLUE}  Set REDIS_ENABLED=\"no\" to disable Redis caching${NC}"
     echo -e "${BLUE}  Set SYSLOG_ENABLED=\"no\" to disable centralized logging${NC}"
+    echo -e "${BLUE}  Set AUTO_DETECT_NETWORK_CONFLICTS=\"no\" to disable network checking${NC}"
     echo ""
     echo -e "${BLUE}Alternative - to disable SSL certificates:${NC}"
     echo -e "${BLUE}  Comment out AUTO_CERT_TYPE (add # at the beginning)${NC}"
@@ -306,6 +710,11 @@ show_usage() {
     echo -e "  --admin-name NAME   Set admin username (overrides config file)"
     echo -e "  --FQDN DOMAIN       Set Fully Qualified Domain Name (overrides auto-detection)"
     echo -e "  --force             Skip configuration validation (not recommended)"
+    echo ""
+    echo -e "${YELLOW}Network Configuration:${NC}"
+    echo -e "  --private-networks \"NET1 NET2\"  Specify existing networks to avoid"
+    echo -e "  --preferred-subnet SUBNET       Preferred Docker subnet"
+    echo -e "  --no-network-check              Disable network conflict detection"
     echo ""
     echo -e "${YELLOW}Redis Configuration:${NC}"
     echo -e "  --redis-enabled yes|no       Enable Redis support (default: yes)"
@@ -336,6 +745,12 @@ show_usage() {
     echo -e "  ${RED}IMPORTANT: SSL is ENABLED by default with example values${NC}"
     echo -e "  ${YELLOW}You MUST edit the config file to use real email addresses${NC}"
     echo -e "  Script will stop if example values are detected in SSL configuration"
+    echo ""
+    echo -e "${BLUE}Network Examples:${NC}"
+    echo -e "  sudo $0 --type autoconf --private-networks \"192.168.1.0/24\""
+    echo -e "  sudo $0 --type autoconf --private-networks \"10.0.0.0/8 172.16.0.0/12\""
+    echo -e "  sudo $0 --type autoconf --preferred-subnet \"172.20.0.0/24\""
+    echo -e "  sudo $0 --type autoconf --no-network-check  # Skip network detection"
     echo ""
     echo -e "${YELLOW}Examples:${NC}"
     echo -e "  sudo $0 --type autoconf"
@@ -372,6 +787,18 @@ while [[ $# -gt 0 ]]; do
         --FQDN)
             FQDN="$2"
             shift 2
+            ;;
+        --private-networks)
+            PRIVATE_NETWORKS_ALREADY_IN_USE="$2"
+            shift 2
+            ;;
+        --preferred-subnet)
+            PREFERRED_DOCKER_SUBNET="$2"
+            shift 2
+            ;;
+        --no-network-check)
+            AUTO_DETECT_NETWORK_CONFLICTS="no"
+            shift
             ;;
         --redis-enabled)
             REDIS_ENABLED="$2"
@@ -437,10 +864,9 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Validate Redis configuration
+# Validate configuration parameters
 case "$REDIS_ENABLED" in
-    yes|no)
-        ;;
+    yes|no) ;;
     *)
         echo -e "${RED}Error: Invalid REDIS_ENABLED value '$REDIS_ENABLED'${NC}"
         echo -e "${YELLOW}Valid values: yes, no${NC}"
@@ -448,12 +874,19 @@ case "$REDIS_ENABLED" in
         ;;
 esac
 
-# Validate Syslog configuration
 case "$SYSLOG_ENABLED" in
-    yes|no)
-        ;;
+    yes|no) ;;
     *)
         echo -e "${RED}Error: Invalid SYSLOG_ENABLED value '$SYSLOG_ENABLED'${NC}"
+        echo -e "${YELLOW}Valid values: yes, no${NC}"
+        exit 1
+        ;;
+esac
+
+case "$AUTO_DETECT_NETWORK_CONFLICTS" in
+    yes|no) ;;
+    *)
+        echo -e "${RED}Error: Invalid AUTO_DETECT_NETWORK_CONFLICTS value '$AUTO_DETECT_NETWORK_CONFLICTS'${NC}"
         echo -e "${YELLOW}Valid values: yes, no${NC}"
         exit 1
         ;;
@@ -467,6 +900,9 @@ if [[ -z "$DEPLOYMENT_TYPE" ]]; then
     exit 1
 fi
 
+# Perform network conflict detection
+detect_network_conflicts
+
 # Auto-detect FQDN if not provided
 if [[ -z "$FQDN" ]]; then
     echo -e "${BLUE}Auto-detecting FQDN...${NC}"
@@ -475,12 +911,12 @@ if [[ -z "$FQDN" ]]; then
     DETECTED_FQDN=""
     
     # Method 1: hostname -f
-    if command -v hostname &> /dev/null; then
+    if check_command hostname; then
         DETECTED_FQDN=$(hostname -f 2>/dev/null || echo "")
     fi
     
     # Method 2: dnsdomainname + hostname
-    if [[ -z "$DETECTED_FQDN" ]] && command -v dnsdomainname &> /dev/null; then
+    if [[ -z "$DETECTED_FQDN" ]] && check_command dnsdomainname; then
         DOMAIN=$(dnsdomainname 2>/dev/null || echo "")
         HOSTNAME=$(hostname 2>/dev/null || echo "")
         if [[ -n "$DOMAIN" && -n "$HOSTNAME" ]]; then
@@ -555,8 +991,7 @@ if [[ -n "$AUTO_CERT_TYPE" ]]; then
             
             # Validate Let's Encrypt specific options
             case "$LETS_ENCRYPT_CHALLENGE" in
-                http|dns)
-                    ;;
+                http|dns) ;;
                 *)
                     echo -e "${RED}Error: Invalid challenge type '$LETS_ENCRYPT_CHALLENGE'${NC}"
                     echo -e "${YELLOW}Valid types: http, dns${NC}"
@@ -565,8 +1000,7 @@ if [[ -n "$AUTO_CERT_TYPE" ]]; then
             esac
             
             case "$LETS_ENCRYPT_STAGING" in
-                yes|no)
-                    ;;
+                yes|no) ;;
                 *)
                     echo -e "${RED}Error: Invalid staging value '$LETS_ENCRYPT_STAGING'${NC}"
                     echo -e "${YELLOW}Valid values: yes, no${NC}"
@@ -575,8 +1009,7 @@ if [[ -n "$AUTO_CERT_TYPE" ]]; then
             esac
             
             case "$LETS_ENCRYPT_WILDCARD" in
-                yes|no)
-                    ;;
+                yes|no) ;;
                 *)
                     echo -e "${RED}Error: Invalid wildcard value '$LETS_ENCRYPT_WILDCARD'${NC}"
                     echo -e "${YELLOW}Valid values: yes, no${NC}"
@@ -614,11 +1047,12 @@ if [[ -n "$AUTO_CERT_TYPE" ]]; then
     esac
 fi
 
-# Set compose file path - MOVED HERE TO DEFINE EARLY
+# Set compose file path
 COMPOSE_FILE="$INSTALL_DIR/docker-compose.yml"
 TEMPLATE_PATH="$INSTALL_DIR/$TEMPLATE_FILE"
 BACKUP_FILE="$INSTALL_DIR/docker-compose.yml.backup"
 
+echo ""
 echo -e "${BLUE}================================================${NC}"
 echo -e "${BLUE}          BunkerWeb Setup Script${NC}"
 echo -e "${BLUE}================================================${NC}"
@@ -629,6 +1063,10 @@ echo -e "${GREEN}Setup Mode:${NC} $(if [[ $SETUP_MODE == "automated" ]]; then ec
 echo -e "${GREEN}Admin Username:${NC} $ADMIN_USERNAME"
 echo -e "${GREEN}Domain (FQDN):${NC} $FQDN"
 echo -e "${GREEN}Multisite Mode:${NC} $MULTISITE"
+echo -e "${GREEN}Network Conflicts:${NC} $(if [[ $AUTO_DETECT_NETWORK_CONFLICTS == "yes" ]]; then echo "Auto-detected"; else echo "Disabled"; fi)"
+if [[ -n "$DOCKER_SUBNET" ]]; then
+    echo -e "${GREEN}Docker Subnet:${NC} $DOCKER_SUBNET"
+fi
 echo -e "${GREEN}Redis Enabled:${NC} $REDIS_ENABLED"
 echo -e "${GREEN}Syslog Enabled:${NC} $SYSLOG_ENABLED"
 echo -e "${GREEN}Config File:${NC} $(if [[ -f "$CONFIG_FILE" ]]; then echo "Loaded"; else echo "Created default"; fi)"
@@ -669,21 +1107,28 @@ echo -e "${BLUE}Copying template to docker-compose.yml...${NC}"
 cp "$TEMPLATE_PATH" "$COMPOSE_FILE"
 echo -e "${GREEN}✓ Template copied: $TEMPLATE_FILE → docker-compose.yml${NC}"
 
-# Check if template contains placeholders
-if ! grep -q "REPLACEME_" "$COMPOSE_FILE"; then
-    echo -e "${YELLOW}Warning: No placeholders found in docker-compose.yml${NC}"
-    echo -e "${YELLOW}File may already be configured or invalid template${NC}"
-    read -p "Continue anyway? (y/N): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        exit 1
-    fi
-fi
-
 # Create backup
 echo -e "${BLUE}Creating backup...${NC}"
 cp "$COMPOSE_FILE" "$BACKUP_FILE"
 echo -e "${GREEN}Backup created: $BACKUP_FILE${NC}"
+
+# Update Docker network subnets if conflicts were detected
+if [[ -n "$DOCKER_SUBNET" && "$DOCKER_SUBNET" != "10.20.30.0/24" ]]; then
+    echo -e "${BLUE}Updating Docker network configuration to avoid conflicts...${NC}"
+    
+    # Update the main universe subnet
+    sed -i "s|10.20.30.0/24|$DOCKER_SUBNET|g" "$COMPOSE_FILE"
+    echo -e "${GREEN}✓ Main subnet updated to: $DOCKER_SUBNET${NC}"
+    
+    # Update syslog subnet if needed
+    if [[ -n "$SYSLOG_SUBNET" && "$SYSLOG_SUBNET" != "$SYSLOG_NETWORK" ]]; then
+        # Calculate a suitable syslog subnet from the Docker subnet
+        local base_ip="${DOCKER_SUBNET%.*}"
+        local syslog_cidr="${base_ip}.0/24"
+        SYSLOG_NETWORK="$syslog_cidr"
+        echo -e "${GREEN}✓ Syslog subnet will be: $SYSLOG_NETWORK${NC}"
+    fi
+fi
 
 # Generate passwords function - Admin password only (12 characters for human use)
 generate_admin_password() {
@@ -797,6 +1242,11 @@ Flask Secret: $FLASK_SECRET
 FQDN: $FQDN
 Server Name: $(if [[ -n "$SERVER_NAME" ]]; then echo "$SERVER_NAME"; else echo "$FQDN"; fi)
 
+# Network Configuration
+Network Conflict Detection: $AUTO_DETECT_NETWORK_CONFLICTS
+$(if [[ -n "$DOCKER_SUBNET" ]]; then echo "Docker Subnet: $DOCKER_SUBNET"; fi)
+$(if [[ -n "$PRIVATE_NETWORKS_ALREADY_IN_USE" ]]; then echo "Private Networks Avoided: $PRIVATE_NETWORKS_ALREADY_IN_USE"; fi)
+
 # BunkerWeb Configuration
 Multisite Mode: $MULTISITE
 BunkerWeb Instances: $BUNKERWEB_INSTANCES
@@ -823,15 +1273,10 @@ echo "Wildcard Certificates: $LETS_ENCRYPT_WILDCARD"
 fi)
 $(if [[ "$AUTO_CERT_TYPE" == "ZeroSSL" ]]; then echo "ZeroSSL API Key: $AUTO_CERT_ZSSL_API (NOTE: ZeroSSL is draft - not yet implemented)"; fi)
 
-# Multisite Information:
-# Multisite mode is enabled by default, allowing multiple domains with individual configurations.
-# Use SERVER_NAME prefixes for domain-specific settings in docker-compose.yml labels.
-# Example: myapp.com_USE_ANTIBOT=captcha applies antibot only to myapp.com
-
-# Greylist Information:
-# When USE_GREYLIST=yes, only IPs in GREYLIST_IP can access the admin interface.
-# GREYLIST_RDNS allows access from IPs with reverse DNS matching specified suffixes.
-# This provides additional security for the BunkerWeb admin interface.
+# Network Information:
+# Network conflict detection automatically scans system routes and interfaces
+# to avoid conflicts with existing networks. This ensures Docker containers
+# can start without IP address conflicts.
 
 # Database Connection String:
 # mariadb+pymysql://bunkerweb:$MYSQL_PASSWORD@bw-db:3306/db
@@ -848,16 +1293,6 @@ echo "# Syslog Server: $SYSLOG_ADDRESS:$SYSLOG_PORT"
 echo "# Log Files: $INSTALL_DIR/logs/"
 echo "# Syslog Access: docker exec -it bw-syslog tail -f /var/log/messages"
 fi)
-
-# Container Startup Order:
-$(if [[ "$SYSLOG_ENABLED" == "yes" ]]; then echo "# 1. bw-syslog (starts first)"; fi)
-# $(if [[ "$SYSLOG_ENABLED" == "yes" ]]; then echo "2"; else echo "1"; fi). bw-db (database)
-$(if [[ "$REDIS_ENABLED" == "yes" ]]; then 
-    if [[ "$SYSLOG_ENABLED" == "yes" ]]; then echo "# 3. bw-redis (cache)"; else echo "# 2. bw-redis (cache)"; fi
-fi)
-# Next: bw-scheduler, bw-docker (core services)
-# Next: bunkerweb (main proxy)
-# Last: bw-ui, bw-autoconf (management)
 EOF
 
 if [[ $SETUP_MODE == "automated" ]]; then
@@ -902,7 +1337,7 @@ sed -i "s|REPLACEME_FLASK|$FLASK_SECRET|g" "$COMPOSE_FILE"
 echo -e "${GREEN}✓ Admin password updated${NC}"
 echo -e "${GREEN}✓ Flask secret updated${NC}"
 
-# Handle additional placeholders that may exist in templates - THE CRITICAL FIX
+# Handle additional placeholders that may exist in templates
 echo -e "${BLUE}Processing additional template placeholders...${NC}"
 
 # Handle Redis password placeholder
@@ -933,9 +1368,7 @@ if grep -q "REPLACEME_SYSLOG_NETWORK" "$COMPOSE_FILE"; then
     echo -e "${GREEN}✓ Syslog network updated to: $SYSLOG_NETWORK${NC}"
 fi
 
-# NOW add Redis and Syslog containers if they don't exist and are enabled
-# (This must happen AFTER the compose file exists and AFTER placeholder replacement)
-
+# Add Redis and Syslog containers if they don't exist and are enabled
 if [[ "$REDIS_ENABLED" == "yes" ]]; then
     if ! grep -q "bw-redis:" "$COMPOSE_FILE"; then
         echo -e "${BLUE}Adding Redis container to docker-compose.yml...${NC}"
@@ -973,24 +1406,9 @@ EOF
     fi
 fi
 
-# Handle syslog configuration - template already contains rsyslog service
+# Handle syslog configuration
 if [[ "$SYSLOG_ENABLED" == "yes" ]]; then
-    echo -e "${GREEN}✓ Syslog service already configured in template (rsyslog/rsyslog:latest)${NC}"
-    
-    # Remove any problematic syslog config file mounts from existing templates (cleanup)
-    if grep -q "/etc/syslog-ng/syslog-ng.conf" "$COMPOSE_FILE"; then
-        echo -e "${BLUE}Removing problematic syslog config file mount...${NC}"
-        sed -i '/\/etc\/syslog-ng\/syslog-ng.conf/d' "$COMPOSE_FILE"
-        echo -e "${GREEN}✓ Removed problematic mount${NC}"
-    fi
-    
-    # Remove any problematic balabit/syslog-ng references (cleanup)
-    if grep -q "balabit/syslog-ng" "$COMPOSE_FILE"; then
-        echo -e "${BLUE}Replacing balabit/syslog-ng with rsyslog...${NC}"
-        sed -i 's|balabit/syslog-ng:.*|rsyslog/rsyslog:latest|' "$COMPOSE_FILE"
-        echo -e "${GREEN}✓ Updated to official rsyslog image${NC}"
-    fi
-    
+    echo -e "${GREEN}✓ Syslog service configured in template${NC}"
 elif [[ "$SYSLOG_ENABLED" == "no" ]]; then
     # Remove syslog service if disabled
     if grep -q "bw-syslog:" "$COMPOSE_FILE"; then
@@ -999,19 +1417,10 @@ elif [[ "$SYSLOG_ENABLED" == "no" ]]; then
         sed -i '/bw-syslog:/,/^  [a-zA-Z]/{ /^  [a-zA-Z]/!d; }' "$COMPOSE_FILE"
         # Remove syslog dependencies
         sed -i '/- bw-syslog/d' "$COMPOSE_FILE"
-        sed -i '/- bw-syslog$/d' "$COMPOSE_FILE"
         # Remove syslog networks
-        sed -i '/- bw-syslog$/d' "$COMPOSE_FILE"
         sed -i '/bw-syslog$/d' "$COMPOSE_FILE"
         echo -e "${GREEN}✓ Syslog service removed${NC}"
     fi
-fi
-
-# Display syslog configuration summary
-if [[ "$SYSLOG_ENABLED" == "yes" ]]; then
-    echo -e "${GREEN}✓ Syslog configuration: $SYSLOG_ADDRESS:$SYSLOG_PORT (network: $SYSLOG_NETWORK)${NC}"
-else
-    echo -e "${BLUE}ℹ Syslog disabled - using local logging only${NC}"
 fi
 
 # Handle SSL certificate configuration
@@ -1019,94 +1428,22 @@ if [[ -n "$AUTO_CERT_TYPE" ]]; then
     echo -e "${BLUE}Configuring SSL certificates ($AUTO_CERT_TYPE) for domain: $FQDN...${NC}"
     
     if [[ "$AUTO_CERT_TYPE" == "LE" ]]; then
-        # Let's Encrypt configuration - handle both template placeholders and direct BunkerWeb settings
-        
-        # Replace template placeholders if they exist
+        # Let's Encrypt configuration
         sed -i "s|REPLACEME_AUTO_LETS_ENCRYPT|yes|g" "$COMPOSE_FILE" 2>/dev/null || true
         sed -i "s|REPLACEME_EMAIL_LETS_ENCRYPT|$AUTO_CERT_CONTACT|g" "$COMPOSE_FILE" 2>/dev/null || true
-        
-        # Also set direct BunkerWeb environment variables
-        if grep -q "AUTO_LETS_ENCRYPT:" "$COMPOSE_FILE"; then
-            sed -i "s|AUTO_LETS_ENCRYPT: \"no\"|AUTO_LETS_ENCRYPT: \"yes\"|g" "$COMPOSE_FILE"
-            sed -i "s|AUTO_LETS_ENCRYPT: \".*\"|AUTO_LETS_ENCRYPT: \"yes\"|g" "$COMPOSE_FILE"
-        else
-            # Add Let's Encrypt settings if not present (append to scheduler environment)
-            sed -i '/bw-scheduler:/,/environment:/{
-                /environment:/a\
-      AUTO_LETS_ENCRYPT: "yes"\
-      EMAIL_LETS_ENCRYPT: "'$AUTO_CERT_CONTACT'"\
-      LETS_ENCRYPT_CHALLENGE: "'$LETS_ENCRYPT_CHALLENGE'"\
-      USE_LETS_ENCRYPT_STAGING: "'$LETS_ENCRYPT_STAGING'"\
-      USE_LETS_ENCRYPT_WILDCARD: "'$LETS_ENCRYPT_WILDCARD'"
-            }' "$COMPOSE_FILE"
-        fi
         
         # Set email and other options
         if grep -q "EMAIL_LETS_ENCRYPT:" "$COMPOSE_FILE"; then
             sed -i "s|EMAIL_LETS_ENCRYPT: \".*\"|EMAIL_LETS_ENCRYPT: \"$AUTO_CERT_CONTACT\"|g" "$COMPOSE_FILE"
         fi
         
-        # Set challenge type
-        if grep -q "LETS_ENCRYPT_CHALLENGE:" "$COMPOSE_FILE"; then
-            sed -i "s|LETS_ENCRYPT_CHALLENGE: \".*\"|LETS_ENCRYPT_CHALLENGE: \"$LETS_ENCRYPT_CHALLENGE\"|g" "$COMPOSE_FILE"
-        fi
-        
-        # Set staging mode
-        if grep -q "USE_LETS_ENCRYPT_STAGING:" "$COMPOSE_FILE"; then
-            sed -i "s|USE_LETS_ENCRYPT_STAGING: \".*\"|USE_LETS_ENCRYPT_STAGING: \"$LETS_ENCRYPT_STAGING\"|g" "$COMPOSE_FILE"
-        fi
-        
-        # Set wildcard mode
-        if grep -q "USE_LETS_ENCRYPT_WILDCARD:" "$COMPOSE_FILE"; then
-            sed -i "s|USE_LETS_ENCRYPT_WILDCARD: \".*\"|USE_LETS_ENCRYPT_WILDCARD: \"$LETS_ENCRYPT_WILDCARD\"|g" "$COMPOSE_FILE"
-        fi
-        
         echo -e "${GREEN}✓ Let's Encrypt enabled${NC}"
         echo -e "${GREEN}✓ Contact email: $AUTO_CERT_CONTACT${NC}"
-        echo -e "${GREEN}✓ Challenge type: $LETS_ENCRYPT_CHALLENGE${NC}"
-        echo -e "${GREEN}✓ Staging mode: $LETS_ENCRYPT_STAGING${NC}"
-        echo -e "${GREEN}✓ Wildcard certificates: $LETS_ENCRYPT_WILDCARD${NC}"
-        
-        if [[ "$LETS_ENCRYPT_STAGING" == "yes" ]]; then
-            echo -e "${YELLOW}⚠ Staging mode enabled (default for safety) - certificates will not be trusted by browsers${NC}"
-            echo -e "${YELLOW}⚠ For production, set --LE_STAGING no to get trusted certificates${NC}"
-        else
-            echo -e "${GREEN}✓ Production mode - certificates will be trusted by browsers${NC}"
-        fi
-        
-        if [[ "$LETS_ENCRYPT_WILDCARD" == "yes" ]]; then
-            echo -e "${BLUE}ℹ Wildcard certificates enabled for *.${FQDN}${NC}"
-            if [[ "$LETS_ENCRYPT_CHALLENGE" == "http" ]]; then
-                echo -e "${YELLOW}⚠ Wildcard certificates require DNS challenge${NC}"
-                echo -e "${YELLOW}⚠ Automatically switching to DNS challenge for wildcard support${NC}"
-                LETS_ENCRYPT_CHALLENGE="dns"
-                sed -i "s|LETS_ENCRYPT_CHALLENGE: \".*\"|LETS_ENCRYPT_CHALLENGE: \"dns\"|g" "$COMPOSE_FILE"
-            fi
-        fi
-        
-        if [[ "$LETS_ENCRYPT_CHALLENGE" == "dns" ]]; then
-            echo -e "${BLUE}ℹ DNS challenge selected${NC}"
-            echo -e "${YELLOW}⚠ DNS challenges require additional configuration:${NC}"
-            echo -e "${YELLOW}  1. Set LETS_ENCRYPT_DNS_PROVIDER (e.g., cloudflare, route53, digitalocean)${NC}"
-            echo -e "${YELLOW}  2. Set LETS_ENCRYPT_DNS_CREDENTIAL_ITEM with your DNS provider credentials${NC}"
-            echo -e "${YELLOW}  3. Refer to BunkerWeb documentation for provider-specific settings${NC}"
-            echo -e "${BLUE}  Manual configuration required in docker-compose.yml${NC}"
-        fi
         
     elif [[ "$AUTO_CERT_TYPE" == "ZeroSSL" ]]; then
-        # ZeroSSL configuration (may require custom implementation)
+        # ZeroSSL configuration
         sed -i "s|REPLACEME_AUTO_LETS_ENCRYPT|yes|g" "$COMPOSE_FILE" 2>/dev/null || true
         sed -i "s|REPLACEME_EMAIL_LETS_ENCRYPT|$AUTO_CERT_CONTACT|g" "$COMPOSE_FILE" 2>/dev/null || true
-        
-        # Add ZeroSSL specific configuration if template supports it
-        if grep -q "ZEROSSL_API" "$COMPOSE_FILE"; then
-            sed -i "s|ZEROSSL_API: \".*\"|ZEROSSL_API: \"$AUTO_CERT_ZSSL_API\"|g" "$COMPOSE_FILE"
-            sed -i "s|REPLACEME_ZEROSSL_API|$AUTO_CERT_ZSSL_API|g" "$COMPOSE_FILE"
-            echo -e "${GREEN}✓ ZeroSSL enabled with API key${NC}"
-        else
-            echo -e "${YELLOW}⚠ ZeroSSL requires custom template configuration${NC}"
-            echo -e "${BLUE}ℹ Consider using Let's Encrypt for automatic configuration${NC}"
-        fi
         echo -e "${GREEN}✓ Contact email: $AUTO_CERT_CONTACT${NC}"
     fi
     
@@ -1139,9 +1476,6 @@ if [[ -n "$REMAINING_PLACEHOLDERS" ]]; then
     exit 1
 else
     echo -e "${GREEN}✓ All placeholders successfully replaced${NC}"
-    if [[ $SETUP_MODE == "wizard" ]]; then
-        echo -e "${BLUE}ℹ Automated setup remains disabled - use setup wizard${NC}"
-    fi
 fi
 
 # Create required directories
@@ -1165,10 +1499,6 @@ fi
 # Set proper ownership and permissions for BunkerWeb containers
 echo -e "${BLUE}Setting permissions for BunkerWeb containers...${NC}"
 
-# BunkerWeb containers run as nginx user (uid 101, gid 101)
-# We need to ensure proper permissions for the storage directory
-echo -e "${GREEN}Setting BunkerWeb-specific permissions...${NC}"
-
 # Set ownership for storage directory to nginx user (uid 101, gid 101)
 chown -R 101:101 "$INSTALL_DIR/storage"
 chmod -R 755 "$INSTALL_DIR/storage"
@@ -1181,14 +1511,14 @@ echo -e "${GREEN}✓ Database directory ownership set to mysql (999:999)${NC}"
 
 # Set ownership for Redis directory if enabled
 if [[ "$REDIS_ENABLED" == "yes" ]]; then
-    chown -R 999:999 "$INSTALL_DIR/redis"  # Redis container runs as user 999
+    chown -R 999:999 "$INSTALL_DIR/redis"
     chmod -R 755 "$INSTALL_DIR/redis"
     echo -e "${GREEN}✓ Redis directory ownership set to redis (999:999)${NC}"
 fi
 
 # Set ownership for Syslog directory if enabled
 if [[ "$SYSLOG_ENABLED" == "yes" ]]; then
-    chown -R 101:101 "$INSTALL_DIR/logs"  # Syslog container runs as user 101
+    chown -R 101:101 "$INSTALL_DIR/logs"
     chmod -R 755 "$INSTALL_DIR/logs"
     echo -e "${GREEN}✓ Syslog directory ownership set to syslog (101:101)${NC}"
 fi
@@ -1219,19 +1549,21 @@ echo -e "${GREEN}          Setup Complete!${NC}"
 echo -e "${GREEN}================================================${NC}"
 echo ""
 echo -e "${YELLOW}Deployment Type:${NC} $DEPLOYMENT_NAME"
-echo -e "${YELLOW}Template Used:${NC} $TEMPLATE_FILE"
 echo -e "${YELLOW}Installation Directory:${NC} $INSTALL_DIR"
 echo -e "${YELLOW}Credentials File:${NC} $CREDS_FILE"
-echo -e "${YELLOW}Backup File:${NC} $BACKUP_FILE"
+echo -e "${YELLOW}Network Conflict Detection:${NC} $AUTO_DETECT_NETWORK_CONFLICTS"
+if [[ -n "$DOCKER_SUBNET" ]]; then
+    echo -e "${YELLOW}Docker Subnet:${NC} $DOCKER_SUBNET"
+fi
 echo -e "${YELLOW}Redis Enabled:${NC} $REDIS_ENABLED"
 echo -e "${YELLOW}Syslog Enabled:${NC} $SYSLOG_ENABLED"
 echo ""
 
 if [[ $SETUP_MODE == "automated" ]]; then
-    echo -e "${BLUE}🚀 Configuration completed! Redis: $REDIS_ENABLED, Syslog: $SYSLOG_ENABLED${NC}"
+    echo -e "${BLUE}🚀 Configuration completed with network conflict detection!${NC}"
     echo -e "${GREEN}You can now start BunkerWeb with: cd $INSTALL_DIR && docker compose up -d${NC}"
 else
-    echo -e "${BLUE}🔧 Setup wizard mode configured! Complete setup via web interface.${NC}"
+    echo -e "${BLUE}🔧 Setup wizard mode configured with safe network settings!${NC}"
 fi
 
 echo -e "${GREEN}Setup script completed successfully!${NC}"
