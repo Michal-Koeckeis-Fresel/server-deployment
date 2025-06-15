@@ -237,7 +237,7 @@ suggest_safe_subnet() {
         local conflict=false
         
         for existing in "${existing_networks[@]}"; do
-            if networks_overlap "$subnet" "$existing"; then
+            if is_valid_cidr "$existing" && networks_overlap "$subnet" "$existing"; then
                 conflict=true
                 break
             fi
@@ -259,7 +259,7 @@ suggest_safe_subnet() {
                     local test_subnet="10.$i.0.0/24"
                     local conflict=false
                     for existing in "${existing_networks[@]}"; do
-                        if networks_overlap "$test_subnet" "$existing"; then
+                        if is_valid_cidr "$existing" && networks_overlap "$test_subnet" "$existing"; then
                             conflict=true
                             break
                         fi
@@ -276,7 +276,7 @@ suggest_safe_subnet() {
                     local test_subnet="172.$i.0.0/24"
                     local conflict=false
                     for existing in "${existing_networks[@]}"; do
-                        if networks_overlap "$test_subnet" "$existing"; then
+                        if is_valid_cidr "$existing" && networks_overlap "$test_subnet" "$existing"; then
                             conflict=true
                             break
                         fi
@@ -293,7 +293,7 @@ suggest_safe_subnet() {
                     local test_subnet="192.168.$i.0/24"
                     local conflict=false
                     for existing in "${existing_networks[@]}"; do
-                        if networks_overlap "$test_subnet" "$existing"; then
+                        if is_valid_cidr "$existing" && networks_overlap "$test_subnet" "$existing"; then
                             conflict=true
                             break
                         fi
@@ -314,55 +314,56 @@ suggest_safe_subnet() {
 # Function to perform network conflict detection
 detect_network_conflicts() {
     if [[ "$AUTO_DETECT_NETWORK_CONFLICTS" != "yes" ]]; then
-        echo -e "${BLUE}Network conflict detection disabled${NC}"
+        echo -e "${BLUE}Network conflict detection disabled${NC}" >&2
         return 0
     fi
     
-    echo -e "${BLUE}=================================================================================${NC}"
-    echo -e "${BLUE}                    NETWORK CONFLICT DETECTION                    ${NC}"
-    echo -e "${BLUE}=================================================================================${NC}"
-    echo ""
+    echo -e "${BLUE}=================================================================================${NC}" >&2
+    echo -e "${BLUE}                    NETWORK CONFLICT DETECTION                    ${NC}" >&2
+    echo -e "${BLUE}=================================================================================${NC}" >&2
+    echo "" >&2
     
-    echo -e "${BLUE}Scanning existing network configurations...${NC}"
+    echo -e "${BLUE}Scanning existing network configurations...${NC}" >&2
     
     # Get existing networks from system
     local existing_networks=()
-    echo -e "${CYAN}• Checking routing table...${NC}"
-    echo -e "${CYAN}• Checking network interfaces...${NC}"
-    echo -e "${CYAN}• Checking existing Docker networks...${NC}"
+    echo -e "${CYAN}• Checking routing table...${NC}" >&2
+    echo -e "${CYAN}• Checking network interfaces...${NC}" >&2
+    echo -e "${CYAN}• Checking existing Docker networks...${NC}" >&2
     
+    # Capture only valid CIDR networks
     while IFS= read -r network; do
-        if [[ -n "$network" && "$network" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$ ]]; then
+        if [[ -n "$network" ]] && is_valid_cidr "$network"; then
             existing_networks+=("$network")
         fi
     done < <(get_existing_networks)
     
     # Add user-specified networks
     if [[ -n "$PRIVATE_NETWORKS_ALREADY_IN_USE" ]]; then
-        echo -e "${BLUE}User-specified networks to avoid: $PRIVATE_NETWORKS_ALREADY_IN_USE${NC}"
+        echo -e "${BLUE}User-specified networks to avoid: $PRIVATE_NETWORKS_ALREADY_IN_USE${NC}" >&2
         IFS=' ' read -ra user_networks <<< "$PRIVATE_NETWORKS_ALREADY_IN_USE"
         for network in "${user_networks[@]}"; do
             # Validate CIDR format
             if is_valid_cidr "$network"; then
                 existing_networks+=("$network")
             else
-                echo -e "${YELLOW}⚠ Invalid network format ignored: $network${NC}"
+                echo -e "${YELLOW}⚠ Invalid network format ignored: $network${NC}" >&2
             fi
         done
     fi
     
     if [[ ${#existing_networks[@]} -eq 0 ]]; then
-        echo -e "${YELLOW}⚠ No existing networks detected - using default configuration${NC}"
+        echo -e "${YELLOW}⚠ No existing networks detected - using default configuration${NC}" >&2
         DOCKER_SUBNET="10.20.30.0/24"
         SYSLOG_SUBNET="10.20.30.0/24"
         return 0
     fi
     
-    echo -e "${GREEN}Detected existing networks:${NC}"
+    echo -e "${GREEN}Detected existing networks:${NC}" >&2
     for network in "${existing_networks[@]}"; do
-        echo -e "${GREEN}  • $network${NC}"
+        echo -e "${GREEN}  • $network${NC}" >&2
     done
-    echo ""
+    echo "" >&2
     
     # Check for conflicts with default BunkerWeb subnet
     local default_subnet="10.20.30.0/24"
@@ -377,15 +378,15 @@ detect_network_conflicts() {
     done
     
     if [[ "$conflict_found" == "true" ]]; then
-        echo -e "${RED}⚠ NETWORK CONFLICT DETECTED!${NC}"
-        echo -e "${RED}Default BunkerWeb subnet $default_subnet conflicts with:${NC}"
+        echo -e "${RED}⚠ NETWORK CONFLICT DETECTED!${NC}" >&2
+        echo -e "${RED}Default BunkerWeb subnet $default_subnet conflicts with:${NC}" >&2
         for conflicting in "${conflicting_networks[@]}"; do
-            echo -e "${RED}  • $conflicting${NC}"
+            echo -e "${RED}  • $conflicting${NC}" >&2
         done
-        echo ""
+        echo "" >&2
         
         # Suggest safe subnet
-        echo -e "${BLUE}Finding safe Docker subnet...${NC}"
+        echo -e "${BLUE}Finding safe Docker subnet...${NC}" >&2
         local safe_subnet=$(suggest_safe_subnet "${existing_networks[@]}")
         
         # Check if we had to use a custom subnet
@@ -399,10 +400,10 @@ detect_network_conflicts() {
         done
         
         if [[ "$is_custom" == "true" ]]; then
-            echo -e "${YELLOW}⚠ No predefined safe subnet found, generated custom subnet${NC}"
+            echo -e "${YELLOW}⚠ No predefined safe subnet found, generated custom subnet${NC}" >&2
         fi
         
-        echo -e "${GREEN}✓ Suggested safe subnet: $safe_subnet${NC}"
+        echo -e "${GREEN}✓ Suggested safe subnet: $safe_subnet${NC}" >&2
         DOCKER_SUBNET="$safe_subnet"
         
         # Calculate syslog subnet in same range
@@ -410,7 +411,7 @@ detect_network_conflicts() {
         SYSLOG_SUBNET="${base_ip}.0/24"
         
     else
-        echo -e "${GREEN}✓ No conflicts detected with default subnet $default_subnet${NC}"
+        echo -e "${GREEN}✓ No conflicts detected with default subnet $default_subnet${NC}" >&2
         DOCKER_SUBNET="$default_subnet"
         SYSLOG_SUBNET="10.20.30.0/24"
     fi
@@ -427,22 +428,22 @@ detect_network_conflicts() {
             done
             
             if [[ "$preferred_conflict" == "false" ]]; then
-                echo -e "${GREEN}✓ Using preferred subnet: $PREFERRED_DOCKER_SUBNET${NC}"
+                echo -e "${GREEN}✓ Using preferred subnet: $PREFERRED_DOCKER_SUBNET${NC}" >&2
                 DOCKER_SUBNET="$PREFERRED_DOCKER_SUBNET"
             else
-                echo -e "${RED}⚠ Preferred subnet $PREFERRED_DOCKER_SUBNET conflicts with existing networks${NC}"
-                echo -e "${BLUE}ℹ Using auto-detected safe subnet: $DOCKER_SUBNET${NC}"
+                echo -e "${RED}⚠ Preferred subnet $PREFERRED_DOCKER_SUBNET conflicts with existing networks${NC}" >&2
+                echo -e "${BLUE}ℹ Using auto-detected safe subnet: $DOCKER_SUBNET${NC}" >&2
             fi
         else
-            echo -e "${YELLOW}⚠ Invalid preferred subnet format: $PREFERRED_DOCKER_SUBNET${NC}"
+            echo -e "${YELLOW}⚠ Invalid preferred subnet format: $PREFERRED_DOCKER_SUBNET${NC}" >&2
         fi
     fi
     
-    echo ""
-    echo -e "${GREEN}Final Docker network configuration:${NC}"
-    echo -e "${GREEN}  • Main subnet: $DOCKER_SUBNET${NC}"
-    echo -e "${GREEN}  • Syslog subnet: $SYSLOG_SUBNET${NC}"
-    echo ""
+    echo "" >&2
+    echo -e "${GREEN}Final Docker network configuration:${NC}" >&2
+    echo -e "${GREEN}  • Main subnet: $DOCKER_SUBNET${NC}" >&2
+    echo -e "${GREEN}  • Syslog subnet: $SYSLOG_SUBNET${NC}" >&2
+    echo "" >&2
 }
 
 # Load configuration from BunkerWeb.conf if it exists
