@@ -13,6 +13,12 @@
 
 set -e  # Exit on any error
 
+# Enable debugging if DEBUG environment variable is set
+if [[ "${DEBUG:-}" == "1" || "${DEBUG:-}" == "true" ]]; then
+    set -x
+    log_info "Debug mode enabled"
+fi
+
 # Logging functions
 log_info() {
     echo -e "\033[34m[INFO]\033[0m $1"
@@ -53,14 +59,13 @@ main() {
     # Base URL for the repository
     BASE_URL="https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/refs/heads/main/linux/waf/BunkerWeb"
     
-    # Array of files to download
+    # Array of files to download (excluding BunkerWeb.conf - handled separately)
     FILES=(
         "script_autoconf_display.sh"
         "script_password_reset_display.sh"
         "template_autoconf_display.yml"
         "template_basic_display.yml"
         "template_ui_integrated_display.yml"
-        "BunkerWeb.conf"
         "autoconf_script.sh"
         "uninstall_BunkerWeb.sh"
     )
@@ -71,7 +76,56 @@ main() {
         exit 1
     fi
     
-    # Download each file
+    # Handle BunkerWeb.conf separately
+    log_step "Checking for BunkerWeb.conf..."
+    if [[ -f "/root/BunkerWeb.conf" ]]; then
+        log_info "Found existing /root/BunkerWeb.conf - skipping download"
+    else
+        log_info "Creating /root/BunkerWeb.conf..."
+        touch /root/BunkerWeb.conf
+        
+        if [[ -f "/root/BunkerWeb.conf" ]]; then
+            log_success "✓ Created /root/BunkerWeb.conf"
+            log_info "Downloading BunkerWeb.conf to /root/BunkerWeb.conf..."
+            
+            if command_exists wget; then
+                wget -q "$BASE_URL/BunkerWeb.conf" -O "/root/BunkerWeb.conf"
+            elif command_exists curl; then
+                curl -s "$BASE_URL/BunkerWeb.conf" -o "/root/BunkerWeb.conf"
+            fi
+            
+            if [ $? -eq 0 ]; then
+                log_success "✓ Successfully downloaded BunkerWeb.conf to /root/"
+            else
+                log_error "✗ Failed to download BunkerWeb.conf"
+                exit 1
+            fi
+        else
+            log_error "✗ Failed to create /root/BunkerWeb.conf"
+            exit 1
+        fi
+    fi
+    
+    # Create symbolic link from /data/BunkerWeb/BunkerWeb.conf to /root/BunkerWeb.conf
+    log_step "Creating symbolic link for BunkerWeb.conf..."
+    if [[ -L "/data/BunkerWeb/BunkerWeb.conf" ]]; then
+        log_info "Symbolic link already exists - removing old link"
+        rm "/data/BunkerWeb/BunkerWeb.conf"
+    elif [[ -f "/data/BunkerWeb/BunkerWeb.conf" ]]; then
+        log_warning "Regular file exists at /data/BunkerWeb/BunkerWeb.conf - backing up"
+        mv "/data/BunkerWeb/BunkerWeb.conf" "/data/BunkerWeb/BunkerWeb.conf.backup.$(date +%Y%m%d_%H%M%S)"
+    fi
+    
+    ln -s "/root/BunkerWeb.conf" "/data/BunkerWeb/BunkerWeb.conf"
+    
+    if [[ -L "/data/BunkerWeb/BunkerWeb.conf" ]]; then
+        log_success "✓ Created symbolic link: /data/BunkerWeb/BunkerWeb.conf → /root/BunkerWeb.conf"
+    else
+        log_error "✗ Failed to create symbolic link"
+        exit 1
+    fi
+    
+    # Download each file to current directory
     log_step "Downloading BunkerWeb project files..."
     for file in "${FILES[@]}"; do
         log_info "Downloading $file..."
@@ -99,9 +153,14 @@ main() {
     log_success "BunkerWeb deployment completed successfully!"
     echo ""
     echo "📁 Files downloaded to: /data/BunkerWeb"
+    echo "📁 BunkerWeb.conf location: /root/BunkerWeb.conf"
+    echo "🔗 Symbolic link: /data/BunkerWeb/BunkerWeb.conf → /root/BunkerWeb.conf"
     echo ""
     echo "Downloaded files:"
     ls -la /data/BunkerWeb/
+    echo ""
+    echo "Configuration file:"
+    ls -la /root/BunkerWeb.conf
     echo ""
     log_info "You can now proceed with BunkerWeb configuration and deployment."
 }
