@@ -64,15 +64,41 @@ check_command() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# Function to validate CIDR format
+is_valid_cidr() {
+    local cidr="$1"
+    [[ "$cidr" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$ ]]
+}
+
 # Function to convert CIDR to decimal for comparison
 cidr_to_decimal() {
     local cidr="$1"
+    
+    # Validate input format
+    if ! is_valid_cidr "$cidr"; then
+        echo "0/32"  # Return invalid network that won't match anything
+        return 1
+    fi
+    
     local ip="${cidr%/*}"
     local prefix="${cidr#*/}"
+    
+    # Validate prefix length
+    if [[ $prefix -lt 0 || $prefix -gt 32 ]]; then
+        echo "0/32"
+        return 1
+    fi
     
     # Convert IP to decimal
     local a b c d
     IFS=. read -r a b c d <<< "$ip"
+    
+    # Validate IP octets
+    if [[ $a -gt 255 || $b -gt 255 || $c -gt 255 || $d -gt 255 ]]; then
+        echo "0/32"
+        return 1
+    fi
+    
     local ip_decimal=$((a * 256**3 + b * 256**2 + c * 256 + d))
     
     # Calculate network address
@@ -86,6 +112,11 @@ cidr_to_decimal() {
 networks_overlap() {
     local net1="$1"
     local net2="$2"
+    
+    # Validate both inputs
+    if ! is_valid_cidr "$net1" || ! is_valid_cidr "$net2"; then
+        return 1  # No overlap if either is invalid
+    fi
     
     # Convert to comparable format
     local net1_dec=$(cidr_to_decimal "$net1")
@@ -110,11 +141,8 @@ networks_overlap() {
 get_existing_networks() {
     local networks=()
     
-    echo -e "${BLUE}Scanning existing network configurations...${NC}"
-    
     # Method 1: Get routes from 'ip route'
     if check_command ip; then
-        echo -e "${CYAN}• Checking routing table...${NC}"
         while IFS= read -r line; do
             if [[ "$line" =~ ^([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+) ]]; then
                 local network="${BASH_REMATCH[1]}"
@@ -128,7 +156,6 @@ get_existing_networks() {
     
     # Method 2: Get interfaces from 'ip addr'
     if check_command ip; then
-        echo -e "${CYAN}• Checking network interfaces...${NC}"
         while IFS= read -r line; do
             if [[ "$line" =~ inet[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+) ]]; then
                 local network="${BASH_REMATCH[1]}"
@@ -142,7 +169,6 @@ get_existing_networks() {
     
     # Method 3: Fallback to ifconfig if available
     if check_command ifconfig && [[ ${#networks[@]} -eq 0 ]]; then
-        echo -e "${CYAN}• Checking ifconfig...${NC}"
         while IFS= read -r line; do
             if [[ "$line" =~ inet[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+).*netmask[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+) ]]; then
                 local ip="${BASH_REMATCH[1]}"
@@ -158,7 +184,6 @@ get_existing_networks() {
     
     # Method 4: Check existing Docker networks
     if check_command docker; then
-        echo -e "${CYAN}• Checking existing Docker networks...${NC}"
         while IFS= read -r line; do
             if [[ "$line" =~ \"Subnet\":[[:space:]]*\"([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+)\" ]]; then
                 local network="${BASH_REMATCH[1]}"
@@ -192,13 +217,6 @@ netmask_to_cidr() {
 # Function to suggest safe Docker subnets
 suggest_safe_subnet() {
     local existing_networks=("$@")
-    local rfc1918_ranges=(
-        "10.0.0.0/8"
-        "172.16.0.0/12"
-        "192.168.0.0/16"
-    )
-    
-    echo -e "${BLUE}Finding safe Docker subnet...${NC}"
     
     # Common safe subnets to try (in order of preference)
     local candidate_subnets=(
@@ -232,8 +250,6 @@ suggest_safe_subnet() {
     done
     
     # If no predefined subnet works, generate one
-    echo -e "${YELLOW}⚠ No predefined safe subnet found, generating custom subnet...${NC}"
-    
     # Try different ranges in RFC1918 space
     for base_range in "10" "172" "192"; do
         case "$base_range" in
@@ -307,10 +323,18 @@ detect_network_conflicts() {
     echo -e "${BLUE}=================================================================================${NC}"
     echo ""
     
+    echo -e "${BLUE}Scanning existing network configurations...${NC}"
+    
     # Get existing networks from system
     local existing_networks=()
+    echo -e "${CYAN}• Checking routing table...${NC}"
+    echo -e "${CYAN}• Checking network interfaces...${NC}"
+    echo -e "${CYAN}• Checking existing Docker networks...${NC}"
+    
     while IFS= read -r network; do
-        [[ -n "$network" ]] && existing_networks+=("$network")
+        if [[ -n "$network" && "$network" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$ ]]; then
+            existing_networks+=("$network")
+        fi
     done < <(get_existing_networks)
     
     # Add user-specified networks
@@ -319,7 +343,7 @@ detect_network_conflicts() {
         IFS=' ' read -ra user_networks <<< "$PRIVATE_NETWORKS_ALREADY_IN_USE"
         for network in "${user_networks[@]}"; do
             # Validate CIDR format
-            if [[ "$network" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$ ]]; then
+            if is_valid_cidr "$network"; then
                 existing_networks+=("$network")
             else
                 echo -e "${YELLOW}⚠ Invalid network format ignored: $network${NC}"
@@ -330,7 +354,7 @@ detect_network_conflicts() {
     if [[ ${#existing_networks[@]} -eq 0 ]]; then
         echo -e "${YELLOW}⚠ No existing networks detected - using default configuration${NC}"
         DOCKER_SUBNET="10.20.30.0/24"
-        SYSLOG_SUBNET="127.0.0.1/32"
+        SYSLOG_SUBNET="10.20.30.0/24"
         return 0
     fi
     
@@ -361,7 +385,23 @@ detect_network_conflicts() {
         echo ""
         
         # Suggest safe subnet
+        echo -e "${BLUE}Finding safe Docker subnet...${NC}"
         local safe_subnet=$(suggest_safe_subnet "${existing_networks[@]}")
+        
+        # Check if we had to use a custom subnet
+        local is_custom=true
+        local predefined_subnets=("10.20.30.0/24" "172.20.0.0/24" "172.21.0.0/24" "172.22.0.0/24" "10.10.10.0/24" "10.50.0.0/24" "10.100.0.0/24" "192.168.200.0/24" "192.168.100.0/24" "192.168.50.0/24")
+        for predefined in "${predefined_subnets[@]}"; do
+            if [[ "$safe_subnet" == "$predefined" ]]; then
+                is_custom=false
+                break
+            fi
+        done
+        
+        if [[ "$is_custom" == "true" ]]; then
+            echo -e "${YELLOW}⚠ No predefined safe subnet found, generated custom subnet${NC}"
+        fi
+        
         echo -e "${GREEN}✓ Suggested safe subnet: $safe_subnet${NC}"
         DOCKER_SUBNET="$safe_subnet"
         
@@ -377,20 +417,24 @@ detect_network_conflicts() {
     
     # Use user-preferred subnet if specified and safe
     if [[ -n "$PREFERRED_DOCKER_SUBNET" ]]; then
-        local preferred_conflict=false
-        for existing in "${existing_networks[@]}"; do
-            if networks_overlap "$PREFERRED_DOCKER_SUBNET" "$existing"; then
-                preferred_conflict=true
-                break
+        if is_valid_cidr "$PREFERRED_DOCKER_SUBNET"; then
+            local preferred_conflict=false
+            for existing in "${existing_networks[@]}"; do
+                if networks_overlap "$PREFERRED_DOCKER_SUBNET" "$existing"; then
+                    preferred_conflict=true
+                    break
+                fi
+            done
+            
+            if [[ "$preferred_conflict" == "false" ]]; then
+                echo -e "${GREEN}✓ Using preferred subnet: $PREFERRED_DOCKER_SUBNET${NC}"
+                DOCKER_SUBNET="$PREFERRED_DOCKER_SUBNET"
+            else
+                echo -e "${RED}⚠ Preferred subnet $PREFERRED_DOCKER_SUBNET conflicts with existing networks${NC}"
+                echo -e "${BLUE}ℹ Using auto-detected safe subnet: $DOCKER_SUBNET${NC}"
             fi
-        done
-        
-        if [[ "$preferred_conflict" == "false" ]]; then
-            echo -e "${GREEN}✓ Using preferred subnet: $PREFERRED_DOCKER_SUBNET${NC}"
-            DOCKER_SUBNET="$PREFERRED_DOCKER_SUBNET"
         else
-            echo -e "${RED}⚠ Preferred subnet $PREFERRED_DOCKER_SUBNET conflicts with existing networks${NC}"
-            echo -e "${BLUE}ℹ Using auto-detected safe subnet: $DOCKER_SUBNET${NC}"
+            echo -e "${YELLOW}⚠ Invalid preferred subnet format: $PREFERRED_DOCKER_SUBNET${NC}"
         fi
     fi
     
@@ -1116,8 +1160,11 @@ echo -e "${GREEN}Backup created: $BACKUP_FILE${NC}"
 if [[ -n "$DOCKER_SUBNET" && "$DOCKER_SUBNET" != "10.20.30.0/24" ]]; then
     echo -e "${BLUE}Updating Docker network configuration to avoid conflicts...${NC}"
     
+    # Escape special characters for sed
+    local escaped_subnet=$(printf '%s\n' "$DOCKER_SUBNET" | sed 's/[[\.*^$()+?{|]/\\&/g')
+    
     # Update the main universe subnet
-    sed -i "s|10.20.30.0/24|$DOCKER_SUBNET|g" "$COMPOSE_FILE"
+    sed -i "s|10\.20\.30\.0/24|${escaped_subnet}|g" "$COMPOSE_FILE"
     echo -e "${GREEN}✓ Main subnet updated to: $DOCKER_SUBNET${NC}"
     
     # Update syslog subnet if needed
