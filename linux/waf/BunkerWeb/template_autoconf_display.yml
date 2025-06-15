@@ -1,119 +1,239 @@
 #!/bin/bash
-#
-# Copyright (c) 2025 Michal Koeckeis-Fresel
-# 
-# This software is dual-licensed under your choice of:
-# - MIT License (see LICENSE-MIT)
-# - GNU Affero General Public License v3.0 (see LICENSE-AGPL)
-# 
-# SPDX-License-Identifier: MIT OR AGPL-3.0-or-later
-#
 
-# BunkerWeb Autoconf Docker Compose Template
+# 
+
+# Copyright (c) 2025 Michal Koeckeis-Fresel
+
+# 
+
+# This software is dual-licensed under your choice of:
+
+# - MIT License (see LICENSE-MIT)
+
+# - GNU Affero General Public License v3.0 (see LICENSE-AGPL)
+
+# 
+
+# SPDX-License-Identifier: MIT OR AGPL-3.0-or-later
+
+# 
+
+# BunkerWeb Autoconf Docker Compose Template with Redis and Syslog
 
 x-ui-env: &bw-ui-env
-  # We anchor the environment variables to avoid duplication
-  AUTOCONF_MODE: "yes"
-  DATABASE_URI: "mariadb+pymysql://bunkerweb:REPLACEME_MYSQL@bw-db:3306/db"
+
+# We anchor the environment variables to avoid duplication
+
+AUTOCONF_MODE: “yes”
+DATABASE_URI: “mariadb+pymysql://bunkerweb:REPLACEME_MYSQL@bw-db:3306/db”
+
+x-redis-env: &redis-env
+
+# Redis configuration for cluster mode
+
+USE_REDIS: “yes”
+REDIS_HOST: “bw-redis”
+REDIS_PORT: “6379”
+REDIS_DATABASE: “0”
+REDIS_SSL: “no”
+REDIS_SSL_VERIFY: “no”
+REDIS_TIMEOUT: “1000”
+REDIS_USERNAME: “”
+REDIS_PASSWORD: “REPLACEME_REDIS_PASSWORD”
+REDIS_KEEPALIVE_IDLE: “30000”
+REDIS_KEEPALIVE_POOL: “10”
+
+x-syslog-config: &syslog-config
+
+# Syslog configuration
+
+logging:
+driver: syslog
+options:
+syslog-address: “udp://REPLACEME_SYSLOG_ADDRESS:REPLACEME_SYSLOG_PORT”
 
 services:
-  bunkerweb:
-    image: bunkerity/bunkerweb:1.6.1
-    ports:
-      - "80:8080/tcp"
-      - "443:8443/tcp"
-      - "443:8443/udp" # For QUIC / HTTP3 support
-    labels:
-      - "bunkerweb.INSTANCE=yes" # We set the instance label to allow the autoconf to detect the instance
-    environment:
-      AUTOCONF_MODE: "yes"
-      API_WHITELIST_IP: "127.0.0.0/8 10.20.30.0/24"
-    restart: "unless-stopped"
-    networks:
-      - bw-universe
-      - bw-services
+bunkerweb:
+image: bunkerity/bunkerweb:1.6.1
+ports:
+- “80:8080/tcp”
+- “443:8443/tcp”
+- “443:8443/udp” # For QUIC / HTTP3 support
+labels:
+- “bunkerweb.INSTANCE=yes” # We set the instance label to allow the autoconf to detect the instance
+environment:
+<<: *redis-env
+AUTOCONF_MODE: “yes”
+API_WHITELIST_IP: “127.0.0.0/8 10.20.30.0/24”
+restart: “unless-stopped”
+depends_on:
+- bw-redis
+- bw-syslog
+networks:
+- bw-universe
+- bw-services
+- bw-redis
+- bw-syslog
+<<: *syslog-config
 
-  bw-scheduler:
-    image: bunkerity/bunkerweb-scheduler:1.6.1
-    environment:
-      <<: *bw-ui-env
-      BUNKERWEB_INSTANCES: ""
-      SERVER_NAME: ""
-      API_WHITELIST_IP: "127.0.0.0/8 10.20.30.0/24"
-      MULTISITE: "yes"
-      UI_HOST: "http://bw-ui:7000" # Change it if needed
-    volumes:
-      - bw-storage:/data # This is used to persist the cache and other data like the backups
-    restart: "unless-stopped"
-    networks:
-      - bw-universe
-      - bw-db
-
-  bw-autoconf:
-    image: bunkerity/bunkerweb-autoconf:1.6.1
-    depends_on:
-      - bw-docker
-    environment:
-      <<: *bw-ui-env
-      DOCKER_HOST: "tcp://bw-docker:2375"
-    restart: "unless-stopped"
-    networks:
-      - bw-universe
-      - bw-docker
-      - bw-db
-
-  bw-docker:
-    image: tecnativa/docker-socket-proxy:nightly
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    environment:
-      CONTAINERS: "1"
-      LOG_LEVEL: "warning"
-    networks:
-      - bw-docker
-
-  bw-ui:
-    image: bunkerity/bunkerweb-ui:1.6.1
-    environment:
-      <<: *bw-ui-env
-      # Optional: Automated admin credentials (uncomment to skip setup wizard)
-      # OVERRIDE_ADMIN_CREDS: "yes"
-      # ADMIN_USERNAME: "admin"
-      # ADMIN_PASSWORD: "REPLACEME_ADMIN"
-      # FLASK_SECRET: "REPLACEME_FLASK"
-      TOTP_SECRETS: "REPLACEME_DEFAULT"
-    restart: "unless-stopped"
-    networks:
-      - bw-universe
-      - bw-db
-
-  bw-db:
-    image: mariadb:11
-    environment:
-      MYSQL_RANDOM_ROOT_PASSWORD: "yes"
-      MYSQL_DATABASE: "db"
-      MYSQL_USER: "bunkerweb"
-      MYSQL_PASSWORD: "REPLACEME_MYSQL"
-    volumes:
-      - bw-data:/var/lib/mysql
-    restart: "unless-stopped"
-    networks:
-      - bw-db
-
+bw-scheduler:
+image: bunkerity/bunkerweb-scheduler:1.6.1
+environment:
+<<: [*bw-ui-env, *redis-env]
+BUNKERWEB_INSTANCES: “”
+SERVER_NAME: “”
+API_WHITELIST_IP: “127.0.0.0/8 10.20.30.0/24”
+MULTISITE: “yes”
+UI_HOST: “http://bw-ui:7000” # Change it if needed
 volumes:
-  bw-data:
-  bw-storage:
+- /data/BunkerWeb/storage:/data # This is used to persist the cache and other data like the backups
+restart: “unless-stopped”
+depends_on:
+- bw-redis
+- bw-db
+- bw-syslog
+networks:
+- bw-universe
+- bw-db
+- bw-redis
+- bw-syslog
+<<: *syslog-config
+
+bw-autoconf:
+image: bunkerity/bunkerweb-autoconf:1.6.1
+depends_on:
+- bw-docker
+- bw-redis
+- bw-syslog
+environment:
+<<: [*bw-ui-env, *redis-env]
+DOCKER_HOST: “tcp://bw-docker:2375”
+restart: “unless-stopped”
+networks:
+- bw-universe
+- bw-docker
+- bw-db
+- bw-redis
+- bw-syslog
+<<: *syslog-config
+
+bw-docker:
+image: tecnativa/docker-socket-proxy:nightly
+volumes:
+- /var/run/docker.sock:/var/run/docker.sock:ro
+environment:
+CONTAINERS: “1”
+LOG_LEVEL: “warning”
+networks:
+- bw-docker
+
+bw-ui:
+image: bunkerity/bunkerweb-ui:1.6.1
+environment:
+<<: [*bw-ui-env, *redis-env]
+# Optional: Automated admin credentials (uncomment to skip setup wizard)
+# OVERRIDE_ADMIN_CREDS: “yes”
+# ADMIN_USERNAME: “admin”
+# ADMIN_PASSWORD: “REPLACEME_ADMIN”
+# FLASK_SECRET: “REPLACEME_FLASK”
+TOTP_SECRETS: “REPLACEME_DEFAULT”
+restart: “unless-stopped”
+depends_on:
+- bw-redis
+- bw-db
+- bw-syslog
+networks:
+- bw-universe
+- bw-db
+- bw-redis
+- bw-syslog
+<<: *syslog-config
+
+bw-syslog:
+image: balabit/syslog-ng:4.8.0  # For x86_64 architecture
+# image: lscr.io/linuxserver/syslog-ng:4.8.1-r1-ls147  # For aarch64 architecture (ARM64)
+command: –no-caps
+cap_add:
+- NET_BIND_SERVICE  # Bind to low ports
+- NET_BROADCAST     # Send broadcasts
+- NET_RAW          # Use raw sockets
+- DAC_READ_SEARCH  # Read files bypassing permissions
+- DAC_OVERRIDE     # Override file permissions
+- CHOWN            # Change ownership
+- SYSLOG           # Write to system logs
+volumes:
+- /data/BunkerWeb/syslog/syslog-ng.conf:/etc/syslog-ng/syslog-ng.conf
+- /data/BunkerWeb/logs:/var/log
+restart: “unless-stopped”
+networks:
+bw-syslog:
+ipv4_address: REPLACEME_SYSLOG_ADDRESS
+healthcheck:
+test: [“CMD”, “syslog-ng-ctl”, “stats”]
+interval: 30s
+timeout: 10s
+retries: 3
+start_period: 10s
+
+bw-redis:
+image: redis:7-alpine
+command: >
+redis-server
+–requirepass “REPLACEME_REDIS_PASSWORD”
+–maxmemory 256mb
+–maxmemory-policy allkeys-lru
+–save 900 1 300 10 60 10000
+–appendonly yes
+–appendfsync everysec
+–auto-aof-rewrite-percentage 100
+–auto-aof-rewrite-min-size 64mb
+–tcp-keepalive 300
+–timeout 300
+volumes:
+- /data/BunkerWeb/redis:/data
+restart: “unless-stopped”
+networks:
+- bw-redis
+healthcheck:
+test: [“CMD”, “redis-cli”, “–raw”, “incr”, “ping”]
+interval: 30s
+timeout: 10s
+retries: 3
+start_period: 30s
+
+bw-db:
+image: mariadb:11
+environment:
+MYSQL_RANDOM_ROOT_PASSWORD: “yes”
+MYSQL_DATABASE: “db”
+MYSQL_USER: “bunkerweb”
+MYSQL_PASSWORD: “REPLACEME_MYSQL”
+volumes:
+- /data/BunkerWeb/database:/var/lib/mysql
+restart: “unless-stopped”
+networks:
+- bw-db
+
+# volumes: # Using host directories instead of named volumes
 
 networks:
-  bw-universe:
-    name: bw-universe
-    ipam:
-      driver: default
-      config:
-        - subnet: 10.20.30.0/24
-  bw-services:
-    name: bw-services
-  bw-docker:
-    name: bw-docker
-  bw-db:
-    name: bw-db
+bw-universe:
+name: bw-universe
+ipam:
+driver: default
+config:
+- subnet: 10.20.30.0/24
+bw-services:
+name: bw-services
+bw-docker:
+name: bw-docker
+bw-db:
+name: bw-db
+bw-redis:
+name: bw-redis
+bw-syslog:
+name: bw-syslog
+ipam:
+driver: default
+config:
+- subnet: REPLACEME_SYSLOG_NETWORK
