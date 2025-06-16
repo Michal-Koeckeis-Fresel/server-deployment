@@ -10,7 +10,7 @@
 #
 
 # Deploy BunkerWeb - Download project files
-
+set -x
 set -e  # Exit on any error
 
 # Logging functions
