@@ -157,67 +157,60 @@ main() {
     log_step "Downloading BunkerWeb project files..."
     
     # Main setup scripts
-    declare -A MAIN_SCRIPTS=(
-        ["script_autoconf_display.sh"]="Main setup script (autoconf display)"
-        ["script_password_reset_display.sh"]="Password reset utility"
-        ["uninstall_BunkerWeb.sh"]="Uninstall script"
-    )
-    
-    # Helper scripts (modular components)
-    declare -A HELPER_SCRIPTS=(
-        ["helper_network_detection.sh"]="Network conflict detection helper"
-        ["helper_password_mananger.sh"]="Password management helper"
-        ["helper_template_processor.sh"]="Template processing helper"
-        ["helper_fqdn_lookup.sh"]="FQDN detection helper"
-        ["helper_directory_layout.sh"]="Directory layout helper"
-    )
-    
-    # Docker Compose templates
-    declare -A TEMPLATES=(
-        ["template_autoconf_display.yml"]="Autoconf deployment template"
-        ["template_basic_display.yml"]="Basic deployment template"
-        ["template_ui_integrated_display.yml"]="UI integrated deployment template"
-        ["template_sample_app_display.yml"]="Sample application template"
-    )
-    
-    # Configuration files
-    declare -A CONFIG_FILES=(
-        ["syslog-ng.conf"]="Syslog-ng configuration"
-    )
-    
-    # Download main scripts
     log_step "Downloading main scripts..."
+    local main_scripts=(
+        "script_autoconf_display.sh"
+        "script_password_reset_display.sh"
+        "uninstall_BunkerWeb.sh"
+    )
+    
     local failed_downloads=0
     
-    for file in "${!MAIN_SCRIPTS[@]}"; do
-        if ! download_file "$BASE_URL/$file" "$file" "${MAIN_SCRIPTS[$file]}"; then
+    for file in "${main_scripts[@]}"; do
+        if ! download_file "$BASE_URL/$file" "$file" "main script: $file"; then
             ((failed_downloads++))
         fi
     done
     
-    # Download helper scripts
+    # Helper scripts (modular components)
     log_step "Downloading helper scripts..."
+    local helper_scripts=(
+        "helper_network_detection.sh"
+        "helper_password_mananger.sh"
+        "helper_template_processor.sh"
+        "helper_fqdn_lookup.sh"
+        "helper_directory_layout.sh"
+    )
     
-    for file in "${!HELPER_SCRIPTS[@]}"; do
-        if ! download_file "$BASE_URL/$file" "$file" "${HELPER_SCRIPTS[$file]}"; then
+    for file in "${helper_scripts[@]}"; do
+        if ! download_file "$BASE_URL/$file" "$file" "helper script: $file"; then
             ((failed_downloads++))
         fi
     done
     
-    # Download templates
+    # Docker Compose templates
     log_step "Downloading Docker Compose templates..."
+    local templates=(
+        "template_autoconf_display.yml"
+        "template_basic_display.yml"
+        "template_ui_integrated_display.yml"
+        "template_sample_app_display.yml"
+    )
     
-    for file in "${!TEMPLATES[@]}"; do
-        if ! download_file "$BASE_URL/$file" "$file" "${TEMPLATES[$file]}"; then
+    for file in "${templates[@]}"; do
+        if ! download_file "$BASE_URL/$file" "$file" "template: $file"; then
             ((failed_downloads++))
         fi
     done
     
-    # Download configuration files
+    # Configuration files
     log_step "Downloading configuration files..."
+    local config_files=(
+        "syslog-ng.conf"
+    )
     
-    for file in "${!CONFIG_FILES[@]}"; do
-        if ! download_file "$BASE_URL/$file" "$file" "${CONFIG_FILES[$file]}"; then
+    for file in "${config_files[@]}"; do
+        if ! download_file "$BASE_URL/$file" "$file" "config file: $file"; then
             ((failed_downloads++))
         fi
     done
@@ -235,7 +228,7 @@ main() {
     log_step "Setting executable permissions on shell scripts..."
     
     # Set permissions for main scripts
-    for file in "${!MAIN_SCRIPTS[@]}"; do
+    for file in "${main_scripts[@]}"; do
         if [[ -f "$file" ]]; then
             chmod +x "$file"
             log_success "✓ Made executable: $file"
@@ -243,7 +236,7 @@ main() {
     done
     
     # Set permissions for helper scripts
-    for file in "${!HELPER_SCRIPTS[@]}"; do
+    for file in "${helper_scripts[@]}"; do
         if [[ -f "$file" ]]; then
             chmod +x "$file"
             log_success "✓ Made executable: $file"
@@ -294,9 +287,9 @@ main() {
     echo ""
     
     echo "🔧 Main Scripts:"
-    for file in "${!MAIN_SCRIPTS[@]}"; do
+    for file in "${main_scripts[@]}"; do
         if [[ -f "$file" ]]; then
-            echo "  ✓ $file - ${MAIN_SCRIPTS[$file]}"
+            echo "  ✓ $file"
         else
             echo "  ✗ $file - Missing"
         fi
@@ -304,9 +297,9 @@ main() {
     echo ""
     
     echo "🛠️  Helper Scripts:"
-    for file in "${!HELPER_SCRIPTS[@]}"; do
+    for file in "${helper_scripts[@]}"; do
         if [[ -f "$file" ]]; then
-            echo "  ✓ $file - ${HELPER_SCRIPTS[$file]}"
+            echo "  ✓ $file"
         else
             echo "  ✗ $file - Missing"
         fi
@@ -314,9 +307,9 @@ main() {
     echo ""
     
     echo "📄 Templates:"
-    for file in "${!TEMPLATES[@]}"; do
+    for file in "${templates[@]}"; do
         if [[ -f "$file" ]]; then
-            echo "  ✓ $file - ${TEMPLATES[$file]}"
+            echo "  ✓ $file"
         else
             echo "  ✗ $file - Missing"
         fi
@@ -324,9 +317,9 @@ main() {
     echo ""
     
     echo "⚙️  Configuration Files:"
-    for file in "${!CONFIG_FILES[@]}"; do
+    for file in "${config_files[@]}"; do
         if [[ -f "$file" ]]; then
-            echo "  ✓ $file - ${CONFIG_FILES[$file]}"
+            echo "  ✓ $file"
         else
             echo "  ✗ $file - Missing"
         fi
@@ -345,20 +338,7 @@ main() {
     ls -la /root/BunkerWeb-credentials.txt
     echo ""
     echo "🔗 Symbolic links:"
-    ls -la /data/BunkerWeb/ | grep -E '\.conf$|credentials\.txt
-    
-    # Next steps
-    echo "🚀 Next Steps:"
-    echo "1. Edit configuration: nano /root/BunkerWeb.conf"
-    echo "2. Run setup script: sudo /data/BunkerWeb/script_autoconf_display.sh --type autoconf"
-    echo "3. Or get help: /data/BunkerWeb/script_autoconf_display.sh --help"
-    echo ""
-    
-    log_info "You can now proceed with BunkerWeb configuration and deployment."
-}
-
-# Run main function
-main "$@"
+    ls -la /data/BunkerWeb/ | grep -E '\.conf$|credentials\.txt$'
     echo ""
     
     # Next steps
