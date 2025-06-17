@@ -47,72 +47,6 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Function to get Docker image tag based on release channel
-get_image_tag() {
-    local release_channel="$1"
-    
-    case "$release_channel" in
-        "latest")
-            echo "latest"
-            ;;
-        "RC")
-            echo "rc"
-            ;;
-        "nightly")
-            echo "nightly"
-            ;;
-        *)
-            echo -e "${YELLOW}⚠ Unknown release channel '$release_channel', defaulting to 'latest'${NC}" >&2
-            echo "latest"
-            ;;
-    esac
-}
-
-# Function to validate release channel
-validate_release_channel() {
-    local channel="$1"
-    
-    case "$channel" in
-        "latest"|"RC"|"nightly")
-            return 0
-            ;;
-        *)
-            echo -e "${RED}Error: Invalid release channel '$channel'${NC}" >&2
-            echo -e "${YELLOW}Valid channels: latest, RC, nightly${NC}" >&2
-            return 1
-            ;;
-    esac
-}
-
-# Function to display release channel information
-show_release_channel_info() {
-    local channel="$1"
-    local tag=$(get_image_tag "$channel")
-    
-    echo -e "${BLUE}Release Channel Information:${NC}"
-    echo -e "${GREEN}• Selected Channel: $channel${NC}"
-    echo -e "${GREEN}• Docker Image Tag: $tag${NC}"
-    
-    case "$channel" in
-        "latest")
-            echo -e "${GREEN}• Stability: Production Ready (Stable)${NC}"
-            echo -e "${GREEN}• Recommendation: ✓ Recommended for production use${NC}"
-            echo -e "${GREEN}• Description: Stable, tested releases with full support${NC}"
-            ;;
-        "RC")
-            echo -e "${YELLOW}• Stability: Release Candidate (Beta)${NC}"
-            echo -e "${YELLOW}• Recommendation: ⚠ Use for testing/staging only${NC}"
-            echo -e "${YELLOW}• Description: Pre-release versions with new features${NC}"
-            ;;
-        "nightly")
-            echo -e "${RED}• Stability: Development Build (Unstable)${NC}"
-            echo -e "${RED}• Recommendation: ⚠ Hardcore testers only!${NC}"
-            echo -e "${RED}• Description: Latest development code - may be unstable${NC}"
-            ;;
-    esac
-    echo ""
-}
-
 # Source the modular scripts
 source_modules() {
     local modules=(
@@ -234,102 +168,15 @@ build_comprehensive_api_whitelist() {
     echo "$api_whitelist"
 }
 
-# Enhanced template processing with release channel and automatic API whitelist replacement
-process_template_with_release_channel() {
-    local template_path="$1"
-    local compose_file="$2"
-    local mysql_password="$3"
-    local redis_password="$4"
-    local totp_secret="$5"
-    local admin_password="$6"
-    local flask_secret="$7"
-    local admin_username="$8"
-    local auto_cert_type="$9"
-    local auto_cert_contact="${10}"
-    local fqdn="${11}"
-    local server_name="${12}"
-    local docker_subnet="${13}"
-    local setup_mode="${14}"
-    local redis_enabled="${15:-yes}"
-    local api_whitelist="${16}"
-    local release_channel="${17:-latest}"
+# Function to update API whitelist in docker-compose file
+update_api_whitelist() {
+    local compose_file="$1"
+    local api_whitelist="$2"
     
-    echo -e "${BLUE}=================================================================================${NC}"
-    echo -e "${BLUE}                        TEMPLATE PROCESSING                        ${NC}"
-    echo -e "${BLUE}=================================================================================${NC}"
-    echo ""
-    
-    echo -e "${BLUE}Processing template with release channel and enhanced API whitelist...${NC}"
-    echo -e "${BLUE}Release Channel: $release_channel${NC}"
-    echo -e "${BLUE}API Whitelist: $api_whitelist${NC}"
-    
-    # Get the appropriate image tag for the release channel
-    local image_tag=$(get_image_tag_for_channel "$release_channel")
-    echo -e "${GREEN}• Using Docker image tag: $image_tag${NC}"
-    
-    # First, run the standard template processing
-    if ! process_template "$template_path" "$compose_file" "$mysql_password" "$redis_password" "$totp_secret" "$admin_password" "$flask_secret" "$admin_username" "$auto_cert_type" "$auto_cert_contact" "$fqdn" "$server_name" "$docker_subnet" "$setup_mode" "$redis_enabled"; then
-        echo -e "${RED}✗ Standard template processing failed${NC}"
-        return 1
-    fi
-    
-    # Update Docker image tags based on release channel
-    echo -e "${BLUE}Updating Docker image tags for release channel '$release_channel'...${NC}"
-    
-    # Replace image tags in the docker-compose.yml
-    local temp_file=$(mktemp)
-    local updates_made=0
-    
-    # Update BunkerWeb images
-    if sed "s|bunkerity/bunkerweb:REPLACEME_TAG|bunkerity/bunkerweb:$image_tag|g" "$compose_file" > "$temp_file"; then
-        mv "$temp_file" "$compose_file"
-        ((updates_made++))
-        echo -e "${GREEN}✓ Updated bunkerity/bunkerweb image tag${NC}"
-    fi
-    
-    if sed "s|bunkerity/bunkerweb-scheduler:REPLACEME_TAG|bunkerity/bunkerweb-scheduler:$image_tag|g" "$compose_file" > "$temp_file"; then
-        mv "$temp_file" "$compose_file"
-        ((updates_made++))
-        echo -e "${GREEN}✓ Updated bunkerity/bunkerweb-scheduler image tag${NC}"
-    fi
-    
-    if sed "s|bunkerity/bunkerweb-autoconf:REPLACEME_TAG|bunkerity/bunkerweb-autoconf:$image_tag|g" "$compose_file" > "$temp_file"; then
-        mv "$temp_file" "$compose_file"
-        ((updates_made++))
-        echo -e "${GREEN}✓ Updated bunkerity/bunkerweb-autoconf image tag${NC}"
-    fi
-    
-    if sed "s|bunkerity/bunkerweb-ui:REPLACEME_TAG|bunkerity/bunkerweb-ui:$image_tag|g" "$compose_file" > "$temp_file"; then
-        mv "$temp_file" "$compose_file"
-        ((updates_made++))
-        echo -e "${GREEN}✓ Updated bunkerity/bunkerweb-ui image tag${NC}"
-    fi
-    
-    # Also update any existing :latest tags to the selected channel (if different from latest)
-    if [[ "$image_tag" != "latest" ]]; then
-        if sed "s|bunkerity/bunkerweb:latest|bunkerity/bunkerweb:$image_tag|g" "$compose_file" > "$temp_file"; then
-            mv "$temp_file" "$compose_file"
-            echo -e "${GREEN}✓ Updated existing :latest tags to :$image_tag${NC}"
-        fi
-        
-        if sed "s|bunkerity/bunkerweb-scheduler:latest|bunkerity/bunkerweb-scheduler:$image_tag|g" "$compose_file" > "$temp_file"; then
-            mv "$temp_file" "$compose_file"
-        fi
-        
-        if sed "s|bunkerity/bunkerweb-autoconf:latest|bunkerity/bunkerweb-autoconf:$image_tag|g" "$compose_file" > "$temp_file"; then
-            mv "$temp_file" "$compose_file"
-        fi
-        
-        if sed "s|bunkerity/bunkerweb-ui:latest|bunkerity/bunkerweb-ui:$image_tag|g" "$compose_file" > "$temp_file"; then
-            mv "$temp_file" "$compose_file"
-        fi
-    fi
-    
-    # Then, update the API whitelist with comprehensive network coverage
     echo -e "${BLUE}Updating API whitelist in docker-compose.yml...${NC}"
     
     # Use a more robust approach with awk instead of sed for complex strings
-    local old_pattern='API_WHITELIST_IP: "127.0.0.0/8 10.20.30.0/24'
+    local temp_file=$(mktemp)
     local new_value="API_WHITELIST_IP: \"$api_whitelist\""
     
     # Use awk to replace the API whitelist lines
@@ -355,28 +202,12 @@ process_template_with_release_channel() {
         echo -e "${BLUE}Verification - Updated API whitelist entries:${NC}"
         grep "API_WHITELIST_IP:" "$compose_file" | sed 's/^\s*/  /' | cut -c1-100 | sed 's/$/.../' || true
         
+        return 0
     else
         echo -e "${RED}✗ Failed to update API whitelist${NC}"
         rm -f "$temp_file"
         return 1
     fi
-    
-    # Clean up
-    rm -f "$temp_file"
-    
-    # Also ensure BUNKERWEB_INSTANCES is set correctly for autoconf mode
-    echo -e "${BLUE}Configuring BunkerWeb instances for autoconf mode...${NC}"
-    if sed -i 's|BUNKERWEB_INSTANCES: ""|BUNKERWEB_INSTANCES: "bunkerweb"|g' "$compose_file"; then
-        echo -e "${GREEN}✓ BUNKERWEB_INSTANCES configured for autoconf${NC}"
-    else
-        echo -e "${YELLOW}⚠ Could not update BUNKERWEB_INSTANCES${NC}"
-    fi
-    
-    echo ""
-    echo -e "${GREEN}✓ Template processing with release channel and API whitelist completed successfully${NC}"
-    echo ""
-    
-    return 0
 }
 
 # Auto-detect FQDN if not provided
@@ -832,18 +663,29 @@ main() {
     # Load the generated passwords
     eval "$(get_passwords)"
     
-    # 4. Enhanced Template Processing with Release Channel and API Whitelist
-    echo -e "${BLUE}Step 4: Enhanced Template Processing with Release Channel${NC}"
-    if ! process_template_with_release_channel "$template_path" "$compose_file" "$MYSQL_PASSWORD" "$REDIS_PASSWORD" "$TOTP_SECRET" "$ADMIN_PASSWORD" "$FLASK_SECRET" "$ADMIN_USERNAME" "$AUTO_CERT_TYPE" "$AUTO_CERT_CONTACT" "$FQDN" "$SERVER_NAME" "$docker_subnet" "$SETUP_MODE" "$REDIS_ENABLED" "$api_whitelist" "$RELEASE_CHANNEL"; then
+    # 4. Get the appropriate Docker image tag for the release channel
+    local image_tag=$(get_image_tag_for_channel "$RELEASE_CHANNEL")
+    echo -e "${BLUE}Using Docker image tag: $image_tag for release channel: $RELEASE_CHANNEL${NC}"
+    
+    # 5. Template Processing with Release Channel Support
+    echo -e "${BLUE}Step 4: Template Processing with Release Channel Support${NC}"
+    if ! process_template "$template_path" "$compose_file" "$MYSQL_PASSWORD" "$REDIS_PASSWORD" "$TOTP_SECRET" "$ADMIN_PASSWORD" "$FLASK_SECRET" "$ADMIN_USERNAME" "$AUTO_CERT_TYPE" "$AUTO_CERT_CONTACT" "$FQDN" "$SERVER_NAME" "$docker_subnet" "$SETUP_MODE" "$REDIS_ENABLED" "$image_tag"; then
         echo -e "${RED}✗ Template processing failed${NC}"
         exit 1
     fi
     
-    # 5. Directory Setup
-    echo -e "${BLUE}Step 5: Directory Setup${NC}"
+    # 6. Update API Whitelist
+    echo -e "${BLUE}Step 5: API Whitelist Configuration${NC}"
+    if ! update_api_whitelist "$compose_file" "$api_whitelist"; then
+        echo -e "${RED}✗ API whitelist update failed${NC}"
+        exit 1
+    fi
+    
+    # 7. Directory Setup
+    echo -e "${BLUE}Step 6: Directory Setup${NC}"
     setup_directories
     
-    # 6. Final Summary
+    # 8. Final Summary
     show_setup_summary
 }
 
