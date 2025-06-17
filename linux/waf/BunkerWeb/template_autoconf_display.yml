@@ -1,4 +1,4 @@
-# BunkerWeb Autoconf Docker Compose Template with Redis and Syslog
+# BunkerWeb Autoconf Docker Compose Template with Redis, Let's Encrypt Support and Release Channel Support
 
 x-ui-env: &bw-ui-env
   # We anchor the environment variables to avoid duplication
@@ -21,7 +21,7 @@ x-redis-env: &redis-env
 
 services:
   bunkerweb:
-    image: bunkerity/bunkerweb:1.6.1
+    image: bunkerity/bunkerweb:REPLACEME_TAG
     ports:
       - "80:8080/tcp"
       - "443:8443/tcp"
@@ -32,43 +32,72 @@ services:
       <<: *redis-env
       AUTOCONF_MODE: "yes"
       API_WHITELIST_IP: "127.0.0.0/8 10.20.30.0/24"
+      # Syslog Configuration
+      USE_SYSLOG: "yes"
+      SYSLOG_HOST: "bw-syslog"
+      SYSLOG_PORT: "5514"
+      SYSLOG_FACILITY: "local0"
     restart: "unless-stopped"
     depends_on:
       - bw-redis
       - bw-db
+      - bw-syslog
     networks:
       - bw-universe
       - bw-services
       - bw-redis
 
   bw-scheduler:
-    image: bunkerity/bunkerweb-scheduler:1.6.1
+    image: bunkerity/bunkerweb-scheduler:REPLACEME_TAG
     environment:
       <<: [*bw-ui-env, *redis-env]
-      BUNKERWEB_INSTANCES: ""
-      SERVER_NAME: ""
+      BUNKERWEB_INSTANCES: "bunkerweb"
+      SERVER_NAME: "REPLACEME_DOMAIN"
       API_WHITELIST_IP: "127.0.0.0/8 10.20.30.0/24"
       MULTISITE: "yes"
       UI_HOST: "http://bw-ui:7000" # Change it if needed
+      # Let's Encrypt Configuration
+      AUTO_LETS_ENCRYPT: "REPLACEME_AUTO_LETS_ENCRYPT"
+      EMAIL_LETS_ENCRYPT: "REPLACEME_EMAIL_LETS_ENCRYPT"
+      LETS_ENCRYPT_CHALLENGE: "http"
+      USE_LETS_ENCRYPT_STAGING: "yes"
+      # DNS Resolvers for domain validation
+      DNS_RESOLVERS: "1.1.1.1 8.8.8.8"
+      # Additional SSL/TLS settings
+      USE_HTTPS: "yes"
+      HTTPS_PROTOCOLS: "TLSv1.2 TLSv1.3"
+      HTTP2: "yes"
+      # Syslog Configuration
+      USE_SYSLOG: "yes"
+      SYSLOG_HOST: "bw-syslog"
+      SYSLOG_PORT: "5514"
+      SYSLOG_FACILITY: "local0"
     volumes:
       - /data/BunkerWeb/storage:/data # This is used to persist the cache and other data like the backups
     restart: "unless-stopped"
     depends_on:
       - bw-redis
       - bw-db
+      - bw-syslog
     networks:
       - bw-universe
       - bw-db
       - bw-redis
 
   bw-autoconf:
-    image: bunkerity/bunkerweb-autoconf:1.6.1
+    image: bunkerity/bunkerweb-autoconf:REPLACEME_TAG
     depends_on:
       - bw-docker
       - bw-scheduler
+      - bw-syslog
     environment:
       <<: [*bw-ui-env, *redis-env]
       DOCKER_HOST: "tcp://bw-docker:2375"
+      # Syslog Configuration
+      USE_SYSLOG: "yes"
+      SYSLOG_HOST: "bw-syslog"
+      SYSLOG_PORT: "5514"
+      SYSLOG_FACILITY: "local0"
     restart: "unless-stopped"
     networks:
       - bw-universe
@@ -87,7 +116,7 @@ services:
       - bw-docker
 
   bw-ui:
-    image: bunkerity/bunkerweb-ui:1.6.1
+    image: bunkerity/bunkerweb-ui:REPLACEME_TAG
     environment:
       <<: [*bw-ui-env, *redis-env]
       # Optional: Automated admin credentials (uncomment to skip setup wizard)
@@ -96,10 +125,16 @@ services:
       # ADMIN_PASSWORD: "REPLACEME_ADMIN"
       # FLASK_SECRET: "REPLACEME_FLASK"
       TOTP_SECRETS: "REPLACEME_DEFAULT"
+      # Syslog Configuration
+      USE_SYSLOG: "yes"
+      SYSLOG_HOST: "bw-syslog"
+      SYSLOG_PORT: "5514"
+      SYSLOG_FACILITY: "local0"
     restart: "unless-stopped"
     depends_on:
       - bw-redis
       - bw-db
+      - bw-syslog
     networks:
       - bw-universe
       - bw-db
@@ -143,6 +178,29 @@ services:
     restart: "unless-stopped"
     networks:
       - bw-db
+
+  bw-syslog:
+    image: lscr.io/linuxserver/syslog-ng:latest
+    environment:
+      - PUID=101
+      - PGID=101
+      - TZ=Etc/UTC
+    ports:
+      - "514:5514/udp"
+      - "601:6601/tcp"
+      - "6514:6514/tcp"
+    volumes:
+      - /data/BunkerWeb/logs:/var/log
+      - /data/BunkerWeb/syslog-config:/config
+    restart: unless-stopped
+    networks:
+      - bw-universe
+    healthcheck:
+      test: ["CMD", "pgrep", "syslog-ng"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
 networks:
   bw-universe:
