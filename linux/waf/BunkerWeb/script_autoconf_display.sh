@@ -16,7 +16,59 @@
 set -e
 
 # Script directory and installation directory
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}
+
+# Function to add BunkerWeb labels to bw-ui service
+add_bw_ui_labels() {
+    local compose_file="$1"
+    local fqdn="$2"
+    
+    echo -e "${BLUE}Adding BunkerWeb labels to bw-ui service...${NC}"
+    
+    # Generate random 8-character path for UI access
+    local random_ui_path=$(generate_random_ui_path)
+    
+    # Create the labels block
+    local labels_block="    labels:
+      - \"bunkerweb.SERVER_NAME=$fqdn\"
+      - \"bunkerweb.USE_TEMPLATE=ui\"
+      - \"bunkerweb.USE_REVERSE_PROXY=yes\"
+      - \"bunkerweb.REVERSE_PROXY_URL=/$random_ui_path\"
+      - \"bunkerweb.REVERSE_PROXY_HOST=http://bw-ui:7000\""
+    
+    # Find the bw-ui service and add labels after the image line
+    if grep -q "bw-ui:" "$compose_file"; then
+        # Use awk to insert labels after the image line in bw-ui service
+        awk -v labels="$labels_block" '
+        /^  bw-ui:/ { in_ui_service = 1 }
+        in_ui_service && /^    image:/ { 
+            print $0
+            print labels
+            next
+        }
+        /^  [a-zA-Z]/ && !/^  bw-ui:/ { in_ui_service = 0 }
+        { print }
+        ' "$compose_file" > "$compose_file.tmp" && mv "$compose_file.tmp" "$compose_file"
+        
+        echo -e "${GREEN}✓ BunkerWeb labels added to bw-ui service${NC}"
+        echo -e "${GREEN}✓ UI access path: /$random_ui_path${NC}"
+        echo -e "${GREEN}✓ Server name: $fqdn${NC}"
+        
+        # Update credentials file with UI path information
+        if [[ -f "${compose_file%/*}/credentials.txt" ]]; then
+            echo "" >> "${compose_file%/*}/credentials.txt"
+            echo "# BunkerWeb UI Access Information" >> "${compose_file%/*}/credentials.txt"
+            echo "UI Access Path: /$random_ui_path" >> "${compose_file%/*}/credentials.txt"
+            echo "Full UI URL: http://$fqdn/$random_ui_path" >> "${compose_file%/*}/credentials.txt"
+            echo "Direct Access: http://$(hostname -I | awk '{print $1}')/$random_ui_path" >> "${compose_file%/*}/credentials.txt"
+        fi
+        
+        return 0
+    else
+        echo -e "${YELLOW}⚠ bw-ui service not found in compose file${NC}"
+        return 1
+    fi
+}")" && pwd)"
 INSTALL_DIR="/data/BunkerWeb"
 SETUP_MODE="wizard"  # Default to wizard mode (changed from automated)
 
@@ -81,6 +133,19 @@ generate_secure_admin_password() {
     
     # Shuffle the password characters
     echo "$password" | fold -w1 | shuf | tr -d '\n'
+}
+
+# Function to generate random 8-character string for UI path
+generate_random_ui_path() {
+    # Generate a random 8-character string using letters and numbers
+    local chars="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    local random_path=""
+    
+    for i in {1..8}; do
+        random_path+="${chars:$((RANDOM % ${#chars})):1}"
+    done
+    
+    echo "$random_path"
 }
 
 # Source the modular scripts
@@ -248,10 +313,12 @@ configure_setup_mode() {
         echo -e "${BLUE}Configuring automated setup with credentials...${NC}"
         
         # Enable automated setup in docker-compose.yml (uncomment the lines)
-        sed -i 's|# OVERRIDE_ADMIN_CREDS: "yes"|OVERRIDE_ADMIN_CREDS: "yes"|' "$compose_file"
+        sed -i 's|# OVERRIDE_ADMIN_CREDS: "no"|OVERRIDE_ADMIN_CREDS: "yes"|' "$compose_file"
+        sed -i 's|# # OVERRIDE_ADMIN_CREDS: "no"|OVERRIDE_ADMIN_CREDS: "yes"|' "$compose_file"
         sed -i 's|# ADMIN_USERNAME: "admin"|ADMIN_USERNAME: "'$admin_username'"|' "$compose_file"
-        sed -i 's|# ADMIN_PASSWORD: ".*"|ADMIN_PASSWORD: "'$admin_password'"|' "$compose_file"
-        sed -i 's|# FLASK_SECRET: ".*"|FLASK_SECRET: "'$flask_secret'"|' "$compose_file"
+        sed -i 's|# # ADMIN_USERNAME: "admin"|ADMIN_USERNAME: "'$admin_username'"|' "$compose_file"
+        sed -i 's|# ADMIN_PASSWORD: "'$admin_password'"|ADMIN_PASSWORD: "'$admin_password'"|' "$compose_file"
+        sed -i 's|# FLASK_SECRET: "'$flask_secret'"|FLASK_SECRET: "'$flask_secret'"|' "$compose_file"
         
         echo -e "${GREEN}✓ Automated setup configured and enabled${NC}"
         echo -e "${GREEN}✓ Admin credentials activated${NC}"
@@ -259,23 +326,16 @@ configure_setup_mode() {
     else
         echo -e "${BLUE}Configuring setup wizard mode...${NC}"
         
-        # Ensure OVERRIDE_ADMIN_CREDS is commented out or set to "no"
+        # Ensure OVERRIDE_ADMIN_CREDS is commented out
         sed -i 's|OVERRIDE_ADMIN_CREDS: "yes"|# OVERRIDE_ADMIN_CREDS: "no"|' "$compose_file"
         
-        # Keep the credentials in the file but commented for reference
-        sed -i 's|ADMIN_USERNAME: "'$admin_username'"|# ADMIN_USERNAME: "'$admin_username'"|' "$compose_file"
-        sed -i 's|ADMIN_PASSWORD: "'$admin_password'"|# ADMIN_PASSWORD: "'$admin_password'"|' "$compose_file"
-        sed -i 's|FLASK_SECRET: "'$flask_secret'"|# FLASK_SECRET: "'$flask_secret'"|' "$compose_file"
-        
-        # But keep them uncommented if they were already uncommented in the template
-        if grep -q "ADMIN_PASSWORD:" "$compose_file" && ! grep -q "# ADMIN_PASSWORD:" "$compose_file"; then
-            # Replace the placeholder with actual password but keep it uncommented
-            sed -i 's|ADMIN_PASSWORD: ".*"|ADMIN_PASSWORD: "'$admin_password'"|' "$compose_file"
-            sed -i 's|FLASK_SECRET: ".*"|FLASK_SECRET: "'$flask_secret'"|' "$compose_file"
-        fi
+        # Comment out admin credentials but keep the values for reference
+        sed -i 's|^[[:space:]]*ADMIN_USERNAME: "'$admin_username'"|      # ADMIN_USERNAME: "'$admin_username'"|' "$compose_file"
+        sed -i 's|^[[:space:]]*ADMIN_PASSWORD: "'$admin_password'"|      # ADMIN_PASSWORD: "'$admin_password'"|' "$compose_file"
+        sed -i 's|^[[:space:]]*FLASK_SECRET: "'$flask_secret'"|      # FLASK_SECRET: "'$flask_secret'"|' "$compose_file"
         
         echo -e "${GREEN}✓ Setup wizard mode enabled${NC}"
-        echo -e "${GREEN}✓ Credentials generated for manual setup${NC}"
+        echo -e "${GREEN}✓ Credentials commented out but available for reference${NC}"
         return 0
     fi
 }
@@ -370,7 +430,18 @@ process_template_enhanced() {
         echo -e "${GREEN}✓ SSL certificates disabled${NC}"
     fi
     
-    # 4. Handle domain configuration
+    # 4. Replace ALL REPLACEME placeholders first (including admin credentials)
+    if [[ -n "$admin_password" ]]; then
+        sed -i "s|REPLACEME_ADMIN|$admin_password|g" "$compose_file"
+        echo -e "${GREEN}✓ Admin password placeholder updated${NC}"
+    fi
+    
+    if [[ -n "$flask_secret" ]]; then
+        sed -i "s|REPLACEME_FLASK|$flask_secret|g" "$compose_file"
+        echo -e "${GREEN}✓ Flask secret placeholder updated${NC}"
+    fi
+    
+    # 5. Handle domain configuration
     if [[ -n "$fqdn" ]]; then
         sed -i "s|REPLACEME_DOMAIN|$fqdn|g" "$compose_file"
         # Also update SERVER_NAME environment variable
@@ -378,10 +449,13 @@ process_template_enhanced() {
         echo -e "${GREEN}✓ Domain configured: $fqdn${NC}"
     fi
     
-    # 5. Configure setup mode and credentials
+    # 6. Configure setup mode and credentials (after placeholders are replaced)
     configure_setup_mode "$compose_file" "$setup_mode" "$admin_username" "$admin_password" "$flask_secret"
     
-    # 6. Verify all placeholders are replaced
+    # 7. Add BunkerWeb labels to bw-ui service for reverse proxy configuration
+    add_bw_ui_labels "$compose_file" "$fqdn"
+    
+    # 8. Verify all placeholders are replaced
     local remaining_placeholders=$(grep -o "REPLACEME_[A-Z_]*" "$compose_file" || true)
     if [[ -n "$remaining_placeholders" ]]; then
         echo -e "${YELLOW}⚠ Some placeholders remain: $remaining_placeholders${NC}"
@@ -389,7 +463,7 @@ process_template_enhanced() {
         echo -e "${GREEN}✓ All placeholders processed${NC}"
     fi
     
-    # 7. Validate Docker Compose syntax
+    # 9. Validate Docker Compose syntax
     local current_dir=$(pwd)
     cd "$(dirname "$compose_file")"
     if docker compose config >/dev/null 2>&1; then
@@ -875,16 +949,34 @@ show_setup_summary() {
     echo -e "${BLUE}Next Steps:${NC}"
     echo -e "${GREEN}1. Start BunkerWeb: cd $INSTALL_DIR && docker compose up -d${NC}"
     
+    # Get the UI path from credentials file if it exists
+    local ui_path=""
+    local creds_file="$INSTALL_DIR/credentials.txt"
+    if [[ -f "$creds_file" ]]; then
+        ui_path=$(grep "UI Access Path:" "$creds_file" 2>/dev/null | cut -d' ' -f4 || echo "")
+    fi
+    
     if [[ $SETUP_MODE == "automated" ]]; then
-        echo -e "${GREEN}2. Access web interface: http://$(hostname -I | awk '{print $1}')${NC}"
+        if [[ -n "$ui_path" ]]; then
+            echo -e "${GREEN}2. Access web interface: http://$(hostname -I | awk '{print $1}')$ui_path${NC}"
+        else
+            echo -e "${GREEN}2. Access web interface: http://$(hostname -I | awk '{print $1}')${NC}"
+        fi
         echo -e "${GREEN}3. Login with credentials from: $INSTALL_DIR/credentials.txt${NC}"
     else
-        echo -e "${GREEN}2. Complete setup wizard: http://$(hostname -I | awk '{print $1}')${NC}"
+        if [[ -n "$ui_path" ]]; then
+            echo -e "${GREEN}2. Complete setup wizard: http://$(hostname -I | awk '{print $1}')$ui_path${NC}"
+        else
+            echo -e "${GREEN}2. Complete setup wizard: http://$(hostname -I | awk '{print $1}')${NC}"
+        fi
         echo -e "${GREEN}3. Use pre-generated credentials from: $INSTALL_DIR/credentials.txt${NC}"
         echo ""
         echo -e "${BLUE}Wizard Setup Information:${NC}"
         echo -e "${GREEN}• Username: $ADMIN_USERNAME${NC}"
         echo -e "${GREEN}• Password: $ADMIN_PASSWORD${NC}"
+        if [[ -n "$ui_path" ]]; then
+            echo -e "${GREEN}• UI Access Path: $ui_path (secure random path)${NC}"
+        fi
         echo -e "${YELLOW}• The setup wizard will guide you through initial configuration${NC}"
         echo -e "${YELLOW}• All necessary credentials are pre-generated and ready to use${NC}"
     fi
