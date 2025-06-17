@@ -22,8 +22,13 @@ services:
       - "80:8080/tcp"
       - "443:8443/tcp"
       - "443:8443/udp" # For QUIC / HTTP3 support
+    labels:
+      - "bunkerweb.INSTANCE=yes" # We set the instance label to allow the autoconf to detect the instance
     environment:
       API_WHITELIST_IP: "127.0.0.0/8 10.20.30.0/24" # Make sure to set the correct IP range so the scheduler can send the configuration to the instance
+    restart: "unless-stopped"
+    depends_on:
+      - bw-db
     networks:
       - bw-universe
       - bw-services
@@ -36,7 +41,7 @@ services:
       SERVER_NAME: "REPLACEME_DOMAIN"
       MULTISITE: "yes"
       API_WHITELIST_IP: "127.0.0.0/8 10.20.30.0/24" # We mirror the API_WHITELIST_IP from the bunkerweb service
-      DNS_RESOLVERS: "127.0.0.1" # Use local DNS server
+      DNS_RESOLVERS: "127.0.0.11" # Use local DNS server
       SERVE_FILES: "no"
       DISABLE_DEFAULT_SERVER: "yes"
       USE_CLIENT_CACHE: "yes"
@@ -59,9 +64,37 @@ services:
       REPLACEME_DOMAIN_REVERSE_PROXY_HOST: "http://bw-ui:7000" # The web UI container is listening on the 7000 port by default
     volumes:
       - /data/BunkerWeb/storage:/data # This is used to persist the cache and other data like the backups
+    restart: "unless-stopped"
+    depends_on:
+      - bw-db
     networks:
       - bw-universe
       - bw-db
+
+  bw-autoconf:
+    image: bunkerity/bunkerweb-autoconf:1.6.1
+    depends_on:
+      - bw-docker
+      - bw-scheduler
+    environment:
+      <<: *ui-env
+      DOCKER_HOST: "tcp://bw-docker:2375"
+    restart: "unless-stopped"
+    networks:
+      - bw-universe
+      - bw-docker
+      - bw-db
+
+  bw-docker:
+    image: tecnativa/docker-socket-proxy:nightly
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      CONTAINERS: "1"
+      LOG_LEVEL: "warning"
+    restart: "unless-stopped"
+    networks:
+      - bw-docker
 
   bw-ui:
     image: bunkerity/bunkerweb-ui:1.6.1
@@ -73,6 +106,9 @@ services:
       # ADMIN_PASSWORD: "REPLACEME_ADMIN_PASS"
       # FLASK_SECRET: "REPLACEME_FLASK"
       TOTP_SECRETS: "REPLACEME_DEFAULT"
+    restart: "unless-stopped"
+    depends_on:
+      - bw-db
     networks:
       - bw-universe
       - bw-db
@@ -86,6 +122,7 @@ services:
       MYSQL_PASSWORD: "REPLACEME_MYSQL"
     volumes:
       - /data/BunkerWeb/database:/var/lib/mysql
+    restart: "unless-stopped"
     networks:
       - bw-db
 
@@ -100,5 +137,7 @@ networks:
         - subnet: 10.20.30.0/24
   bw-services:
     name: bw-services
+  bw-docker:
+    name: bw-docker
   bw-db:
     name: bw-db
