@@ -9,7 +9,7 @@
 # SPDX-License-Identifier: MIT OR AGPL-3.0-or-later
 #
 
-# Deploy BunkerWeb - Download project files with Fluent Bit support
+# Deploy BunkerWeb - Download project files with Enhanced Security Features
 
 set -e  # Exit on any error
 
@@ -41,7 +41,7 @@ command_exists() {
 
 # Main execution
 main() {
-    log_step "Starting BunkerWeb deployment with Fluent Bit support..."
+    log_step "Starting BunkerWeb deployment with Enhanced Security Features..."
     
     # Create the BunkerWeb directory
     log_step "Creating BunkerWeb directory structure..."
@@ -68,6 +68,8 @@ main() {
         "helper_template_processor.sh"
         "helper_release_channel_manager.sh"
         "helper_bunkerweb_config_checker.sh"
+        "helper_allowlist.sh"
+        "helper_greylist.sh"
         "uninstall_BunkerWeb.sh"
     )
     
@@ -134,6 +136,43 @@ main() {
         log_success "✓ Created symbolic link: /data/BunkerWeb/BunkerWeb.conf → /root/BunkerWeb.conf"
     else
         log_error "✗ Failed to create symbolic link"
+        exit 1
+    fi
+    
+    # Handle BunkerWeb-credentials.txt
+    log_step "Setting up credentials file..."
+    if [[ ! -f "/root/BunkerWeb-credentials.txt" ]]; then
+        log_info "Creating /root/BunkerWeb-credentials.txt..."
+        touch "/root/BunkerWeb-credentials.txt"
+        chmod 600 "/root/BunkerWeb-credentials.txt"  # Secure permissions for credentials
+        
+        if [[ -f "/root/BunkerWeb-credentials.txt" ]]; then
+            log_success "✓ Created /root/BunkerWeb-credentials.txt with secure permissions"
+        else
+            log_error "✗ Failed to create /root/BunkerWeb-credentials.txt"
+            exit 1
+        fi
+    else
+        log_info "Found existing /root/BunkerWeb-credentials.txt - ensuring secure permissions"
+        chmod 600 "/root/BunkerWeb-credentials.txt"
+    fi
+    
+    # Create symbolic link from /data/BunkerWeb/credentials.txt to /root/BunkerWeb-credentials.txt
+    log_step "Creating symbolic link for credentials.txt..."
+    if [[ -L "/data/BunkerWeb/credentials.txt" ]]; then
+        log_info "Credentials symbolic link already exists - removing old link"
+        rm "/data/BunkerWeb/credentials.txt"
+    elif [[ -f "/data/BunkerWeb/credentials.txt" ]]; then
+        log_warning "Regular credentials file exists at /data/BunkerWeb/credentials.txt - backing up"
+        mv "/data/BunkerWeb/credentials.txt" "/data/BunkerWeb/credentials.txt.backup.$(date +%Y%m%d_%H%M%S)"
+    fi
+    
+    ln -s "/root/BunkerWeb-credentials.txt" "/data/BunkerWeb/credentials.txt"
+    
+    if [[ -L "/data/BunkerWeb/credentials.txt" ]]; then
+        log_success "✓ Created symbolic link: /data/BunkerWeb/credentials.txt → /root/BunkerWeb-credentials.txt"
+    else
+        log_error "✗ Failed to create credentials symbolic link"
         exit 1
     fi
     
@@ -211,8 +250,9 @@ main() {
     chmod +x helper_template_processor.sh
     chmod +x helper_release_channel_manager.sh
     chmod +x helper_bunkerweb_config_checker.sh
+    chmod +x helper_allowlist.sh
+    chmod +x helper_greylist.sh
     chmod +x helper_fqdn.sh
-    chmod +x autoconf_script.sh
     chmod +x uninstall_BunkerWeb.sh
     
     # Set proper permissions for Fluent Bit and log directories
@@ -223,11 +263,13 @@ main() {
     chmod -R 755 logs
     chmod -R 755 fluent-config
     
-    log_success "BunkerWeb deployment with Fluent Bit completed successfully!"
+    log_success "BunkerWeb deployment with Enhanced Security Features completed successfully!"
     echo ""
     echo "📁 Files downloaded to: /data/BunkerWeb"
     echo "📁 BunkerWeb.conf location: /root/BunkerWeb.conf"
+    echo "📁 Credentials file location: /root/BunkerWeb-credentials.txt"
     echo "🔗 Symbolic link: /data/BunkerWeb/BunkerWeb.conf → /root/BunkerWeb.conf"
+    echo "🔗 Symbolic link: /data/BunkerWeb/credentials.txt → /root/BunkerWeb-credentials.txt"
     echo "📁 Fluent Bit config: /data/BunkerWeb/fluent-config/"
     echo "📁 Log directory: /data/BunkerWeb/logs/"
     echo ""
@@ -244,23 +286,64 @@ main() {
     ls -la /root/BunkerWeb.conf
     echo ""
     
+    echo "🔐 Credentials file:"
+    ls -la /root/BunkerWeb-credentials.txt
+    echo ""
+    
     echo "🔧 Next steps:"
     echo "1. Validate configuration: cd /data/BunkerWeb && ./helper_bunkerweb_config_checker.sh"
     echo "2. Check/configure FQDN: cd /data/BunkerWeb && ./helper_fqdn.sh"
     echo "3. Edit configuration if needed: nano /root/BunkerWeb.conf"
     echo "4. Configure network settings (edit PRIVATE_NETWORKS_ALREADY_IN_USE if needed)"
-    echo "5. Deploy BunkerWeb with Fluent Bit: cd /data/BunkerWeb && sudo ./script_autoconf_display.sh --type autoconf"
+    echo "5. Test security helpers: ./helper_allowlist.sh test && ./helper_greylist.sh test-detect"
+    echo "6. Deploy BunkerWeb with enhanced security: sudo ./script_autoconf_display.sh --type autoconf"
+    echo "7. View generated credentials: cat /root/BunkerWeb-credentials.txt (after deployment)"
     echo ""
     
-    echo "🌟 New Features in this deployment:"
-    echo "• Fluent Bit integration for modern logging (replaces syslog-ng)"
-    echo "• Network conflict detection and automatic subnet selection"
-    echo "• Improved SSL certificate management"
-    echo "• Enhanced security with proper private subnet usage"
-    echo "• FQDN detection and validation helper script"
+    echo "🌟 Enhanced Security Features in this deployment:"
+    echo "• 🛡️  Allowlist: Global access control for entire application"
+    echo "• 🔒 Greylist: Admin interface protection with SSH auto-detection"
+    echo "• 🌍 Country-based filtering: Allow/Block by geographic location"
+    echo "• 📊 Fluent Bit integration: Modern logging (replaces syslog-ng)"
+    echo "• 🔍 Network conflict detection: Automatic subnet selection"
+    echo "• 🔐 Enhanced SSL certificate management"
+    echo "• 🏠 Proper private subnet usage (RFC1918 compliance)"
+    echo "• 🎯 FQDN detection and validation system"
+    echo ""
+    
+    echo "🔐 Security Configuration Options:"
+    echo "• USE_ALLOWLIST: Global IP/Country access control"
+    echo "• USE_GREYLIST: Admin interface IP protection"
+    echo "• ALLOWLIST_COUNTRY: Countries to allow (e.g., 'US CA GB')"
+    echo "• BLACKLIST_COUNTRY: Countries to block (e.g., 'CN RU KP')"
+    echo "• Automatic SSH IP detection for lockout prevention"
+    echo ""
+    
+    echo "⚠️  IMPORTANT SECURITY NOTES:"
+    echo "• Allowlist affects ALL visitors to your website"
+    echo "• Greylist only affects admin interface access"
+    echo "• Test thoroughly before enabling in production"
+    echo "• SSH IPs are auto-detected to prevent lockouts"
+    echo "• Keep emergency console access available"
+    echo ""
+    
+    echo "🎯 Example Security Configurations:"
+    echo "# Basic setup with SSH protection only:"
+    echo "sudo ./script_autoconf_display.sh --type autoconf --greylist yes"
+    echo ""
+    echo "# Corporate environment with geographic restrictions:"
+    echo "sudo ./script_autoconf_display.sh --type autoconf \\"
+    echo "  --allowlist yes --allowlist-country \"US CA GB\" \\"
+    echo "  --blacklist-country \"CN RU KP\" --greylist yes"
+    echo ""
+    echo "# High-security setup with IP restrictions:"
+    echo "sudo ./script_autoconf_display.sh --type autoconf \\"
+    echo "  --allowlist yes --allowlist-ip \"203.0.113.0/24\" \\"
+    echo "  --greylist yes --greylist-ip \"10.0.0.0/8\""
     echo ""
     
     log_info "You can now proceed with BunkerWeb configuration and deployment."
+    log_info "Enhanced security features provide enterprise-grade access control."
     log_info "Fluent Bit will provide lightweight, high-performance log processing."
 }
 
