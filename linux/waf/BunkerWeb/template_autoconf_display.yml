@@ -1,4 +1,4 @@
-# BunkerWeb Autoconf Docker Compose Template with Fixed Logging
+# BunkerWeb Autoconf Docker Compose Template - Clean Version (No Syslog/Fluent)
 
 x-ui-env: &bw-ui-env
   # We anchor the environment variables to avoid duplication
@@ -19,37 +19,7 @@ x-redis-env: &redis-env
   REDIS_KEEPALIVE_IDLE: "30000"
   REDIS_KEEPALIVE_POOL: "10"
 
-# Conditional logging configuration - only use if Fluent Bit is healthy
-x-fluent-config: &fluent-config
-  logging:
-    driver: json-file
-    options:
-      max-size: "10m"
-      max-file: "3"
-
 services:
-  # Start Fluent Bit first with no dependencies
-  bw-fluent:
-    image: fluent/fluent-bit:latest
-    ports:
-      - "24224:24224/tcp"  # Forward protocol for log collection
-      - "2020:2020/tcp"    # HTTP API for health checks
-    volumes:
-      - /data/BunkerWeb/logs:/fluent-bit/log
-      - /data/BunkerWeb/fluent-config:/fluent-bit/etc
-    environment:
-      - FLB_CONFIG_PATH=/fluent-bit/etc/fluent-bit.conf
-    command: ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf"]
-    restart: unless-stopped
-    networks:
-      - bw-fluent
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:2020/api/v1/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
   bunkerweb:
     image: bunkerity/bunkerweb:1.6.1
     ports:
@@ -66,14 +36,15 @@ services:
     depends_on:
       bw-redis:
         condition: service_healthy
-      bw-fluent:
-        condition: service_healthy
     networks:
       - bw-universe
       - bw-services
       - bw-redis
-      - bw-fluent
-    <<: *fluent-config
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   bw-scheduler:
     image: bunkerity/bunkerweb-scheduler:1.6.1
@@ -92,14 +63,15 @@ services:
         condition: service_healthy
       bw-db:
         condition: service_started
-      bw-fluent:
-        condition: service_healthy
     networks:
       - bw-universe
       - bw-db
       - bw-redis
-      - bw-fluent
-    <<: *fluent-config
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   bw-autoconf:
     image: bunkerity/bunkerweb-autoconf:1.6.1
@@ -107,8 +79,6 @@ services:
       bw-docker:
         condition: service_started
       bw-redis:
-        condition: service_healthy
-      bw-fluent:
         condition: service_healthy
     environment:
       <<: [*bw-ui-env, *redis-env]
@@ -119,8 +89,11 @@ services:
       - bw-docker
       - bw-db
       - bw-redis
-      - bw-fluent
-    <<: *fluent-config
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   bw-docker:
     image: tecnativa/docker-socket-proxy:nightly
@@ -131,7 +104,11 @@ services:
       LOG_LEVEL: "warning"
     networks:
       - bw-docker
-    # No Fluent Bit logging for this container to avoid dependency issues
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   bw-ui:
     image: bunkerity/bunkerweb-ui:1.6.1
@@ -149,14 +126,15 @@ services:
         condition: service_healthy
       bw-db:
         condition: service_started
-      bw-fluent:
-        condition: service_healthy
     networks:
       - bw-universe
       - bw-db
       - bw-redis
-      - bw-fluent
-    <<: *fluent-config
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   bw-redis:
     image: redis:7-alpine
@@ -183,6 +161,11 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   bw-db:
     image: mariadb:11
@@ -196,7 +179,11 @@ services:
     restart: "unless-stopped"
     networks:
       - bw-db
-    # No Fluent Bit logging for database to avoid dependency issues
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 networks:
   bw-universe:
@@ -213,5 +200,3 @@ networks:
     name: bw-db
   bw-redis:
     name: bw-redis
-  bw-fluent:
-    name: bw-fluent
