@@ -9,66 +9,14 @@
 # SPDX-License-Identifier: MIT OR AGPL-3.0-or-later
 #
 
-# BunkerWeb Setup Script - MODULAR VERSION with API Whitelist Auto-Detection and Release Channel Support
+# BunkerWeb Setup Script - MODULAR VERSION with API Whitelist Auto-Detection and Enhanced UI Security
 # This script orchestrates the setup using separate modules for each major function
 # MUST BE RUN AS ROOT: sudo ./script_autoconf_display.sh --type <autoconf|basic|integrated>
 
 set -e
 
 # Script directory and installation directory
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}
-
-# Function to add BunkerWeb labels to bw-ui service
-add_bw_ui_labels() {
-    local compose_file="$1"
-    local fqdn="$2"
-    
-    echo -e "${BLUE}Adding BunkerWeb labels to bw-ui service...${NC}"
-    
-    # Generate random 8-character path for UI access
-    local random_ui_path=$(generate_random_ui_path)
-    
-    # Create the labels block
-    local labels_block="    labels:
-      - \"bunkerweb.SERVER_NAME=$fqdn\"
-      - \"bunkerweb.USE_TEMPLATE=ui\"
-      - \"bunkerweb.USE_REVERSE_PROXY=yes\"
-      - \"bunkerweb.REVERSE_PROXY_URL=/$random_ui_path\"
-      - \"bunkerweb.REVERSE_PROXY_HOST=http://bw-ui:7000\""
-    
-    # Find the bw-ui service and add labels after the image line
-    if grep -q "bw-ui:" "$compose_file"; then
-        # Use awk to insert labels after the image line in bw-ui service
-        awk -v labels="$labels_block" '
-        /^  bw-ui:/ { in_ui_service = 1 }
-        in_ui_service && /^    image:/ { 
-            print $0
-            print labels
-            next
-        }
-        /^  [a-zA-Z]/ && !/^  bw-ui:/ { in_ui_service = 0 }
-        { print }
-        ' "$compose_file" > "$compose_file.tmp" && mv "$compose_file.tmp" "$compose_file"
-        
-        echo -e "${GREEN}✓ BunkerWeb labels added to bw-ui service${NC}"
-        echo -e "${GREEN}✓ UI access path: /$random_ui_path${NC}"
-        echo -e "${GREEN}✓ Server name: $fqdn${NC}"
-        
-        # Update credentials file with UI path information
-        if [[ -f "${compose_file%/*}/credentials.txt" ]]; then
-            echo "" >> "${compose_file%/*}/credentials.txt"
-            echo "# BunkerWeb UI Access Information" >> "${compose_file%/*}/credentials.txt"
-            echo "UI Access Path: /$random_ui_path" >> "${compose_file%/*}/credentials.txt"
-            echo "Full UI URL: http://$fqdn/$random_ui_path" >> "${compose_file%/*}/credentials.txt"
-            echo "Direct Access: http://$(hostname -I | awk '{print $1}')/$random_ui_path" >> "${compose_file%/*}/credentials.txt"
-        fi
-        
-        return 0
-    else
-        echo -e "${YELLOW}⚠ bw-ui service not found in compose file${NC}"
-        return 1
-    fi
-}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALL_DIR="/data/BunkerWeb"
 SETUP_MODE="wizard"  # Default to wizard mode (changed from automated)
 
@@ -81,7 +29,6 @@ MULTISITE="yes"
 SERVER_NAME=""
 SECURITY_MODE="block"
 SERVER_TYPE="http"
-RELEASE_CHANNEL="latest"  # Default to stable releases
 
 # Network Configuration
 PRIVATE_NETWORKS_ALREADY_IN_USE=""
@@ -337,6 +284,58 @@ configure_setup_mode() {
         echo -e "${GREEN}✓ Setup wizard mode enabled${NC}"
         echo -e "${GREEN}✓ Credentials commented out but available for reference${NC}"
         return 0
+    fi
+}
+
+# Function to add BunkerWeb labels to bw-ui service
+add_bw_ui_labels() {
+    local compose_file="$1"
+    local fqdn="$2"
+    
+    echo -e "${BLUE}Adding BunkerWeb labels to bw-ui service...${NC}"
+    
+    # Generate random 8-character path for UI access
+    local random_ui_path=$(generate_random_ui_path)
+    
+    # Create the labels block
+    local labels_block="    labels:
+      - \"bunkerweb.SERVER_NAME=$fqdn\"
+      - \"bunkerweb.USE_TEMPLATE=ui\"
+      - \"bunkerweb.USE_REVERSE_PROXY=yes\"
+      - \"bunkerweb.REVERSE_PROXY_URL=/$random_ui_path\"
+      - \"bunkerweb.REVERSE_PROXY_HOST=http://bw-ui:7000\""
+    
+    # Find the bw-ui service and add labels after the image line
+    if grep -q "bw-ui:" "$compose_file"; then
+        # Use awk to insert labels after the image line in bw-ui service
+        awk -v labels="$labels_block" '
+        /^  bw-ui:/ { in_ui_service = 1 }
+        in_ui_service && /^    image:/ { 
+            print $0
+            print labels
+            next
+        }
+        /^  [a-zA-Z]/ && !/^  bw-ui:/ { in_ui_service = 0 }
+        { print }
+        ' "$compose_file" > "$compose_file.tmp" && mv "$compose_file.tmp" "$compose_file"
+        
+        echo -e "${GREEN}✓ BunkerWeb labels added to bw-ui service${NC}"
+        echo -e "${GREEN}✓ UI access path: /$random_ui_path${NC}"
+        echo -e "${GREEN}✓ Server name: $fqdn${NC}"
+        
+        # Update credentials file with UI path information
+        if [[ -f "${compose_file%/*}/credentials.txt" ]]; then
+            echo "" >> "${compose_file%/*}/credentials.txt"
+            echo "# BunkerWeb UI Access Information" >> "${compose_file%/*}/credentials.txt"
+            echo "UI Access Path: /$random_ui_path" >> "${compose_file%/*}/credentials.txt"
+            echo "Full UI URL: http://$fqdn/$random_ui_path" >> "${compose_file%/*}/credentials.txt"
+            echo "Direct Access: http://$(hostname -I | awk '{print $1}')/$random_ui_path" >> "${compose_file%/*}/credentials.txt"
+        fi
+        
+        return 0
+    else
+        echo -e "${YELLOW}⚠ bw-ui service not found in compose file${NC}"
+        return 1
     fi
 }
 
@@ -919,6 +918,24 @@ EOF
     return 0
 }
 
+# Simplified network detection for fallback
+simple_network_detection() {
+    local subnet="10.20.30.0/24"  # Default fallback
+    
+    # Try to detect conflicts with common ranges
+    if ip route show 2>/dev/null | grep -q "10.20.30"; then
+        # Try alternative subnet
+        subnet="192.168.100.0/24"
+    fi
+    
+    if ip route show 2>/dev/null | grep -q "192.168.100"; then
+        # Try another alternative
+        subnet="172.20.0.0/24"
+    fi
+    
+    echo "$subnet"
+}
+
 # Display setup summary
 show_setup_summary() {
     echo ""
@@ -933,11 +950,6 @@ show_setup_summary() {
     echo -e "${YELLOW}Domain (FQDN):${NC} $FQDN"
     echo -e "${YELLOW}Redis Enabled:${NC} $REDIS_ENABLED"
     echo -e "${YELLOW}Network Detection:${NC} $AUTO_DETECT_NETWORK_CONFLICTS"
-    
-    local detected_subnet=$(get_detected_subnet 2>/dev/null || echo "Default")
-    if [[ -n "$detected_subnet" && "$detected_subnet" != "Default" ]]; then
-        echo -e "${YELLOW}Docker Subnet:${NC} $detected_subnet"
-    fi
     
     if [[ -n "$AUTO_CERT_TYPE" ]]; then
         echo -e "${YELLOW}SSL Certificates:${NC} $AUTO_CERT_TYPE ($AUTO_CERT_CONTACT)"
@@ -1018,10 +1030,9 @@ main() {
     # Parse command line arguments
     parse_arguments "$@"
     
-    # Source modular scripts
+    # Try to source modular scripts, but continue without them if not available
     if ! source_modules; then
-        echo -e "${RED}✗ Failed to load required modules${NC}"
-        exit 1
+        echo -e "${YELLOW}⚠ Using built-in functions (modules not available)${NC}"
     fi
     
     # Load configuration
@@ -1052,13 +1063,10 @@ main() {
     echo -e "${GREEN}• Network Detection: $AUTO_DETECT_NETWORK_CONFLICTS${NC}"
     echo ""
     
-    # 1. Network Conflict Detection
-    echo -e "${BLUE}Step 1: Network Conflict Detection${NC}"
-    if ! detect_network_conflicts "$AUTO_DETECT_NETWORK_CONFLICTS" "$PRIVATE_NETWORKS_ALREADY_IN_USE" "$PREFERRED_DOCKER_SUBNET" 2>/dev/null; then
-        echo -e "${RED}✗ Network detection failed${NC}"
-        exit 1
-    fi
-    local docker_subnet=$(get_detected_subnet 2>/dev/null || echo "")
+    # 1. Simple Network Detection (fallback)
+    echo -e "${BLUE}Step 1: Network Configuration${NC}"
+    local docker_subnet=$(simple_network_detection)
+    echo -e "${GREEN}✓ Using subnet: $docker_subnet${NC}"
     
     # 2. Build Comprehensive API Whitelist
     echo -e "${BLUE}Step 2: API Whitelist Auto-Detection${NC}"

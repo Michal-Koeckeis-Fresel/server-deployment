@@ -1,23 +1,19 @@
-# BunkerWeb Autoconf Docker Compose Template - Clean Version (No Syslog/Fluent)
+#!/bin/bash
+#
+# Copyright (c) 2025 Michal Koeckeis-Fresel
+# 
+# This software is dual-licensed under your choice of:
+# - MIT License (see LICENSE-MIT)
+# - GNU Affero General Public License v3.0 (see LICENSE-AGPL)
+# 
+# SPDX-License-Identifier: MIT OR AGPL-3.0-or-later
+#
 
-x-ui-env: &bw-ui-env
+# BunkerWeb UI-Integrated Docker Compose Template
+
+x-ui-env: &ui-env
   # We anchor the environment variables to avoid duplication
-  AUTOCONF_MODE: "yes"
   DATABASE_URI: "mariadb+pymysql://bunkerweb:REPLACEME_MYSQL@bw-db:3306/db"
-
-x-redis-env: &redis-env
-  # Redis configuration for cluster mode
-  USE_REDIS: "yes"
-  REDIS_HOST: "bw-redis"
-  REDIS_PORT: "6379"
-  REDIS_DATABASE: "0"
-  REDIS_SSL: "no"
-  REDIS_SSL_VERIFY: "no"
-  REDIS_TIMEOUT: "1000"
-  REDIS_USERNAME: ""
-  REDIS_PASSWORD: "REPLACEME_REDIS_PASSWORD"
-  REDIS_KEEPALIVE_IDLE: "30000"
-  REDIS_KEEPALIVE_POOL: "10"
 
 services:
   bunkerweb:
@@ -26,146 +22,60 @@ services:
       - "80:8080/tcp"
       - "443:8443/tcp"
       - "443:8443/udp" # For QUIC / HTTP3 support
-    labels:
-      - "bunkerweb.INSTANCE=yes" # We set the instance label to allow the autoconf to detect the instance
     environment:
-      <<: *redis-env
-      AUTOCONF_MODE: "yes"
-      API_WHITELIST_IP: "127.0.0.0/8 192.168.100.0/24"
-    restart: "unless-stopped"
-    depends_on:
-      bw-redis:
-        condition: service_healthy
+      API_WHITELIST_IP: "127.0.0.0/8 10.20.30.0/24" # Make sure to set the correct IP range so the scheduler can send the configuration to the instance
     networks:
       - bw-universe
       - bw-services
-      - bw-redis
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
 
   bw-scheduler:
     image: bunkerity/bunkerweb-scheduler:1.6.1
     environment:
-      <<: [*bw-ui-env, *redis-env]
-      BUNKERWEB_INSTANCES: ""
-      SERVER_NAME: ""
-      API_WHITELIST_IP: "127.0.0.0/8 192.168.100.0/24"
+      <<: *ui-env
+      BUNKERWEB_INSTANCES: "bunkerweb" # Make sure to set the correct instance name
+      SERVER_NAME: "REPLACEME_DOMAIN"
       MULTISITE: "yes"
-      UI_HOST: "http://bw-ui:7000" # Change it if needed
+      API_WHITELIST_IP: "127.0.0.0/8 10.20.30.0/24" # We mirror the API_WHITELIST_IP from the bunkerweb service
+      DNS_RESOLVERS: "127.0.0.1" # Use local DNS server
+      SERVE_FILES: "no"
+      DISABLE_DEFAULT_SERVER: "yes"
+      USE_CLIENT_CACHE: "yes"
+      # Compression settings - Maximum performance
+      USE_GZIP: "yes"
+      GZIP_COMP_LEVEL: "9" # Maximum compression (1-9)
+      GZIP_MIN_LENGTH: "1000"
+      USE_BROTLI: "yes"
+      BROTLI_COMP_LEVEL: "11" # Maximum compression (0-11)
+      BROTLI_MIN_LENGTH: "1000"
+      # Let's Encrypt configuration (will be enabled if DNS resolves correctly)
+      AUTO_LETS_ENCRYPT: "REPLACEME_AUTO_LETS_ENCRYPT"
+      EMAIL_LETS_ENCRYPT: "REPLACEME_EMAIL_LETS_ENCRYPT"
+      LETS_ENCRYPT_CHALLENGE: "http"
+      USE_LETS_ENCRYPT_STAGING: "no"
+      # Web UI configuration (replace REPLACEME_DOMAIN with your actual domain)
+      REPLACEME_DOMAIN_USE_TEMPLATE: "ui"
+      REPLACEME_DOMAIN_USE_REVERSE_PROXY: "yes"
+      REPLACEME_DOMAIN_REVERSE_PROXY_URL: "/REPLACEME_UI_PATH" # Custom path for UI access
+      REPLACEME_DOMAIN_REVERSE_PROXY_HOST: "http://bw-ui:7000" # The web UI container is listening on the 7000 port by default
     volumes:
       - /data/BunkerWeb/storage:/data # This is used to persist the cache and other data like the backups
-    restart: "unless-stopped"
-    depends_on:
-      bw-redis:
-        condition: service_healthy
-      bw-db:
-        condition: service_started
     networks:
       - bw-universe
       - bw-db
-      - bw-redis
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  bw-autoconf:
-    image: bunkerity/bunkerweb-autoconf:1.6.1
-    depends_on:
-      bw-docker:
-        condition: service_started
-      bw-redis:
-        condition: service_healthy
-    environment:
-      <<: [*bw-ui-env, *redis-env]
-      DOCKER_HOST: "tcp://bw-docker:2375"
-    restart: "unless-stopped"
-    networks:
-      - bw-universe
-      - bw-docker
-      - bw-db
-      - bw-redis
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  bw-docker:
-    image: tecnativa/docker-socket-proxy:nightly
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    environment:
-      CONTAINERS: "1"
-      LOG_LEVEL: "warning"
-    networks:
-      - bw-docker
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
 
   bw-ui:
     image: bunkerity/bunkerweb-ui:1.6.1
     environment:
-      <<: [*bw-ui-env, *redis-env]
+      <<: *ui-env
       # Optional: Automated admin credentials (uncomment to skip setup wizard)
       # OVERRIDE_ADMIN_CREDS: "yes"
-      # ADMIN_USERNAME: "admin"
-      # ADMIN_PASSWORD: "REPLACEME_ADMIN"
+      # ADMIN_USERNAME: "REPLACEME_ADMIN_USER"
+      # ADMIN_PASSWORD: "REPLACEME_ADMIN_PASS"
       # FLASK_SECRET: "REPLACEME_FLASK"
       TOTP_SECRETS: "REPLACEME_DEFAULT"
-    restart: "unless-stopped"
-    depends_on:
-      bw-redis:
-        condition: service_healthy
-      bw-db:
-        condition: service_started
     networks:
       - bw-universe
       - bw-db
-      - bw-redis
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  bw-redis:
-    image: redis:7-alpine
-    command: >
-      redis-server
-      --requirepass "REPLACEME_REDIS_PASSWORD"
-      --maxmemory 256mb
-      --maxmemory-policy allkeys-lru
-      --save 900 1 300 10 60 10000
-      --appendonly yes
-      --appendfsync everysec
-      --auto-aof-rewrite-percentage 100
-      --auto-aof-rewrite-min-size 64mb
-      --tcp-keepalive 300
-      --timeout 300
-    volumes:
-      - /data/BunkerWeb/redis:/data
-    restart: unless-stopped
-    networks:
-      - bw-redis
-    healthcheck:
-      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
 
   bw-db:
     image: mariadb:11
@@ -176,14 +86,10 @@ services:
       MYSQL_PASSWORD: "REPLACEME_MYSQL"
     volumes:
       - /data/BunkerWeb/database:/var/lib/mysql
-    restart: "unless-stopped"
     networks:
       - bw-db
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+
+# volumes: # Using host directories instead of named volumes
 
 networks:
   bw-universe:
@@ -191,12 +97,8 @@ networks:
     ipam:
       driver: default
       config:
-        - subnet: 192.168.100.0/24
+        - subnet: 10.20.30.0/24
   bw-services:
     name: bw-services
-  bw-docker:
-    name: bw-docker
   bw-db:
     name: bw-db
-  bw-redis:
-    name: bw-redis
