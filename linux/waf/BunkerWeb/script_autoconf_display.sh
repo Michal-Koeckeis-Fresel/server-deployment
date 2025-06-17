@@ -9,7 +9,7 @@
 # SPDX-License-Identifier: MIT OR AGPL-3.0-or-later
 #
 
-# BunkerWeb Setup Script - MODULAR VERSION with API Whitelist Auto-Detection and Enhanced UI Security
+# BunkerWeb Setup Script - MODULAR VERSION with Advanced FQDN Detection
 # This script orchestrates the setup using separate modules for each major function
 # MUST BE RUN AS ROOT: sudo ./script_autoconf_display.sh --type <autoconf|basic|integrated>
 
@@ -18,7 +18,7 @@ set -e
 # Script directory and installation directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALL_DIR="/data/BunkerWeb"
-SETUP_MODE="wizard"  # Default to wizard mode (changed from automated)
+SETUP_MODE="wizard"  # Default to wizard mode
 
 # Default values (can be overridden by BunkerWeb.conf or command line)
 ADMIN_USERNAME="admin"
@@ -38,6 +38,15 @@ PREFERRED_DOCKER_SUBNET=""
 # Service Configuration
 REDIS_ENABLED="yes"
 REDIS_PASSWORD=""
+
+# FQDN Detection Configuration (for helper_fqdn.sh)
+FQDN_REQUIRE_SSL="no"
+FQDN_CHECK_DNS="yes"
+FQDN_ALLOW_LOCALHOST="yes"
+FQDN_ALLOW_IP_AS_FQDN="no"
+FQDN_MIN_DOMAIN_PARTS="2"
+FQDN_LOG_LEVEL="INFO"
+FQDN_STRICT_MODE="no"
 
 # Colors for output
 RED='\033[0;31m'
@@ -101,6 +110,7 @@ source_modules() {
         "helper_password_manager.sh"
         "helper_network_detection.sh" 
         "helper_template_processor.sh"
+        "helper_fqdn.sh"
     )
     
     echo -e "${BLUE}Loading BunkerWeb modules...${NC}"
@@ -124,6 +134,113 @@ source_modules() {
     
     echo -e "${GREEN}✓ All modules loaded successfully${NC}"
     return 0
+}
+
+# Configure FQDN detection settings based on SSL requirements
+configure_fqdn_detection() {
+    echo -e "${BLUE}Configuring FQDN detection parameters...${NC}"
+    
+    # Set SSL requirement based on certificate configuration
+    if [[ -n "$AUTO_CERT_TYPE" ]]; then
+        FQDN_REQUIRE_SSL="yes"
+        echo -e "${GREEN}✓ SSL certificates enabled - requiring SSL-compatible FQDN${NC}"
+    else
+        FQDN_REQUIRE_SSL="no"
+        echo -e "${BLUE}ℹ SSL certificates disabled - allowing localhost FQDN${NC}"
+    fi
+    
+    # Configure helper_fqdn.sh via environment variables
+    export REQUIRE_SSL="$FQDN_REQUIRE_SSL"
+    export CHECK_DNS="$FQDN_CHECK_DNS"
+    export ALLOW_LOCALHOST="$FQDN_ALLOW_LOCALHOST"
+    export ALLOW_IP_AS_FQDN="$FQDN_ALLOW_IP_AS_FQDN"
+    export MIN_DOMAIN_PARTS="$FQDN_MIN_DOMAIN_PARTS"
+    export LOG_LEVEL="$FQDN_LOG_LEVEL"
+    
+    echo -e "${GREEN}✓ FQDN detection configured${NC}"
+}
+
+# Enhanced FQDN detection using helper_fqdn.sh
+detect_fqdn_enhanced() {
+    local provided_fqdn="$1"
+    
+    echo -e "${BLUE}=================================================================================${NC}"
+    echo -e "${BLUE}                    ENHANCED FQDN DETECTION                    ${NC}"
+    echo -e "${BLUE}=================================================================================${NC}"
+    echo ""
+    
+    # Configure FQDN detection parameters
+    configure_fqdn_detection
+    
+    echo -e "${BLUE}Starting advanced FQDN detection...${NC}"
+    
+    # Use the comprehensive FQDN detection from helper_fqdn.sh
+    local detected_fqdn=""
+    if detected_fqdn=$(auto_detect_fqdn "$provided_fqdn" "$FQDN_REQUIRE_SSL" "$FQDN_CHECK_DNS"); then
+        echo -e "${GREEN}✓ FQDN detection successful: $detected_fqdn${NC}"
+        
+        # Perform comprehensive validation
+        if validate_fqdn_comprehensive "$detected_fqdn" "$FQDN_CHECK_DNS" "$FQDN_STRICT_MODE"; then
+            echo -e "${GREEN}✓ FQDN validation passed${NC}"
+        else
+            echo -e "${YELLOW}⚠ FQDN validation had warnings (continuing anyway)${NC}"
+        fi
+        
+        # Show detailed summary if debug level
+        if [[ "$FQDN_LOG_LEVEL" == "DEBUG" ]]; then
+            show_fqdn_summary "$detected_fqdn"
+        fi
+        
+        # Set global FQDN variable
+        FQDN="$detected_fqdn"
+        
+        # Also set SERVER_NAME if not already set
+        if [[ -z "$SERVER_NAME" ]]; then
+            SERVER_NAME="$detected_fqdn"
+        fi
+        
+        echo ""
+        echo -e "${GREEN}Final FQDN Configuration:${NC}"
+        echo -e "${GREEN}• FQDN: $FQDN${NC}"
+        echo -e "${GREEN}• Server Name: $SERVER_NAME${NC}"
+        echo -e "${GREEN}• Detection Method: $(get_detection_method)${NC}"
+        
+        if [[ -n "$AUTO_CERT_TYPE" ]]; then
+            echo -e "${GREEN}• SSL Certificates: Enabled ($AUTO_CERT_TYPE)${NC}"
+            echo -e "${GREEN}• SSL Contact: $AUTO_CERT_CONTACT${NC}"
+        else
+            echo -e "${BLUE}• SSL Certificates: Manual configuration${NC}"
+        fi
+        echo ""
+        
+        return 0
+    else
+        echo -e "${RED}✗ FQDN detection failed${NC}"
+        
+        # Show detailed summary for troubleshooting
+        show_fqdn_summary ""
+        
+        echo ""
+        echo -e "${RED}FQDN Detection Failed${NC}"
+        echo -e "${YELLOW}Possible solutions:${NC}"
+        echo -e "${YELLOW}• Provide FQDN manually: --FQDN your.domain.com${NC}"
+        echo -e "${YELLOW}• Check DNS configuration: nslookup \$(hostname -f)${NC}"
+        echo -e "${YELLOW}• Verify /etc/hostname: cat /etc/hostname${NC}"
+        echo -e "${YELLOW}• Set system hostname: hostnamectl set-hostname your.domain.com${NC}"
+        
+        if [[ "$FQDN_REQUIRE_SSL" == "yes" ]]; then
+            echo ""
+            echo -e "${RED}SSL certificates are enabled but no valid FQDN found.${NC}"
+            echo -e "${YELLOW}Either provide a valid FQDN or disable SSL certificates.${NC}"
+            return 1
+        else
+            echo ""
+            echo -e "${BLUE}Using localhost as fallback (SSL certificates will be disabled)${NC}"
+            FQDN="localhost"
+            SERVER_NAME="localhost"
+            return 0
+        fi
+    fi
 }
 
 # Function to detect and build comprehensive API whitelist (FIXED VERSION)
@@ -484,57 +601,6 @@ process_template_enhanced() {
     fi
 }
 
-# Auto-detect FQDN if not provided
-detect_fqdn() {
-    if [[ -n "$FQDN" ]]; then
-        echo -e "${GREEN}✓ Using provided FQDN: $FQDN${NC}"
-        return 0
-    fi
-    
-    echo -e "${BLUE}Auto-detecting FQDN...${NC}"
-    
-    local detected_fqdn=""
-    
-    # Try hostname -f
-    if command -v hostname &> /dev/null; then
-        detected_fqdn=$(hostname -f 2>/dev/null || echo "")
-    fi
-    
-    # Try dnsdomainname + hostname
-    if [[ -z "$detected_fqdn" ]] && command -v dnsdomainname &> /dev/null; then
-        local domain=$(dnsdomainname 2>/dev/null || echo "")
-        local hostname=$(hostname 2>/dev/null || echo "")
-        if [[ -n "$domain" && -n "$hostname" ]]; then
-            detected_fqdn="$hostname.$domain"
-        fi
-    fi
-    
-    # Check /etc/hostname
-    if [[ -z "$detected_fqdn" && -f "/etc/hostname" ]]; then
-        local hostname=$(cat /etc/hostname 2>/dev/null | head -1)
-        if [[ "$hostname" == *.* ]]; then
-            detected_fqdn="$hostname"
-        fi
-    fi
-    
-    # Validate detected FQDN
-    if [[ -n "$detected_fqdn" && "$detected_fqdn" == *.* && "$detected_fqdn" != "localhost."* ]]; then
-        FQDN="$detected_fqdn"
-        echo -e "${GREEN}✓ FQDN auto-detected: $FQDN${NC}"
-        return 0
-    else
-        echo -e "${YELLOW}⚠ Could not auto-detect valid FQDN${NC}"
-        if [[ -n "$AUTO_CERT_TYPE" ]]; then
-            echo -e "${RED}Error: FQDN is required for SSL certificate enrollment${NC}"
-            exit 1
-        else
-            echo -e "${BLUE}ℹ Using localhost as fallback${NC}"
-            FQDN="localhost"
-            return 0
-        fi
-    fi
-}
-
 # Load configuration from BunkerWeb.conf if it exists
 load_configuration() {
     local config_file="$INSTALL_DIR/BunkerWeb.conf"
@@ -543,6 +609,20 @@ load_configuration() {
         echo -e "${BLUE}Loading configuration from $config_file...${NC}"
         source "$config_file"
         echo -e "${GREEN}✓ Configuration loaded${NC}"
+        
+        # Load FQDN detection configuration if available
+        if [[ -n "${FQDN_REQUIRE_SSL:-}" ]]; then
+            FQDN_REQUIRE_SSL="$FQDN_REQUIRE_SSL"
+        fi
+        if [[ -n "${FQDN_CHECK_DNS:-}" ]]; then
+            FQDN_CHECK_DNS="$FQDN_CHECK_DNS"
+        fi
+        if [[ -n "${FQDN_ALLOW_LOCALHOST:-}" ]]; then
+            FQDN_ALLOW_LOCALHOST="$FQDN_ALLOW_LOCALHOST"
+        fi
+        if [[ -n "${FQDN_LOG_LEVEL:-}" ]]; then
+            FQDN_LOG_LEVEL="$FQDN_LOG_LEVEL"
+        fi
         
         # Simple validation for SSL configuration
         if [[ -n "$AUTO_CERT_TYPE" ]]; then
@@ -584,6 +664,13 @@ show_usage() {
     echo -e "  --FQDN DOMAIN       Set Fully Qualified Domain Name"
     echo -e "  --force             Skip configuration validation"
     echo ""
+    echo -e "${YELLOW}FQDN Detection Options:${NC}"
+    echo -e "  --fqdn-require-ssl     Require SSL-compatible FQDN"
+    echo -e "  --fqdn-no-dns-check    Skip DNS resolution check"
+    echo -e "  --fqdn-allow-localhost Allow localhost as valid FQDN"
+    echo -e "  --fqdn-debug          Enable detailed FQDN detection logging"
+    echo -e "  --fqdn-strict         Enable strict FQDN validation"
+    echo ""
     echo -e "${YELLOW}Network Configuration:${NC}"
     echo -e "  --private-networks \"NET1 NET2\"  Specify existing networks to avoid"
     echo -e "  --preferred-subnet SUBNET       Preferred Docker subnet"
@@ -603,8 +690,16 @@ show_usage() {
     echo -e "${BLUE}Examples:${NC}"
     echo -e "  sudo $0 --type autoconf                                    # Setup wizard mode"
     echo -e "  sudo $0 --type autoconf --automated                       # Automated setup"
+    echo -e "  sudo $0 --type autoconf --FQDN example.com --fqdn-require-ssl"
+    echo -e "  sudo $0 --type autoconf --fqdn-debug                     # Debug FQDN detection"
     echo -e "  sudo $0 --type autoconf --private-networks \"192.168.1.0/24\""
-    echo -e "  sudo $0 --type autoconf --FQDN bunkerweb.example.com"
+    echo ""
+    echo -e "${GREEN}FQDN Detection Features:${NC}"
+    echo -e "  • Multiple detection methods (hostname, DNS, cloud metadata)"
+    echo -e "  • Comprehensive validation with configurable rules"
+    echo -e "  • DNS resolution checking"
+    echo -e "  • SSL readiness validation"
+    echo -e "  • Detailed error reporting and troubleshooting"
     echo ""
 }
 
@@ -634,6 +729,26 @@ parse_arguments() {
             --FQDN)
                 FQDN="$2"
                 shift 2
+                ;;
+            --fqdn-require-ssl)
+                FQDN_REQUIRE_SSL="yes"
+                shift
+                ;;
+            --fqdn-no-dns-check)
+                FQDN_CHECK_DNS="no"
+                shift
+                ;;
+            --fqdn-allow-localhost)
+                FQDN_ALLOW_LOCALHOST="yes"
+                shift
+                ;;
+            --fqdn-debug)
+                FQDN_LOG_LEVEL="DEBUG"
+                shift
+                ;;
+            --fqdn-strict)
+                FQDN_STRICT_MODE="yes"
+                shift
                 ;;
             --private-networks)
                 PRIVATE_NETWORKS_ALREADY_IN_USE="$2"
@@ -863,6 +978,7 @@ Flask Secret: $flask_secret
 # Domain Configuration
 FQDN: ${fqdn:-"localhost"}
 Server Name: ${server_name:-"$fqdn"}
+Detection Method: $(get_detection_method 2>/dev/null || echo "manual")
 
 # Network Configuration
 $(if [[ -n "$docker_subnet" ]]; then echo "Docker Subnet: $docker_subnet"; fi)
@@ -889,6 +1005,14 @@ fi)
 # MySQL passwords: 264-bit entropy (~44 characters)
 # Admin password: 12 characters with uppercase, lowercase, numbers, and special characters
 # All other secrets: 264-bit entropy for maximum security
+
+# FQDN Detection Summary:
+$(if [[ "$FQDN_LOG_LEVEL" == "DEBUG" ]]; then
+    echo "# Detection Results:"
+    get_detection_results 2>/dev/null | sed 's/^/# /' || echo "# No detailed results available"
+    echo "# Validation Results:"
+    get_validation_results 2>/dev/null | sed 's/^/# /' || echo "# No validation results available"
+fi)
 EOF
     
     chmod 600 "$creds_file"
@@ -948,6 +1072,7 @@ show_setup_summary() {
     echo -e "${YELLOW}Template Used:${NC} $TEMPLATE_FILE"
     echo -e "${YELLOW}Setup Mode:${NC} $SETUP_MODE"
     echo -e "${YELLOW}Domain (FQDN):${NC} $FQDN"
+    echo -e "${YELLOW}FQDN Detection Method:${NC} $(get_detection_method 2>/dev/null || echo "manual/fallback")"
     echo -e "${YELLOW}Redis Enabled:${NC} $REDIS_ENABLED"
     echo -e "${YELLOW}Network Detection:${NC} $AUTO_DETECT_NETWORK_CONFLICTS"
     
@@ -1002,11 +1127,18 @@ show_setup_summary() {
     fi
     
     echo ""
+    echo -e "${BLUE}FQDN Detection Results:${NC}"
+    echo -e "${GREEN}• Detected FQDN: $FQDN${NC}"
+    echo -e "${GREEN}• Detection Method: $(get_detection_method 2>/dev/null || echo "manual/fallback")${NC}"
+    echo -e "${GREEN}• SSL Ready: $(if [[ "$FQDN" != "localhost" && "$FQDN" != "127.0.0.1" ]]; then echo "Yes"; else echo "No"; fi)${NC}"
+    
+    echo ""
     echo -e "${BLUE}Troubleshooting:${NC}"
     echo -e "${GREEN}• Check logs: docker compose logs -f${NC}"
     echo -e "${GREEN}• Check API connectivity: docker compose logs bunkerweb | grep API${NC}"
     echo -e "${GREEN}• Monitor Let's Encrypt: docker compose logs bw-scheduler | grep -i lets${NC}"
     echo -e "${GREEN}• View credentials: cat $INSTALL_DIR/credentials.txt${NC}"
+    echo -e "${GREEN}• Test FQDN detection: $SCRIPT_DIR/helper_fqdn.sh detect --fqdn-debug${NC}"
     
     echo ""
     echo -e "${GREEN}Setup completed successfully!${NC}"
@@ -1016,7 +1148,7 @@ show_setup_summary() {
 main() {
     echo -e "${BLUE}================================================${NC}"
     echo -e "${BLUE}      BunkerWeb Enhanced Setup Script${NC}"
-    echo -e "${BLUE}     with Secure Password Generation${NC}"
+    echo -e "${BLUE}   with Advanced FQDN Detection System${NC}"
     echo -e "${BLUE}================================================${NC}"
     echo ""
     
@@ -1033,13 +1165,18 @@ main() {
     # Try to source modular scripts, but continue without them if not available
     if ! source_modules; then
         echo -e "${YELLOW}⚠ Using built-in functions (modules not available)${NC}"
+        echo -e "${RED}✗ helper_fqdn.sh is required for enhanced FQDN detection${NC}"
+        exit 1
     fi
     
     # Load configuration
     load_configuration
     
-    # Auto-detect FQDN
-    detect_fqdn
+    # Enhanced FQDN Detection
+    if ! detect_fqdn_enhanced "$FQDN"; then
+        echo -e "${RED}✗ FQDN detection failed${NC}"
+        exit 1
+    fi
     
     # Set paths
     local compose_file="$INSTALL_DIR/docker-compose.yml"
@@ -1059,6 +1196,7 @@ main() {
     echo -e "${GREEN}• Template File: $TEMPLATE_FILE${NC}"
     echo -e "${GREEN}• Setup Mode: $SETUP_MODE${NC}"
     echo -e "${GREEN}• Domain (FQDN): $FQDN${NC}"
+    echo -e "${GREEN}• FQDN Detection Method: $(get_detection_method)${NC}"
     echo -e "${GREEN}• Redis Enabled: $REDIS_ENABLED${NC}"
     echo -e "${GREEN}• Network Detection: $AUTO_DETECT_NETWORK_CONFLICTS${NC}"
     echo ""
