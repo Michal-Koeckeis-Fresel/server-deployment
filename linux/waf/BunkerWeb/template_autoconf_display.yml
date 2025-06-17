@@ -45,7 +45,7 @@ services:
       AUTO_LETS_ENCRYPT: "REPLACEME_AUTO_LETS_ENCRYPT"
       EMAIL_LETS_ENCRYPT: "REPLACEME_EMAIL_LETS_ENCRYPT"
       LETS_ENCRYPT_CHALLENGE: "http"
-      USE_LETS_ENCRYPT_STAGING: "no"
+      USE_LETS_ENCRYPT_STAGING: "yes"
       # Web UI configuration - FIXED: Will be replaced by script with actual domain and path
       REPLACEME_DOMAIN_USE_TEMPLATE: "ui"
       REPLACEME_DOMAIN_USE_REVERSE_PROXY: "yes"
@@ -93,9 +93,9 @@ services:
       # FIXED: Properly structured admin credentials (will be handled by script)
       # Optional: Automated admin credentials (uncomment to skip setup wizard)
       # OVERRIDE_ADMIN_CREDS: "no"
-      # ADMIN_USERNAME: "REPLACEME_ADMIN_USERNAME"  
-      # ADMIN_PASSWORD: "REPLACEME_ADMIN_PASSWORD"
-      # FLASK_SECRET: "REPLACEME_FLASK_SECRET"
+      ADMIN_USERNAME: "REPLACEME_ADMIN_USERNAME"  
+      ADMIN_PASSWORD: "REPLACEME_ADMIN_PASSWORD"
+      FLASK_SECRET: "REPLACEME_FLASK_SECRET"
       TOTP_SECRETS: "REPLACEME_DEFAULT"
     restart: "unless-stopped"
     depends_on:
