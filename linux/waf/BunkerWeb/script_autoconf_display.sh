@@ -79,26 +79,26 @@ source_modules() {
     return 0
 }
 
-# Function to detect and build comprehensive API whitelist
+# Function to detect and build comprehensive API whitelist (FIXED VERSION)
 build_comprehensive_api_whitelist() {
     local docker_subnet="$1"
     local api_whitelist="127.0.0.0/8"  # Always include localhost
     
-    echo -e "${BLUE}=================================================================================${NC}"
-    echo -e "${BLUE}                    API WHITELIST AUTO-DETECTION                    ${NC}"
-    echo -e "${BLUE}=================================================================================${NC}"
-    echo ""
+    echo -e "${BLUE}=================================================================================${NC}" >&2
+    echo -e "${BLUE}                    API WHITELIST AUTO-DETECTION                    ${NC}" >&2
+    echo -e "${BLUE}=================================================================================${NC}" >&2
+    echo "" >&2
     
-    echo -e "${BLUE}Building comprehensive API whitelist for Docker networks...${NC}"
+    echo -e "${BLUE}Building comprehensive API whitelist for Docker networks...${NC}" >&2
     
     # Add the main Docker subnet
     if [[ -n "$docker_subnet" ]]; then
         api_whitelist="$api_whitelist $docker_subnet"
-        echo -e "${GREEN}• Added main subnet: $docker_subnet${NC}"
+        echo -e "${GREEN}• Added main subnet: $docker_subnet${NC}" >&2
     fi
     
     # Add comprehensive Docker Compose network ranges
-    echo -e "${BLUE}Adding Docker Compose network ranges...${NC}"
+    echo -e "${BLUE}Adding Docker Compose network ranges...${NC}" >&2
     
     # Common Docker Compose networks that might be created
     local docker_ranges=(
@@ -117,13 +117,13 @@ build_comprehensive_api_whitelist() {
     for range in "${docker_ranges[@]}"; do
         if [[ ! "$api_whitelist" =~ $range ]]; then
             api_whitelist="$api_whitelist $range"
-            echo -e "${GREEN}• Added Docker range: $range${NC}"
+            echo -e "${GREEN}• Added Docker range: $range${NC}" >&2
         fi
     done
     
     # Detect existing Docker networks if Docker is available
     if command -v docker >/dev/null 2>&1; then
-        echo -e "${BLUE}Detecting existing Docker networks...${NC}"
+        echo -e "${BLUE}Detecting existing Docker networks...${NC}" >&2
         
         # Get existing Docker bridge networks
         local existing_networks=()
@@ -140,14 +140,14 @@ build_comprehensive_api_whitelist() {
             if [[ "$network" =~ ^10\. ]] || [[ "$network" =~ ^172\.(1[6-9]|2[0-9]|3[0-1])\. ]] || [[ "$network" =~ ^192\.168\. ]]; then
                 if [[ ! "$api_whitelist" =~ $network ]]; then
                     api_whitelist="$api_whitelist $network"
-                    echo -e "${GREEN}• Added existing Docker network: $network${NC}"
+                    echo -e "${GREEN}• Added existing Docker network: $network${NC}" >&2
                 fi
             fi
         done
     fi
     
     # Add broader ranges for safety
-    echo -e "${BLUE}Adding broader private network ranges for safety...${NC}"
+    echo -e "${BLUE}Adding broader private network ranges for safety...${NC}" >&2
     local broad_ranges=(
         "10.0.0.0/8"      # Class A private networks
         "192.168.0.0/16"  # Class C private networks
@@ -156,15 +156,17 @@ build_comprehensive_api_whitelist() {
     for range in "${broad_ranges[@]}"; do
         if [[ ! "$api_whitelist" =~ $range ]]; then
             api_whitelist="$api_whitelist $range"
-            echo -e "${GREEN}• Added private range: $range${NC}"
+            echo -e "${GREEN}• Added private range: $range${NC}" >&2
         fi
     done
     
-    echo ""
-    echo -e "${GREEN}Final comprehensive API whitelist:${NC}"
-    echo -e "${GREEN}$api_whitelist${NC}"
-    echo ""
+    echo "" >&2
+    echo -e "${GREEN}Final comprehensive API whitelist:${NC}" >&2
+    echo -e "${GREEN}$api_whitelist${NC}" >&2
+    echo "" >&2
     
+    # CRITICAL: Only output the final whitelist to stdout (not stderr)
+    # This prevents debug output from being included in the YAML
     echo "$api_whitelist"
 }
 
@@ -173,39 +175,26 @@ update_api_whitelist() {
     local compose_file="$1"
     local api_whitelist="$2"
     
-    echo -e "${BLUE}Updating API whitelist in docker-compose.yml...${NC}"
+    echo -e "${BLUE}Updating API whitelist in docker-compose.yml...${NC}" >&2
     
-    # Use a more robust approach with awk instead of sed for complex strings
-    local temp_file=$(mktemp)
-    local new_value="API_WHITELIST_IP: \"$api_whitelist\""
+    # Escape special characters for sed
+    local escaped_whitelist=$(printf '%s\n' "$api_whitelist" | sed 's/[[\.*^$()+?{|]/\\&/g')
     
-    # Use awk to replace the API whitelist lines
-    awk -v new="$new_value" '
-        {
-            if (index($0, "API_WHITELIST_IP:") > 0) {
-                gsub(/API_WHITELIST_IP: "[^"]*"/, new, $0)
-            }
-            print $0
-        }
-    ' "$compose_file" > "$temp_file"
-    
-    # Check if the replacement worked
-    if [[ -s "$temp_file" ]]; then
-        mv "$temp_file" "$compose_file"
-        echo -e "${GREEN}✓ API whitelist updated successfully${NC}"
+    # Use sed to replace API_WHITELIST_IP lines
+    if sed -i "s|API_WHITELIST_IP: \".*\"|API_WHITELIST_IP: \"$escaped_whitelist\"|g" "$compose_file"; then
+        echo -e "${GREEN}✓ API whitelist updated successfully${NC}" >&2
         
         # Verify the replacement worked
         local updated_count=$(grep -c "API_WHITELIST_IP:" "$compose_file" || echo "0")
-        echo -e "${GREEN}✓ Updated $updated_count API_WHITELIST_IP entries${NC}"
+        echo -e "${GREEN}✓ Updated $updated_count API_WHITELIST_IP entries${NC}" >&2
         
         # Show the updated entries for verification (truncated for readability)
-        echo -e "${BLUE}Verification - Updated API whitelist entries:${NC}"
-        grep "API_WHITELIST_IP:" "$compose_file" | sed 's/^\s*/  /' | cut -c1-100 | sed 's/$/.../' || true
+        echo -e "${BLUE}Verification - Updated API whitelist entries:${NC}" >&2
+        grep "API_WHITELIST_IP:" "$compose_file" | sed 's/^\s*/  /' | cut -c1-100 | sed 's/$/.../' >&2
         
         return 0
     else
-        echo -e "${RED}✗ Failed to update API whitelist${NC}"
-        rm -f "$temp_file"
+        echo -e "${RED}✗ Failed to update API whitelist${NC}" >&2
         return 1
     fi
 }
