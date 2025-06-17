@@ -39,35 +39,6 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
-# Function to download a file with error handling
-download_file() {
-    local url="$1"
-    local output_file="$2"
-    local description="$3"
-    
-    log_info "Downloading $description..."
-    
-    local success=false
-    
-    if command_exists wget; then
-        if wget -q "$url" -O "$output_file"; then
-            success=true
-        fi
-    elif command_exists curl; then
-        if curl -s "$url" -o "$output_file"; then
-            success=true
-        fi
-    fi
-    
-    if [[ "$success" == "true" ]]; then
-        log_success "✓ Successfully downloaded $description"
-        return 0
-    else
-        log_error "✗ Failed to download $description"
-        return 1
-    fi
-}
-
 # Main execution
 main() {
     log_step "Starting BunkerWeb deployment..."
@@ -81,6 +52,24 @@ main() {
     
     # Base URL for the repository
     BASE_URL="https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/refs/heads/main/linux/waf/BunkerWeb"
+    
+    # Array of files to download (excluding BunkerWeb.conf - handled separately)
+    FILES=(
+        "script_autoconf_display.sh"
+        "script_password_reset_display.sh"
+        "template_autoconf_display.yml"
+        "template_basic_display.yml"
+        "template_ui_integrated_display.yml"
+        "template_sample_app_display.yml"
+        "helper_password_manager.sh"
+        "helper_network_detection.sh"
+        "helper_template_processor.sh"
+        "helper_release_channel_manager.sh"
+        "helper_bunkerweb_config_checker.sh"
+        "autoconf_script.sh"
+        "uninstall_BunkerWeb.sh"
+        "syslog-ng.conf"
+    )
     
     # Check if wget or curl is available
     if ! command_exists wget && ! command_exists curl; then
@@ -98,8 +87,18 @@ main() {
         
         if [[ -f "/root/BunkerWeb.conf" ]]; then
             log_success "✓ Created /root/BunkerWeb.conf"
+            log_info "Downloading BunkerWeb.conf to /root/BunkerWeb.conf..."
             
-            if ! download_file "$BASE_URL/BunkerWeb.conf" "/root/BunkerWeb.conf" "BunkerWeb.conf to /root/"; then
+            if command_exists wget; then
+                wget -q "$BASE_URL/BunkerWeb.conf" -O "/root/BunkerWeb.conf"
+            elif command_exists curl; then
+                curl -s "$BASE_URL/BunkerWeb.conf" -o "/root/BunkerWeb.conf"
+            fi
+            
+            if [ $? -eq 0 ]; then
+                log_success "✓ Successfully downloaded BunkerWeb.conf to /root/"
+            else
+                log_error "✗ Failed to download BunkerWeb.conf"
                 exit 1
             fi
         else
@@ -127,227 +126,53 @@ main() {
         exit 1
     fi
     
-    # Create symbolic link from /data/BunkerWeb/credentials.txt to /root/BunkerWeb-credentials.txt
-    log_step "Creating symbolic link for credentials.txt..."
-    if [[ -L "/data/BunkerWeb/credentials.txt" ]]; then
-        log_info "Credentials symbolic link already exists - removing old link"
-        rm "/data/BunkerWeb/credentials.txt"
-    elif [[ -f "/data/BunkerWeb/credentials.txt" ]]; then
-        log_warning "Regular credentials file exists at /data/BunkerWeb/credentials.txt - backing up"
-        mv "/data/BunkerWeb/credentials.txt" "/data/BunkerWeb/credentials.txt.backup.$(date +%Y%m%d_%H%M%S)"
-    fi
-    
-    # Create the target file if it doesn't exist (will be populated by setup script)
-    if [[ ! -f "/root/BunkerWeb-credentials.txt" ]]; then
-        touch "/root/BunkerWeb-credentials.txt"
-        chmod 600 "/root/BunkerWeb-credentials.txt"
-        log_success "✓ Created /root/BunkerWeb-credentials.txt"
-    fi
-    
-    ln -s "/root/BunkerWeb-credentials.txt" "/data/BunkerWeb/credentials.txt"
-    
-    if [[ -L "/data/BunkerWeb/credentials.txt" ]]; then
-        log_success "✓ Created symbolic link: /data/BunkerWeb/credentials.txt → /root/BunkerWeb-credentials.txt"
-    else
-        log_error "✗ Failed to create credentials symbolic link"
-        exit 1
-    fi
-    
-    # Array of all files to download
+    # Download each file to current directory
     log_step "Downloading BunkerWeb project files..."
-    
-    # Main setup scripts
-    log_step "Downloading main scripts..."
-    local main_scripts=(
-        "script_autoconf_display.sh"
-        "script_password_reset_display.sh"
-        "uninstall_BunkerWeb.sh"
-    )
-    
-    local failed_downloads=0
-    
-    for file in "${main_scripts[@]}"; do
-        if ! download_file "$BASE_URL/$file" "$file" "main script: $file"; then
-            ((failed_downloads++))
+    for file in "${FILES[@]}"; do
+        log_info "Downloading $file..."
+        if command_exists wget; then
+            wget -q "$BASE_URL/$file" -O "$file"
+        elif command_exists curl; then
+            curl -s "$BASE_URL/$file" -o "$file"
+        fi
+        
+        if [ $? -eq 0 ]; then
+            log_success "✓ Successfully downloaded $file"
+        else
+            log_error "✗ Failed to download $file"
+            exit 1
         fi
     done
-    
-    # Helper scripts (modular components)
-    log_step "Downloading helper scripts..."
-    local helper_scripts=(
-        "helper_network_detection.sh"
-        "helper_password_manager.sh"
-        "helper_template_processor.sh"
-        "helper_fqdn_lookup.sh"
-        "helper_directory_layout.sh"
-    )
-    
-    for file in "${helper_scripts[@]}"; do
-        if ! download_file "$BASE_URL/$file" "$file" "helper script: $file"; then
-            ((failed_downloads++))
-        fi
-    done
-    
-    # Docker Compose templates
-    log_step "Downloading Docker Compose templates..."
-    local templates=(
-        "template_autoconf_display.yml"
-        "template_basic_display.yml"
-        "template_ui_integrated_display.yml"
-        "template_sample_app_display.yml"
-    )
-    
-    for file in "${templates[@]}"; do
-        if ! download_file "$BASE_URL/$file" "$file" "template: $file"; then
-            ((failed_downloads++))
-        fi
-    done
-    
-    # Configuration files
-    log_step "Downloading configuration files..."
-    local config_files=(
-        "syslog-ng.conf"
-    )
-    
-    for file in "${config_files[@]}"; do
-        if ! download_file "$BASE_URL/$file" "$file" "config file: $file"; then
-            ((failed_downloads++))
-        fi
-    done
-    
-    # Check for download failures
-    if [[ $failed_downloads -gt 0 ]]; then
-        log_error "✗ $failed_downloads files failed to download"
-        log_warning "Some components may not work properly"
-        echo ""
-        log_info "You can retry downloading individual files manually from:"
-        log_info "$BASE_URL"
-    fi
     
     # Make shell scripts executable
     log_step "Setting executable permissions on shell scripts..."
+    chmod +x script_autoconf_display.sh
+    chmod +x script_password_reset_display.sh
+    chmod +x helper_password_manager.sh
+    chmod +x helper_network_detection.sh
+    chmod +x helper_template_processor.sh
+    chmod +x helper_release_channel_manager.sh
+    chmod +x helper_bunkerweb_config_checker.sh
+    chmod +x autoconf_script.sh
+    chmod +x uninstall_BunkerWeb.sh
     
-    # Set permissions for main scripts
-    for file in "${main_scripts[@]}"; do
-        if [[ -f "$file" ]]; then
-            chmod +x "$file"
-            log_success "✓ Made executable: $file"
-        fi
-    done
-    
-    # Set permissions for helper scripts
-    for file in "${helper_scripts[@]}"; do
-        if [[ -f "$file" ]]; then
-            chmod +x "$file"
-            log_success "✓ Made executable: $file"
-        fi
-    done
-    
-    # Verify critical files
-    log_step "Verifying critical files..."
-    
-    local critical_files=(
-        "script_autoconf_display.sh"
-        "helper_password_manager.sh"
-        "helper_network_detection.sh"
-        "helper_template_processor.sh"
-        "helper_fqdn_lookup.sh"
-        "helper_directory_layout.sh"
-        "template_autoconf_display.yml"
-        "template_basic_display.yml"
-        "template_ui_integrated_display.yml"
-    )
-    
-    local missing_critical=0
-    for file in "${critical_files[@]}"; do
-        if [[ ! -f "$file" ]]; then
-            log_error "✗ Critical file missing: $file"
-            ((missing_critical++))
-        fi
-    done
-    
-    if [[ $missing_critical -gt 0 ]]; then
-        log_error "✗ $missing_critical critical files are missing"
-        log_error "BunkerWeb setup may not work properly"
-        exit 1
-    fi
-    
-    # Success summary
     log_success "BunkerWeb deployment completed successfully!"
     echo ""
     echo "📁 Files downloaded to: /data/BunkerWeb"
     echo "📁 BunkerWeb.conf location: /root/BunkerWeb.conf"
-    echo "📁 Credentials location: /root/BunkerWeb-credentials.txt"
     echo "🔗 Symbolic link: /data/BunkerWeb/BunkerWeb.conf → /root/BunkerWeb.conf"
-    echo "🔗 Symbolic link: /data/BunkerWeb/credentials.txt → /root/BunkerWeb-credentials.txt"
     echo ""
-    
-    # Show downloaded file summary
-    echo "📋 Downloaded Components:"
+    echo "Downloaded files:"
+    ls -la /data/BunkerWeb/
     echo ""
-    
-    echo "🔧 Main Scripts:"
-    for file in "${main_scripts[@]}"; do
-        if [[ -f "$file" ]]; then
-            echo "  ✓ $file"
-        else
-            echo "  ✗ $file - Missing"
-        fi
-    done
-    echo ""
-    
-    echo "🛠️  Helper Scripts:"
-    for file in "${helper_scripts[@]}"; do
-        if [[ -f "$file" ]]; then
-            echo "  ✓ $file"
-        else
-            echo "  ✗ $file - Missing"
-        fi
-    done
-    echo ""
-    
-    echo "📄 Templates:"
-    for file in "${templates[@]}"; do
-        if [[ -f "$file" ]]; then
-            echo "  ✓ $file"
-        else
-            echo "  ✗ $file - Missing"
-        fi
-    done
-    echo ""
-    
-    echo "⚙️  Configuration Files:"
-    for file in "${config_files[@]}"; do
-        if [[ -f "$file" ]]; then
-            echo "  ✓ $file"
-        else
-            echo "  ✗ $file - Missing"
-        fi
-    done
-    echo ""
-    
-    # Show directory listing
-    echo "📂 Complete file listing:"
-    ls -la /data/BunkerWeb/ | grep -E '\.(sh|yml|conf)$'
-    echo ""
-    
-    echo "🔧 Configuration file:"
+    echo "Configuration file:"
     ls -la /root/BunkerWeb.conf
     echo ""
-    echo "🔐 Credentials file (will be populated by setup script):"
-    ls -la /root/BunkerWeb-credentials.txt
+    echo "🔧 Next steps:"
+    echo "1. Validate configuration: cd /data/BunkerWeb && ./helper_bunkerweb_config_checker.sh"
+    echo "2. Edit configuration if needed: nano /root/BunkerWeb.conf"
+    echo "3. Deploy BunkerWeb: cd /data/BunkerWeb && sudo ./script_autoconf_display.sh --type autoconf"
     echo ""
-    echo "🔗 Symbolic links:"
-    ls -la /data/BunkerWeb/ | grep -E '\.conf$|credentials\.txt$'
-    echo ""
-    
-    # Next steps
-    echo "🚀 Next Steps:"
-    echo "1. Edit configuration: nano /root/BunkerWeb.conf"
-    echo "2. Run setup script: sudo /data/BunkerWeb/script_autoconf_display.sh --type autoconf"
-    echo "3. Or get help: /data/BunkerWeb/script_autoconf_display.sh --help"
-    echo ""
-    
     log_info "You can now proceed with BunkerWeb configuration and deployment."
 }
 
