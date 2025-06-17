@@ -68,9 +68,7 @@ main() {
         "helper_template_processor.sh"
         "helper_release_channel_manager.sh"
         "helper_bunkerweb_config_checker.sh"
-        "autoconf_script.sh"
         "uninstall_BunkerWeb.sh"
-        "syslog-ng.conf"
     )
     
     # Array of Fluent Bit configuration files to download to fluent-config directory
@@ -180,6 +178,7 @@ main() {
     
     # Make shell scripts executable
     log_step "Setting executable permissions on shell scripts..."
+    cd /data/BunkerWeb
     chmod +x script_autoconf_display.sh
     chmod +x script_password_reset_display.sh
     chmod +x helper_password_manager.sh
