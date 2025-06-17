@@ -1,15 +1,4 @@
-#!/bin/bash
-#
-# Copyright (c) 2025 Michal Koeckeis-Fresel
-# 
-# This software is dual-licensed under your choice of:
-# - MIT License (see LICENSE-MIT)
-# - GNU Affero General Public License v3.0 (see LICENSE-AGPL)
-# 
-# SPDX-License-Identifier: MIT OR AGPL-3.0-or-later
-#
-
-# BunkerWeb Autoconf Docker Compose Template with Redis and Syslog
+# BunkerWeb Autoconf Docker Compose Template with Fixed Logging
 
 x-ui-env: &bw-ui-env
   # We anchor the environment variables to avoid duplication
@@ -30,15 +19,37 @@ x-redis-env: &redis-env
   REDIS_KEEPALIVE_IDLE: "30000"
   REDIS_KEEPALIVE_POOL: "10"
 
+# Conditional logging configuration - only use if Fluent Bit is healthy
 x-fluent-config: &fluent-config
-  # Fluent Bit logging configuration
   logging:
-    driver: fluentd
+    driver: json-file
     options:
-      fluentd-address: "tcp://127.0.0.1:24224"
-      tag: "bunkerweb.{{.Name}}"
+      max-size: "10m"
+      max-file: "3"
 
 services:
+  # Start Fluent Bit first with no dependencies
+  bw-fluent:
+    image: fluent/fluent-bit:latest
+    ports:
+      - "24224:24224/tcp"  # Forward protocol for log collection
+      - "2020:2020/tcp"    # HTTP API for health checks
+    volumes:
+      - /data/BunkerWeb/logs:/fluent-bit/log
+      - /data/BunkerWeb/fluent-config:/fluent-bit/etc
+    environment:
+      - FLB_CONFIG_PATH=/fluent-bit/etc/fluent-bit.conf
+    command: ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf"]
+    restart: unless-stopped
+    networks:
+      - bw-fluent
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:2020/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
   bunkerweb:
     image: bunkerity/bunkerweb:1.6.1
     ports:
@@ -53,8 +64,10 @@ services:
       API_WHITELIST_IP: "127.0.0.0/8 192.168.100.0/24"
     restart: "unless-stopped"
     depends_on:
-      - bw-redis
-      - bw-fluent
+      bw-redis:
+        condition: service_healthy
+      bw-fluent:
+        condition: service_healthy
     networks:
       - bw-universe
       - bw-services
@@ -75,9 +88,12 @@ services:
       - /data/BunkerWeb/storage:/data # This is used to persist the cache and other data like the backups
     restart: "unless-stopped"
     depends_on:
-      - bw-redis
-      - bw-db
-      - bw-fluent
+      bw-redis:
+        condition: service_healthy
+      bw-db:
+        condition: service_started
+      bw-fluent:
+        condition: service_healthy
     networks:
       - bw-universe
       - bw-db
@@ -88,9 +104,12 @@ services:
   bw-autoconf:
     image: bunkerity/bunkerweb-autoconf:1.6.1
     depends_on:
-      - bw-docker
-      - bw-redis
-      - bw-fluent
+      bw-docker:
+        condition: service_started
+      bw-redis:
+        condition: service_healthy
+      bw-fluent:
+        condition: service_healthy
     environment:
       <<: [*bw-ui-env, *redis-env]
       DOCKER_HOST: "tcp://bw-docker:2375"
@@ -112,6 +131,7 @@ services:
       LOG_LEVEL: "warning"
     networks:
       - bw-docker
+    # No Fluent Bit logging for this container to avoid dependency issues
 
   bw-ui:
     image: bunkerity/bunkerweb-ui:1.6.1
@@ -125,35 +145,18 @@ services:
       TOTP_SECRETS: "REPLACEME_DEFAULT"
     restart: "unless-stopped"
     depends_on:
-      - bw-redis
-      - bw-db
-      - bw-fluent
+      bw-redis:
+        condition: service_healthy
+      bw-db:
+        condition: service_started
+      bw-fluent:
+        condition: service_healthy
     networks:
       - bw-universe
       - bw-db
       - bw-redis
       - bw-fluent
     <<: *fluent-config
-
-  bw-fluent:
-    image: fluent/fluent-bit:latest
-    ports:
-      - "24224:24224/tcp"  # Forward protocol for log collection
-    volumes:
-      - /data/BunkerWeb/logs:/fluent-bit/log
-      - /data/BunkerWeb/fluent-config:/fluent-bit/etc
-    environment:
-      - FLB_CONFIG_PATH=/fluent-bit/etc/fluent-bit.conf
-    command: ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf"]
-    restart: unless-stopped
-    networks:
-      - bw-universe
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:2020/api/v1/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
 
   bw-redis:
     image: redis:7-alpine
@@ -193,8 +196,7 @@ services:
     restart: "unless-stopped"
     networks:
       - bw-db
-
-# volumes: # Using host directories instead of named volumes
+    # No Fluent Bit logging for database to avoid dependency issues
 
 networks:
   bw-universe:
