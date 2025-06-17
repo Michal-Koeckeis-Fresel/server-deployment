@@ -9,7 +9,7 @@
 # SPDX-License-Identifier: MIT OR AGPL-3.0-or-later
 #
 
-# BunkerWeb Setup Script - MODULAR VERSION with Advanced FQDN Detection (FIXED)
+# BunkerWeb Setup Script - ENHANCED VERSION with Allowlist and Greylist Security
 # This script orchestrates the setup using separate modules for each major function
 # MUST BE RUN AS ROOT: sudo ./script_autoconf_display.sh --type <autoconf|basic|integrated>
 
@@ -39,7 +39,21 @@ PREFERRED_DOCKER_SUBNET=""
 REDIS_ENABLED="yes"
 REDIS_PASSWORD=""
 
-# FQDN Detection Configuration (for helper_fqdn.sh)
+# Allowlist Configuration (Global Access Control)
+USE_ALLOWLIST="no"
+ALLOWLIST_IP=""
+ALLOWLIST_COUNTRY=""
+BLACKLIST_COUNTRY=""
+ALLOWLIST_DNS=""
+ALLOWLIST_MODE="block"
+ALLOWLIST_STATUS_CODE="403"
+
+# Greylist Configuration (Admin Interface Protection)
+USE_GREYLIST="yes"
+GREYLIST_IP=""
+GREYLIST_DNS=""
+
+# FQDN Detection Configuration
 FQDN_REQUIRE_SSL="no"
 FQDN_CHECK_DNS="yes"
 FQDN_ALLOW_LOCALHOST="yes"
@@ -114,6 +128,8 @@ source_modules() {
         "helper_network_detection.sh" 
         "helper_template_processor.sh"
         "helper_fqdn.sh"
+        "helper_greylist.sh"
+        "helper_allowlist.sh"
     )
     
     echo -e "${BLUE}Loading BunkerWeb modules...${NC}"
@@ -701,6 +717,20 @@ show_usage() {
     echo -e "  --redis-enabled yes|no       Enable Redis support (default: yes)"
     echo -e "  --redis-password PASS        Set custom Redis password"
     echo ""
+    echo -e "${YELLOW}Allowlist Configuration (Global Access Control):${NC}"
+    echo -e "  --allowlist yes|no                Enable global allowlist (default: no)"
+    echo -e "  --allowlist-ip \"NET1 NET2\"       IP addresses/networks to allow"
+    echo -e "  --allowlist-country \"US CA GB\"   Country codes to allow (requires GeoIP)"
+    echo -e "  --blacklist-country \"CN RU KP\"   Country codes to block (requires GeoIP)"
+    echo -e "  --allowlist-dns \"DOM1 DOM2\"      DNS suffixes to allow"
+    echo -e "  --allowlist-mode block|deny       How to handle non-allowlisted IPs"
+    echo -e "  --allowlist-status CODE           HTTP status code for blocked requests"
+    echo ""
+    echo -e "${YELLOW}Greylist Configuration (Admin Interface Protection):${NC}"
+    echo -e "  --greylist yes|no            Enable greylist protection (default: yes)"
+    echo -e "  --greylist-ip \"NET1 NET2\"    Additional IP addresses/networks for greylist"
+    echo -e "  --greylist-dns \"DOM1 DOM2\"   DNS suffixes for greylist (e.g., \"company.com\")"
+    echo ""
     echo -e "${YELLOW}SSL Certificate Options:${NC}"
     echo -e "  --AUTO_CERT LE|ZeroSSL       Enable automatic certificates"
     echo -e "  --AUTO_CERT_CONTACT EMAIL    Contact email for certificate registration"
@@ -714,6 +744,8 @@ show_usage() {
     echo -e "  sudo $0 --type autoconf --FQDN example.com --fqdn-require-ssl"
     echo -e "  sudo $0 --type autoconf --fqdn-debug                     # Debug FQDN detection"
     echo -e "  sudo $0 --type autoconf --private-networks \"192.168.1.0/24\""
+    echo -e "  sudo $0 --type autoconf --greylist-ip \"203.0.113.0/24\" --greylist-dns \"company.com\""
+    echo -e "  sudo $0 --type autoconf --allowlist yes --allowlist-ip \"203.0.113.0/24\" --allowlist-country \"US CA\" --blacklist-country \"CN RU\""
     echo ""
     echo -e "${GREEN}FQDN Detection Features:${NC}"
     echo -e "  • Multiple detection methods (hostname, DNS, cloud metadata)"
@@ -721,6 +753,19 @@ show_usage() {
     echo -e "  • DNS resolution checking"
     echo -e "  • SSL readiness validation"
     echo -e "  • Detailed error reporting and troubleshooting"
+    echo ""
+    echo -e "${GREEN}Security Features:${NC}"
+    echo -e "  • Allowlist: Global access control for entire application"
+    echo -e "  • Greylist: Admin interface protection with SSH auto-detection"
+    echo -e "  • Both can be used together for layered security"
+    echo -e "  • IP, country, and DNS-based access control"
+    echo -e "  • Automatic SSH connection detection and network generation"
+    echo -e "  • Lockout prevention with intelligent detection"
+    echo ""
+    echo -e "${YELLOW}SECURITY WARNING:${NC}"
+    echo -e "  ${RED}Allowlist controls access to your ENTIRE web application!${NC}"
+    echo -e "  ${RED}Test thoroughly before enabling in production environments.${NC}"
+    echo -e "  ${GREEN}Greylist only affects admin interfaces and is safer to enable.${NC}"
     echo ""
 }
 
@@ -789,6 +834,46 @@ parse_arguments() {
                 ;;
             --redis-password)
                 REDIS_PASSWORD="$2"
+                shift 2
+                ;;
+            --allowlist)
+                USE_ALLOWLIST="$2"
+                shift 2
+                ;;
+            --allowlist-ip)
+                ALLOWLIST_IP="$2"
+                shift 2
+                ;;
+            --allowlist-country)
+                ALLOWLIST_COUNTRY="$2"
+                shift 2
+                ;;
+            --blacklist-country)
+                BLACKLIST_COUNTRY="$2"
+                shift 2
+                ;;
+            --allowlist-dns)
+                ALLOWLIST_DNS="$2"
+                shift 2
+                ;;
+            --allowlist-mode)
+                ALLOWLIST_MODE="$2"
+                shift 2
+                ;;
+            --allowlist-status)
+                ALLOWLIST_STATUS_CODE="$2"
+                shift 2
+                ;;
+            --greylist)
+                USE_GREYLIST="$2"
+                shift 2
+                ;;
+            --greylist-ip)
+                GREYLIST_IP="$2"
+                shift 2
+                ;;
+            --greylist-dns)
+                GREYLIST_DNS="$2"
                 shift 2
                 ;;
             --AUTO_CERT)
@@ -980,7 +1065,7 @@ manage_enhanced_credentials() {
     echo -e "${BLUE}Saving credentials to: $creds_file${NC}"
     
     cat > "$creds_file" << EOF
-# BunkerWeb Generated Credentials (FIXED VERSION)
+# BunkerWeb Generated Credentials (ENHANCED WITH ALLOWLIST & GREYLIST)
 # Deployment Type: ${deployment_name:-"Unknown"}
 # Template Used: ${template_file:-"Unknown"}
 # Setup Mode: ${setup_mode:-"Unknown"}
@@ -1095,6 +1180,8 @@ show_setup_summary() {
     echo -e "${YELLOW}Domain (FQDN):${NC} $FQDN"
     echo -e "${YELLOW}FQDN Detection Method:${NC} $(get_detection_method 2>/dev/null || echo "manual/fallback")"
     echo -e "${YELLOW}Redis Enabled:${NC} $REDIS_ENABLED"
+    echo -e "${YELLOW}Allowlist Enabled:${NC} $USE_ALLOWLIST"
+    echo -e "${YELLOW}Greylist Enabled:${NC} $USE_GREYLIST"
     echo -e "${YELLOW}Network Detection:${NC} $AUTO_DETECT_NETWORK_CONFLICTS"
     
     if [[ -n "$AUTO_CERT_TYPE" ]]; then
@@ -1156,12 +1243,79 @@ show_setup_summary() {
     echo -e "${GREEN}• SSL Ready: $(if [[ "$FQDN" != "localhost" && "$FQDN" != "127.0.0.1" ]]; then echo "Yes"; else echo "No"; fi)${NC}"
     
     echo ""
+    echo -e "${BLUE}Security Configuration Status:${NC}"
+    
+    # Allowlist Status
+    if [[ "$USE_ALLOWLIST" == "yes" ]]; then
+        echo -e "${GREEN}• Allowlist Protection: Enabled (GLOBAL ACCESS CONTROL)${NC}"
+        local allowlist_ip=$(get_detected_allowlist_ip 2>/dev/null || echo "$ALLOWLIST_IP")
+        if [[ -n "$allowlist_ip" ]]; then
+            local ip_count=$(echo "$allowlist_ip" | wc -w)
+            echo -e "${GREEN}  - IP/Network entries: $ip_count${NC}"
+        fi
+        if [[ -n "$ALLOWLIST_COUNTRY" ]]; then
+            local country_count=$(echo "$ALLOWLIST_COUNTRY" | wc -w)
+            echo -e "${GREEN}  - Allowed countries: $country_count${NC}"
+        fi
+        if [[ -n "$BLACKLIST_COUNTRY" ]]; then
+            local blacklist_count=$(echo "$BLACKLIST_COUNTRY" | wc -w)
+            echo -e "${GREEN}  - Blocked countries: $blacklist_count${NC}"
+        fi
+        if [[ -n "$ALLOWLIST_DNS" ]]; then
+            local dns_count=$(echo "$ALLOWLIST_DNS" | wc -w)
+            echo -e "${GREEN}  - DNS suffixes: $dns_count${NC}"
+        fi
+        echo -e "${GREEN}  - Detection Method: $(get_allowlist_detection_method 2>/dev/null || echo "manual")${NC}"
+        echo -e "${YELLOW}  - WARNING: Controls access to ENTIRE application${NC}"
+    else
+        echo -e "${BLUE}• Allowlist Protection: Disabled${NC}"
+        echo -e "${BLUE}  - All visitors can access the application${NC}"
+    fi
+    
+    # Greylist Status
+    if [[ "$USE_GREYLIST" == "yes" ]]; then
+        echo -e "${GREEN}• Greylist Protection: Enabled (ADMIN INTERFACE ONLY)${NC}"
+        local enhanced_greylist=$(get_enhanced_greylist_ip 2>/dev/null || echo "")
+        if [[ -n "$enhanced_greylist" ]]; then
+            local greylist_count=$(echo "$enhanced_greylist" | wc -w)
+            echo -e "${GREEN}  - Greylist entries: $greylist_count${NC}"
+        fi
+        echo -e "${GREEN}  - SSH IPs Detected: $(get_detected_ssh_ips 2>/dev/null | wc -l || echo "0")${NC}"
+        echo -e "${GREEN}  - Detection Method: $(get_greylist_detection_method 2>/dev/null || echo "manual")${NC}"
+        echo -e "${GREEN}  - Admin interface protected from unauthorized access${NC}"
+    else
+        echo -e "${YELLOW}• Greylist Protection: Disabled${NC}"
+        echo -e "${YELLOW}  - Admin interface accessible from any IP${NC}"
+        echo -e "${RED}  ⚠ Consider enabling greylist for production environments${NC}"
+    fi
+    
+    echo ""
     echo -e "${BLUE}Troubleshooting:${NC}"
     echo -e "${GREEN}• Check logs: docker compose logs -f${NC}"
     echo -e "${GREEN}• Check API connectivity: docker compose logs bunkerweb | grep API${NC}"
     echo -e "${GREEN}• Monitor Let's Encrypt: docker compose logs bw-scheduler | grep -i lets${NC}"
     echo -e "${GREEN}• View credentials: cat $INSTALL_DIR/credentials.txt${NC}"
     echo -e "${GREEN}• Test FQDN detection: $SCRIPT_DIR/helper_fqdn.sh detect --fqdn-debug${NC}"
+    
+    if [[ "$USE_ALLOWLIST" == "yes" ]]; then
+        echo ""
+        echo -e "${BLUE}Allowlist Troubleshooting:${NC}"
+        echo -e "${GREEN}• Check allowlist status: docker compose logs bunkerweb | grep -i whitelist${NC}"
+        echo -e "${GREEN}• Test allowlist access: curl -I http://$(hostname -I | awk '{print $1}')${NC}"
+        echo -e "${GREEN}• Monitor blocked requests: docker compose logs bunkerweb | grep -i blocked${NC}"
+        echo -e "${GREEN}• View allowlist config: grep \"Allowlist\" $INSTALL_DIR/credentials.txt${NC}"
+        echo -e "${RED}• Emergency disable: Edit BunkerWeb.conf and set USE_ALLOWLIST=\"no\", then restart${NC}"
+    fi
+    
+    if [[ "$USE_GREYLIST" == "yes" ]]; then
+        echo ""
+        echo -e "${BLUE}Greylist Troubleshooting:${NC}"
+        echo -e "${GREEN}• Check greylist status: docker compose logs bunkerweb | grep -i greylist${NC}"
+        echo -e "${GREEN}• Test greylist access: curl -I http://$(hostname -I | awk '{print $1}')${NC}"
+        echo -e "${GREEN}• View enhanced greylist: grep \"Greylist IP\" $INSTALL_DIR/credentials.txt${NC}"
+        echo -e "${GREEN}• SSH IP detection: $SCRIPT_DIR/helper_greylist.sh test-detect${NC}"
+        echo -e "${YELLOW}• If locked out: Edit BunkerWeb.conf and set USE_GREYLIST=\"no\", then restart${NC}"
+    fi
     
     echo ""
     echo -e "${GREEN}Setup completed successfully!${NC}"
@@ -1172,7 +1326,8 @@ main() {
     echo -e "${BLUE}================================================${NC}"
     echo -e "${BLUE}      BunkerWeb Enhanced Setup Script${NC}"
     echo -e "${BLUE}   with Advanced FQDN Detection System${NC}"
-    echo -e "${BLUE}            (FIXED VERSION)${NC}"
+    echo -e "${BLUE}     and Allowlist + Greylist Security${NC}"
+    echo -e "${BLUE}            (ENHANCED VERSION)${NC}"
     echo -e "${BLUE}================================================${NC}"
     echo ""
     
@@ -1189,7 +1344,7 @@ main() {
     # Try to source modular scripts, but continue without them if not available
     if ! source_modules; then
         echo -e "${YELLOW}⚠ Using built-in functions (modules not available)${NC}"
-        echo -e "${RED}✗ helper_fqdn.sh is required for enhanced FQDN detection${NC}"
+        echo -e "${RED}✗ helper modules are required for enhanced functionality${NC}"
         exit 1
     fi
     
@@ -1221,6 +1376,8 @@ main() {
     echo -e "${GREEN}• Setup Mode: $SETUP_MODE${NC}"
     echo -e "${GREEN}• Domain (FQDN): $FQDN${NC}"
     echo -e "${GREEN}• FQDN Detection Method: $(get_detection_method)${NC}"
+    echo -e "${GREEN}• Allowlist Enabled: $USE_ALLOWLIST${NC}"
+    echo -e "${GREEN}• Greylist Enabled: $USE_GREYLIST${NC}"
     echo -e "${GREEN}• Redis Enabled: $REDIS_ENABLED${NC}"
     echo -e "${GREEN}• Network Detection: $AUTO_DETECT_NETWORK_CONFLICTS${NC}"
     echo ""
@@ -1255,11 +1412,25 @@ main() {
         exit 1
     fi
     
-    # 6. Directory Setup
-    echo -e "${BLUE}Step 6: Directory Setup${NC}"
+    # 6. Allowlist Configuration (NEW)
+    echo -e "${BLUE}Step 6: Allowlist Configuration${NC}"
+    if ! manage_allowlist_configuration "$ALLOWLIST_IP" "$ALLOWLIST_COUNTRY" "$BLACKLIST_COUNTRY" "$ALLOWLIST_DNS" "$USE_ALLOWLIST" "$ALLOWLIST_MODE" "$ALLOWLIST_STATUS_CODE" "$compose_file" "$creds_file" "$FQDN"; then
+        echo -e "${RED}✗ Allowlist configuration failed${NC}"
+        exit 1
+    fi
+    
+    # 7. Greylist Configuration
+    echo -e "${BLUE}Step 7: Greylist Configuration${NC}"
+    if ! manage_greylist_configuration "$GREYLIST_IP" "$GREYLIST_DNS" "$USE_GREYLIST" "$compose_file" "$creds_file" "$FQDN"; then
+        echo -e "${RED}✗ Greylist configuration failed${NC}"
+        exit 1
+    fi
+    
+    # 8. Directory Setup
+    echo -e "${BLUE}Step 8: Directory Setup${NC}"
     setup_directories
     
-    # 7. Final Summary
+    # 9. Final Summary
     show_setup_summary
 }
 
