@@ -71,6 +71,11 @@ main() {
         "uninstall_BunkerWeb.sh"
     )
     
+    # Special helper files from different repository path
+    HELPER_FILES=(
+        "helper_fqdn.sh"
+    )
+    
     # Array of Fluent Bit configuration files to download to fluent-config directory
     FLUENT_FILES=(
         "fluent-bit.conf"
@@ -176,6 +181,26 @@ main() {
         fi
     done
     
+    # Download special helper files from different repository path
+    log_step "Downloading additional helper scripts..."
+    HELPER_BASE_URL="https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/refs/heads/main/linux/deploy_scripts/helper-scripts"
+    
+    for file in "${HELPER_FILES[@]}"; do
+        log_info "Downloading $file from helper-scripts..."
+        if command_exists wget; then
+            wget -q "$HELPER_BASE_URL/$file" -O "$file"
+        elif command_exists curl; then
+            curl -s "$HELPER_BASE_URL/$file" -o "$file"
+        fi
+        
+        if [ $? -eq 0 ]; then
+            log_success "✓ Successfully downloaded $file"
+        else
+            log_error "✗ Failed to download $file"
+            exit 1
+        fi
+    done
+    
     # Make shell scripts executable
     log_step "Setting executable permissions on shell scripts..."
     cd /data/BunkerWeb
@@ -186,6 +211,7 @@ main() {
     chmod +x helper_template_processor.sh
     chmod +x helper_release_channel_manager.sh
     chmod +x helper_bunkerweb_config_checker.sh
+    chmod +x helper_fqdn.sh
     chmod +x autoconf_script.sh
     chmod +x uninstall_BunkerWeb.sh
     
@@ -220,9 +246,10 @@ main() {
     
     echo "🔧 Next steps:"
     echo "1. Validate configuration: cd /data/BunkerWeb && ./helper_bunkerweb_config_checker.sh"
-    echo "2. Edit configuration if needed: nano /root/BunkerWeb.conf"
-    echo "3. Configure network settings (edit PRIVATE_NETWORKS_ALREADY_IN_USE if needed)"
-    echo "4. Deploy BunkerWeb with Fluent Bit: cd /data/BunkerWeb && sudo ./script_autoconf_display.sh --type autoconf"
+    echo "2. Check/configure FQDN: cd /data/BunkerWeb && ./helper_fqdn.sh"
+    echo "3. Edit configuration if needed: nano /root/BunkerWeb.conf"
+    echo "4. Configure network settings (edit PRIVATE_NETWORKS_ALREADY_IN_USE if needed)"
+    echo "5. Deploy BunkerWeb with Fluent Bit: cd /data/BunkerWeb && sudo ./script_autoconf_display.sh --type autoconf"
     echo ""
     
     echo "🌟 New Features in this deployment:"
@@ -230,6 +257,7 @@ main() {
     echo "• Network conflict detection and automatic subnet selection"
     echo "• Improved SSL certificate management"
     echo "• Enhanced security with proper private subnet usage"
+    echo "• FQDN detection and validation helper script"
     echo ""
     
     log_info "You can now proceed with BunkerWeb configuration and deployment."
