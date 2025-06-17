@@ -412,11 +412,229 @@ configure_allowlist_in_compose() {
     return 0
 }
 
+# Function to save allowlist configuration to credentials file
+save_allowlist_to_credentials() {
+    local creds_file="$1"
+    local allowlist_ip="$2"
+    local allowlist_country="$3"
+    local blacklist_country="$4"
+    local allowlist_dns="$5"
+    local use_allowlist="$6"
+    local allowlist_mode="$7"
+    local allowlist_status="$8"
+    local detection_method="$9"
+    
+    if [[ ! -f "$creds_file" ]]; then
+        echo -e "${YELLOW}⚠ Credentials file not found: $creds_file${NC}" >&2
+        return 1
+    fi
+    
+    echo -e "${BLUE}Saving allowlist configuration to credentials file...${NC}" >&2
+    
+    # Add allowlist section to credentials file
+    cat >> "$creds_file" << EOF
+
+# Allowlist Configuration (Global Access Control)
+Allowlist Enabled: $use_allowlist
+$(if [[ "$use_allowlist" == "yes" ]]; then
+    if [[ -n "$allowlist_ip" ]]; then
+        echo "Allowlist IP/Networks: $allowlist_ip"
+    fi
+    if [[ -n "$allowlist_country" ]]; then
+        echo "Allowlist Countries: $allowlist_country"
+    fi
+    if [[ -n "$blacklist_country" ]]; then
+        echo "Blacklist Countries: $blacklist_country"
+    fi
+    if [[ -n "$allowlist_dns" ]]; then
+        echo "Allowlist DNS Suffixes: $allowlist_dns"
+    fi
+    if [[ -n "$allowlist_mode" ]]; then
+        echo "Allowlist Mode: $allowlist_mode"
+    fi
+    if [[ -n "$allowlist_status" ]]; then
+        echo "HTTP Status Code: $allowlist_status"
+    fi
+    echo "Detection Method: ${detection_method:-"manual"}"
+    echo ""
+    echo "# SECURITY WARNING: Allowlist controls access to your ENTIRE application!"
+    echo "# Only the above IP addresses/networks/countries can access your application"
+    echo "# Test thoroughly before enabling in production environments"
+    echo "# Consider using greylist instead for admin-only protection"
+fi)
+
+# Allowlist Management Commands:
+$(if [[ "$use_allowlist" == "yes" ]]; then
+    echo "# Test allowlist: curl -I http://$(hostname -I | awk '{print $1}')"
+    echo "# Check logs: docker compose logs bunkerweb | grep -i whitelist"
+    echo "# Check blocked requests: docker compose logs bunkerweb | grep -i blocked"
+    echo "# Emergency disable: Edit BunkerWeb.conf, set USE_ALLOWLIST=\"no\", restart"
+    echo "# Modify allowlist: Edit BunkerWeb.conf and restart containers"
+fi)
+EOF
+    
+    echo -e "${GREEN}✓ Allowlist configuration saved to credentials file${NC}" >&2
+    return 0
+}
+
+# Function to show allowlist summary
+show_allowlist_summary() {
+    local allowlist_ip="$1"
+    local allowlist_country="$2"
+    local blacklist_country="$3"
+    local allowlist_dns="$4"
+    local use_allowlist="$5"
+    
+    echo -e "${BLUE}Allowlist Configuration Summary:${NC}" >&2
+    echo -e "${GREEN}• Allowlist Enabled: $use_allowlist${NC}" >&2
+    
+    if [[ "$use_allowlist" == "yes" ]]; then
+        echo -e "${GREEN}• Detection Method: ${ALLOWLIST_DETECTION_METHOD:-"manual"}${NC}" >&2
+        
+        if [[ -n "$allowlist_ip" ]]; then
+            local ip_count=$(echo "$allowlist_ip" | wc -w)
+            echo -e "${GREEN}• IP/Network Entries: $ip_count${NC}" >&2
+        fi
+        
+        if [[ -n "$allowlist_country" ]]; then
+            local country_count=$(echo "$allowlist_country" | wc -w)
+            echo -e "${GREEN}• Allowed Countries: $country_count${NC}" >&2
+        fi
+        
+        if [[ -n "$blacklist_country" ]]; then
+            local blacklist_count=$(echo "$blacklist_country" | wc -w)
+            echo -e "${GREEN}• Blocked Countries: $blacklist_count${NC}" >&2
+        fi
+        
+        if [[ -n "$allowlist_dns" ]]; then
+            local dns_count=$(echo "$allowlist_dns" | wc -w)
+            echo -e "${GREEN}• DNS Suffixes: $dns_count${NC}" >&2
+        fi
+        
+        echo -e "${RED}• WARNING: Controls access to ENTIRE application${NC}" >&2
+    else
+        echo -e "${YELLOW}• Global access control is disabled${NC}" >&2
+        echo -e "${YELLOW}• All visitors can access the application${NC}" >&2
+    fi
+}
+
 # Function to manage allowlist configuration (main function)
 manage_allowlist_configuration() {
     local user_allowlist_ip="$1"
     local user_allowlist_country="$2"
-    local user_allowlist_dns="$3"
-    local use_allowlist="$4"
-    local allowlist_mode="$5"
-    local allowlist_status="$6"
+    local blacklist_country="$3"
+    local user_allowlist_dns="$4"
+    local use_allowlist="$5"
+    local allowlist_mode="$6"
+    local allowlist_status="$7"
+    local compose_file="$8"
+    local creds_file="$9"
+    local fqdn="${10}"
+    
+    echo -e "${BLUE}=================================================================================${NC}" >&2
+    echo -e "${BLUE}                    ALLOWLIST CONFIGURATION MANAGEMENT                    ${NC}" >&2
+    echo -e "${BLUE}=================================================================================${NC}" >&2
+    echo "" >&2
+    
+    if [[ "$use_allowlist" != "yes" ]]; then
+        echo -e "${YELLOW}⚠ Allowlist disabled in configuration${NC}" >&2
+        echo -e "${BLUE}ℹ Skipping allowlist configuration${NC}" >&2
+        
+        # Still save the disabled status to credentials
+        if [[ -n "$creds_file" ]]; then
+            save_allowlist_to_credentials "$creds_file" "" "" "" "" "$use_allowlist" "" "" "disabled"
+        fi
+        
+        show_allowlist_summary "" "" "" "" "$use_allowlist"
+        return 0
+    fi
+    
+    echo -e "${BLUE}Configuring allowlist protection...${NC}" >&2
+    echo -e "${RED}WARNING: This will control access to your ENTIRE application!${NC}" >&2
+    echo "" >&2
+    
+    # Auto-detect allowlist configuration
+    auto_detect_allowlist "$user_allowlist_ip" "$user_allowlist_dns"
+    
+    # Use detected values or fall back to user-provided
+    local final_allowlist_ip="${DETECTED_ALLOWLIST_IP:-$user_allowlist_ip}"
+    local final_allowlist_dns="${DETECTED_ALLOWLIST_DNS:-$user_allowlist_dns}"
+    
+    # Validate configuration
+    if ! validate_allowlist_config "$final_allowlist_ip" "$user_allowlist_country" "$blacklist_country" "$final_allowlist_dns" "$allowlist_mode" "$allowlist_status"; then
+        echo -e "${RED}✗ Allowlist validation failed${NC}" >&2
+        return 1
+    fi
+    
+    # Configure in docker-compose file
+    if [[ -n "$compose_file" ]]; then
+        configure_allowlist_in_compose "$compose_file" "$use_allowlist" "$final_allowlist_ip" "$user_allowlist_country" "$blacklist_country" "$final_allowlist_dns" "$allowlist_mode" "$allowlist_status"
+    fi
+    
+    # Save to credentials file
+    if [[ -n "$creds_file" ]]; then
+        save_allowlist_to_credentials "$creds_file" "$final_allowlist_ip" "$user_allowlist_country" "$blacklist_country" "$final_allowlist_dns" "$use_allowlist" "$allowlist_mode" "$allowlist_status" "$ALLOWLIST_DETECTION_METHOD"
+    fi
+    
+    # Show summary
+    show_allowlist_summary "$final_allowlist_ip" "$user_allowlist_country" "$blacklist_country" "$final_allowlist_dns" "$use_allowlist"
+    
+    echo "" >&2
+    echo -e "${GREEN}✓ Allowlist configuration completed successfully${NC}" >&2
+    echo "" >&2
+    
+    return 0
+}
+
+# Function to get detected allowlist IP
+get_detected_allowlist_ip() {
+    echo "$DETECTED_ALLOWLIST_IP"
+}
+
+# Function to get detected allowlist DNS
+get_detected_allowlist_dns() {
+    echo "$DETECTED_ALLOWLIST_DNS"
+}
+
+# Function to get allowlist detection method
+get_allowlist_detection_method() {
+    echo "$ALLOWLIST_DETECTION_METHOD"
+}
+
+# If script is run directly, show usage or run tests
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    echo "BunkerWeb Allowlist Management Script"
+    echo ""
+    echo "This script is designed to be sourced by other scripts."
+    echo ""
+    echo "Available functions:"
+    echo "  manage_allowlist_configuration <ip> <country> <blacklist_country> <dns> <use> <mode> <status> <compose_file> <creds_file> <fqdn>"
+    echo "  auto_detect_allowlist <ip> <dns>"
+    echo "  validate_allowlist_config <ip> <country> <blacklist_country> <dns> <mode> <status>"
+    echo "  configure_allowlist_in_compose <compose_file> <use> <ip> <country> <blacklist_country> <dns> <mode> <status>"
+    echo "  get_detected_allowlist_ip"
+    echo "  get_detected_allowlist_dns"
+    echo "  get_allowlist_detection_method"
+    echo "  show_allowlist_summary <ip> <country> <blacklist_country> <dns> <use>"
+    echo ""
+    echo "Example usage:"
+    echo "  source helper_allowlist.sh"
+    echo "  manage_allowlist_configuration \"203.0.113.0/24\" \"US CA\" \"CN RU\" \"company.com\" \"yes\" \"block\" \"403\" \"docker-compose.yml\" \"credentials.txt\" \"example.com\""
+    echo ""
+    echo "Test functions:"
+    echo "  $0 test-detect    # Test SSH IP detection"
+    echo "  $0 test-validate  # Test validation functions"
+    
+    # Handle test commands
+    if [[ "$1" == "test-detect" ]]; then
+        echo ""
+        echo "=== Testing SSH IP Detection ==="
+        detect_ssh_connection_ip
+        auto_detect_allowlist "" ""
+        show_allowlist_summary "$DETECTED_ALLOWLIST_IP" "" "" "$DETECTED_ALLOWLIST_DNS" "yes"
+    elif [[ "$1" == "test-validate" ]]; then
+        echo ""
+        echo "=== Testing Validation Functions ==="
+        validate_allowlist_config "192.168.1.0/24 10.0.0.1 invalid.ip" "US CA XX" "CN RU YY" "example.com invalid..domain" "invalid_mode" "999"
+    fi
+fi
