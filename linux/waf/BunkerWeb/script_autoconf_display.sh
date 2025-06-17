@@ -18,7 +18,7 @@ set -e
 # Script directory and installation directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALL_DIR="/data/BunkerWeb"
-SETUP_MODE="automated"  # Default to automated mode
+SETUP_MODE="wizard"  # Default to wizard mode (changed from automated)
 
 # Default values (can be overridden by BunkerWeb.conf or command line)
 ADMIN_USERNAME="admin"
@@ -47,13 +47,48 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# Enhanced password generation function for admin password
+generate_secure_admin_password() {
+    # Generate a 12-character password with mixed case, numbers, and special characters
+    # Pattern: 3 uppercase + 3 lowercase + 3 numbers + 3 special chars, then shuffle
+    
+    local uppercase="ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    local lowercase="abcdefghijklmnopqrstuvwxyz"
+    local numbers="0123456789"
+    local special_chars="#$@!%*+=?"
+    
+    local password=""
+    
+    # Add 3 uppercase letters
+    for i in {1..3}; do
+        password+="${uppercase:$((RANDOM % ${#uppercase})):1}"
+    done
+    
+    # Add 3 lowercase letters
+    for i in {1..3}; do
+        password+="${lowercase:$((RANDOM % ${#lowercase})):1}"
+    done
+    
+    # Add 3 numbers
+    for i in {1..3}; do
+        password+="${numbers:$((RANDOM % ${#numbers})):1}"
+    done
+    
+    # Add 3 special characters
+    for i in {1..3}; do
+        password+="${special_chars:$((RANDOM % ${#special_chars})):1}"
+    done
+    
+    # Shuffle the password characters
+    echo "$password" | fold -w1 | shuf | tr -d '\n'
+}
+
 # Source the modular scripts
 source_modules() {
     local modules=(
         "helper_password_manager.sh"
         "helper_network_detection.sh" 
         "helper_template_processor.sh"
-        "helper_release_channel_manager.sh"
     )
     
     echo -e "${BLUE}Loading BunkerWeb modules...${NC}"
@@ -199,6 +234,183 @@ update_api_whitelist() {
     fi
 }
 
+# Function to configure automated vs wizard setup
+configure_setup_mode() {
+    local compose_file="$1"
+    local setup_mode="$2"
+    local admin_username="$3"
+    local admin_password="$4"
+    local flask_secret="$5"
+    
+    echo -e "${BLUE}Configuring setup mode: $setup_mode${NC}"
+    
+    if [[ "$setup_mode" == "automated" ]]; then
+        echo -e "${BLUE}Configuring automated setup with credentials...${NC}"
+        
+        # Enable automated setup in docker-compose.yml (uncomment the lines)
+        sed -i 's|# OVERRIDE_ADMIN_CREDS: "yes"|OVERRIDE_ADMIN_CREDS: "yes"|' "$compose_file"
+        sed -i 's|# ADMIN_USERNAME: "admin"|ADMIN_USERNAME: "'$admin_username'"|' "$compose_file"
+        sed -i 's|# ADMIN_PASSWORD: ".*"|ADMIN_PASSWORD: "'$admin_password'"|' "$compose_file"
+        sed -i 's|# FLASK_SECRET: ".*"|FLASK_SECRET: "'$flask_secret'"|' "$compose_file"
+        
+        echo -e "${GREEN}✓ Automated setup configured and enabled${NC}"
+        echo -e "${GREEN}✓ Admin credentials activated${NC}"
+        return 0
+    else
+        echo -e "${BLUE}Configuring setup wizard mode...${NC}"
+        
+        # Ensure OVERRIDE_ADMIN_CREDS is commented out or set to "no"
+        sed -i 's|OVERRIDE_ADMIN_CREDS: "yes"|# OVERRIDE_ADMIN_CREDS: "no"|' "$compose_file"
+        
+        # Keep the credentials in the file but commented for reference
+        sed -i 's|ADMIN_USERNAME: "'$admin_username'"|# ADMIN_USERNAME: "'$admin_username'"|' "$compose_file"
+        sed -i 's|ADMIN_PASSWORD: "'$admin_password'"|# ADMIN_PASSWORD: "'$admin_password'"|' "$compose_file"
+        sed -i 's|FLASK_SECRET: "'$flask_secret'"|# FLASK_SECRET: "'$flask_secret'"|' "$compose_file"
+        
+        # But keep them uncommented if they were already uncommented in the template
+        if grep -q "ADMIN_PASSWORD:" "$compose_file" && ! grep -q "# ADMIN_PASSWORD:" "$compose_file"; then
+            # Replace the placeholder with actual password but keep it uncommented
+            sed -i 's|ADMIN_PASSWORD: ".*"|ADMIN_PASSWORD: "'$admin_password'"|' "$compose_file"
+            sed -i 's|FLASK_SECRET: ".*"|FLASK_SECRET: "'$flask_secret'"|' "$compose_file"
+        fi
+        
+        echo -e "${GREEN}✓ Setup wizard mode enabled${NC}"
+        echo -e "${GREEN}✓ Credentials generated for manual setup${NC}"
+        return 0
+    fi
+}
+
+# Enhanced template processing function
+process_template_enhanced() {
+    local template_file="$1"
+    local compose_file="$2"
+    local mysql_password="$3"
+    local redis_password="$4"
+    local totp_secret="$5"
+    local admin_password="$6"
+    local flask_secret="$7"
+    local admin_username="$8"
+    local auto_cert_type="$9"
+    local auto_cert_contact="${10}"
+    local fqdn="${11}"
+    local server_name="${12}"
+    local docker_subnet="${13}"
+    local setup_mode="${14}"
+    local redis_enabled="${15:-yes}"
+    
+    echo -e "${BLUE}=================================================================================${NC}"
+    echo -e "${BLUE}                        ENHANCED TEMPLATE PROCESSING                        ${NC}"
+    echo -e "${BLUE}=================================================================================${NC}"
+    echo ""
+    
+    # Validate inputs
+    if [[ ! -f "$template_file" ]]; then
+        echo -e "${RED}✗ Template file not found: $template_file${NC}"
+        return 1
+    fi
+    
+    # Copy template to compose file
+    echo -e "${BLUE}Copying template to docker-compose.yml...${NC}"
+    if cp "$template_file" "$compose_file"; then
+        echo -e "${GREEN}✓ Template copied: $(basename "$template_file") → $(basename "$compose_file")${NC}"
+    else
+        echo -e "${RED}✗ Failed to copy template${NC}"
+        return 1
+    fi
+    
+    # Create backup
+    local backup_file="$compose_file.backup.$(date +%Y%m%d_%H%M%S)"
+    if cp "$compose_file" "$backup_file"; then
+        echo -e "${GREEN}✓ Backup created: $backup_file${NC}"
+    else
+        echo -e "${RED}✗ Failed to create backup${NC}"
+        return 1
+    fi
+    
+    echo -e "${BLUE}Processing template placeholders...${NC}"
+    
+    # Process all placeholders
+    local processing_errors=0
+    
+    # 1. Replace credential placeholders
+    if [[ -n "$mysql_password" ]]; then
+        sed -i "s|REPLACEME_MYSQL|$mysql_password|g" "$compose_file"
+        echo -e "${GREEN}✓ MySQL password updated${NC}"
+    fi
+    
+    if [[ "$redis_enabled" == "yes" && -n "$redis_password" ]]; then
+        sed -i "s|REPLACEME_REDIS_PASSWORD|$redis_password|g" "$compose_file"
+        echo -e "${GREEN}✓ Redis password updated${NC}"
+    else
+        sed -i "s|REPLACEME_REDIS_PASSWORD|disabled|g" "$compose_file"
+        echo -e "${GREEN}✓ Redis password set to disabled${NC}"
+    fi
+    
+    if [[ -n "$totp_secret" ]]; then
+        sed -i "s|REPLACEME_DEFAULT|$totp_secret|g" "$compose_file"
+        echo -e "${GREEN}✓ TOTP secret updated${NC}"
+    fi
+    
+    # 2. Handle network configuration
+    if [[ -n "$docker_subnet" ]]; then
+        local default_subnet="10.20.30.0/24"
+        if [[ "$docker_subnet" != "$default_subnet" ]]; then
+            sed -i "s|$default_subnet|$docker_subnet|g" "$compose_file"
+            echo -e "${GREEN}✓ Docker subnet updated to: $docker_subnet${NC}"
+        fi
+    fi
+    
+    # 3. Handle SSL configuration
+    if [[ -n "$auto_cert_type" ]]; then
+        sed -i "s|REPLACEME_AUTO_LETS_ENCRYPT|yes|g" "$compose_file"
+        sed -i "s|REPLACEME_EMAIL_LETS_ENCRYPT|$auto_cert_contact|g" "$compose_file"
+        echo -e "${GREEN}✓ SSL certificates configured ($auto_cert_type)${NC}"
+    else
+        sed -i "s|REPLACEME_AUTO_LETS_ENCRYPT|no|g" "$compose_file"
+        echo -e "${GREEN}✓ SSL certificates disabled${NC}"
+    fi
+    
+    # 4. Handle domain configuration
+    if [[ -n "$fqdn" ]]; then
+        sed -i "s|REPLACEME_DOMAIN|$fqdn|g" "$compose_file"
+        # Also update SERVER_NAME environment variable
+        sed -i "s|SERVER_NAME: \"\"|SERVER_NAME: \"$fqdn\"|g" "$compose_file"
+        echo -e "${GREEN}✓ Domain configured: $fqdn${NC}"
+    fi
+    
+    # 5. Configure setup mode and credentials
+    configure_setup_mode "$compose_file" "$setup_mode" "$admin_username" "$admin_password" "$flask_secret"
+    
+    # 6. Verify all placeholders are replaced
+    local remaining_placeholders=$(grep -o "REPLACEME_[A-Z_]*" "$compose_file" || true)
+    if [[ -n "$remaining_placeholders" ]]; then
+        echo -e "${YELLOW}⚠ Some placeholders remain: $remaining_placeholders${NC}"
+    else
+        echo -e "${GREEN}✓ All placeholders processed${NC}"
+    fi
+    
+    # 7. Validate Docker Compose syntax
+    local current_dir=$(pwd)
+    cd "$(dirname "$compose_file")"
+    if docker compose config >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ Docker Compose syntax is valid${NC}"
+        cd "$current_dir"
+    else
+        echo -e "${RED}✗ Docker Compose syntax error detected${NC}"
+        cd "$current_dir"
+        ((processing_errors++))
+    fi
+    
+    echo ""
+    if [[ $processing_errors -eq 0 ]]; then
+        echo -e "${GREEN}✓ Enhanced template processing completed successfully${NC}"
+        return 0
+    else
+        echo -e "${RED}✗ Template processing completed with $processing_errors errors${NC}"
+        return 1
+    fi
+}
+
 # Auto-detect FQDN if not provided
 detect_fqdn() {
     if [[ -n "$FQDN" ]]; then
@@ -259,12 +471,6 @@ load_configuration() {
         source "$config_file"
         echo -e "${GREEN}✓ Configuration loaded${NC}"
         
-        # Validate release channel
-        if ! validate_release_channel "$RELEASE_CHANNEL"; then
-            echo -e "${RED}Invalid RELEASE_CHANNEL in configuration file${NC}"
-            exit 1
-        fi
-        
         # Simple validation for SSL configuration
         if [[ -n "$AUTO_CERT_TYPE" ]]; then
             if [[ "$AUTO_CERT_CONTACT" == "me@example.com" ]] || [[ "$AUTO_CERT_CONTACT" == *"@example.com"* ]] || [[ "$AUTO_CERT_CONTACT" == *"@yourdomain.com"* ]]; then
@@ -299,16 +505,11 @@ show_usage() {
     echo -e "  --type integrated   Use template_ui_integrated_display.yml"
     echo ""
     echo -e "${YELLOW}Optional Parameters:${NC}"
-    echo -e "  --wizard            Enable setup wizard mode (default: automated setup)"
+    echo -e "  --automated         Enable automated setup (skip wizard)"
+    echo -e "  --wizard            Enable setup wizard mode (default)"
     echo -e "  --admin-name NAME   Set admin username"
     echo -e "  --FQDN DOMAIN       Set Fully Qualified Domain Name"
     echo -e "  --force             Skip configuration validation"
-    echo ""
-    echo -e "${YELLOW}Release Channel Options:${NC}"
-    echo -e "  --release-channel latest   Use stable releases (recommended for production)"
-    echo -e "  --release-channel RC       Use release candidates (for testing)"
-    echo -e "  --release-channel nightly  Use development builds (hardcore testers only)"
-    echo -e "  --release-channel X.Y.Z    Pin to specific version (e.g., 1.6.1, 1.5.4)"
     echo ""
     echo -e "${YELLOW}Network Configuration:${NC}"
     echo -e "  --private-networks \"NET1 NET2\"  Specify existing networks to avoid"
@@ -327,11 +528,10 @@ show_usage() {
     echo -e "  -h, --help          Show this help message"
     echo ""
     echo -e "${BLUE}Examples:${NC}"
-    echo -e "  sudo $0 --type autoconf"
-    echo -e "  sudo $0 --type autoconf --release-channel RC"
-    echo -e "  sudo $0 --type autoconf --release-channel 1.6.1"
-    echo -e "  sudo $0 --type autoconf --release-channel nightly --private-networks \"192.168.1.0/24\""
-    echo -e "  sudo $0 --type autoconf --FQDN bunkerweb.example.com --release-channel latest"
+    echo -e "  sudo $0 --type autoconf                                    # Setup wizard mode"
+    echo -e "  sudo $0 --type autoconf --automated                       # Automated setup"
+    echo -e "  sudo $0 --type autoconf --private-networks \"192.168.1.0/24\""
+    echo -e "  sudo $0 --type autoconf --FQDN bunkerweb.example.com"
     echo ""
 }
 
@@ -346,6 +546,10 @@ parse_arguments() {
                 DEPLOYMENT_TYPE="$2"
                 shift 2
                 ;;
+            --automated)
+                SETUP_MODE="automated"
+                shift
+                ;;
             --wizard)
                 SETUP_MODE="wizard"
                 shift
@@ -356,13 +560,6 @@ parse_arguments() {
                 ;;
             --FQDN)
                 FQDN="$2"
-                shift 2
-                ;;
-            --release-channel)
-                RELEASE_CHANNEL="$2"
-                if ! validate_release_channel "$RELEASE_CHANNEL"; then
-                    exit 1
-                fi
                 shift 2
                 ;;
             --private-networks)
@@ -497,6 +694,157 @@ setup_directories() {
     echo -e "${GREEN}✓ All directories created and permissions properly set${NC}"
 }
 
+# Enhanced credential management
+manage_enhanced_credentials() {
+    local creds_file="$1"
+    local redis_enabled="$2"
+    local deployment_name="$3"
+    local template_file="$4"
+    local setup_mode="$5"
+    local fqdn="$6"
+    local server_name="$7"
+    local docker_subnet="$8"
+    local networks_avoided="$9"
+    
+    echo -e "${BLUE}=================================================================================${NC}"
+    echo -e "${BLUE}                        ENHANCED CREDENTIAL MANAGEMENT                        ${NC}"
+    echo -e "${BLUE}=================================================================================${NC}"
+    echo ""
+    
+    # Global credential variables
+    local mysql_password=""
+    local redis_password=""
+    local totp_secret=""
+    local admin_password=""
+    local flask_secret=""
+    local admin_username="$ADMIN_USERNAME"
+    
+    # Try to load existing credentials
+    if [[ -f "$creds_file" ]]; then
+        echo -e "${BLUE}Loading existing credentials...${NC}"
+        mysql_password=$(grep "MySQL Database Password:" "$creds_file" 2>/dev/null | cut -d' ' -f4 || echo "")
+        redis_password=$(grep "Redis Password:" "$creds_file" 2>/dev/null | cut -d' ' -f3 || echo "")
+        totp_secret=$(grep "TOTP Secret Key:" "$creds_file" 2>/dev/null | cut -d' ' -f4 || echo "")
+        admin_password=$(grep "Admin Password:" "$creds_file" 2>/dev/null | cut -d' ' -f3 || echo "")
+        flask_secret=$(grep "Flask Secret:" "$creds_file" 2>/dev/null | cut -d' ' -f3 || echo "")
+        admin_username=$(grep "Admin Username:" "$creds_file" 2>/dev/null | cut -d' ' -f3 || echo "admin")
+        
+        local loaded_count=0
+        [[ -n "$mysql_password" ]] && ((loaded_count++))
+        [[ -n "$redis_password" && "$redis_enabled" == "yes" ]] && ((loaded_count++))
+        [[ -n "$totp_secret" ]] && ((loaded_count++))
+        [[ -n "$admin_password" ]] && ((loaded_count++))
+        [[ -n "$flask_secret" ]] && ((loaded_count++))
+        
+        echo -e "${GREEN}✓ Loaded $loaded_count existing credentials${NC}"
+    fi
+    
+    # Generate missing credentials
+    echo -e "${BLUE}Generating missing credentials...${NC}"
+    
+    if [[ -z "$mysql_password" ]]; then
+        mysql_password=$(openssl rand -base64 33)
+        echo -e "${GREEN}✓ Generated MySQL password${NC}"
+    fi
+    
+    if [[ "$redis_enabled" == "yes" && -z "$redis_password" ]]; then
+        redis_password=$(openssl rand -base64 33)
+        echo -e "${GREEN}✓ Generated Redis password${NC}"
+    fi
+    
+    if [[ -z "$totp_secret" ]]; then
+        totp_secret=$(openssl rand -base64 33)
+        echo -e "${GREEN}✓ Generated TOTP secret${NC}"
+    fi
+    
+    if [[ -z "$admin_password" ]]; then
+        admin_password=$(generate_secure_admin_password)
+        echo -e "${GREEN}✓ Generated secure admin password (12 chars with mixed case, numbers, special chars)${NC}"
+    fi
+    
+    if [[ -z "$flask_secret" ]]; then
+        flask_secret=$(openssl rand -base64 33)
+        echo -e "${GREEN}✓ Generated Flask secret${NC}"
+    fi
+    
+    # Save credentials
+    echo -e "${BLUE}Saving credentials to: $creds_file${NC}"
+    
+    cat > "$creds_file" << EOF
+# BunkerWeb Generated Credentials
+# Deployment Type: ${deployment_name:-"Unknown"}
+# Template Used: ${template_file:-"Unknown"}
+# Setup Mode: ${setup_mode:-"Unknown"}
+# Generated on: $(date)
+# Keep this file secure and backed up!
+
+MySQL Database Password: $mysql_password
+TOTP Secret Key: $totp_secret
+$(if [[ "$redis_enabled" == "yes" ]]; then echo "Redis Password: $redis_password"; fi)
+
+# Web UI Setup
+Admin Username: $admin_username
+Admin Password: $admin_password
+Flask Secret: $flask_secret
+
+# Domain Configuration
+FQDN: ${fqdn:-"localhost"}
+Server Name: ${server_name:-"$fqdn"}
+
+# Network Configuration
+$(if [[ -n "$docker_subnet" ]]; then echo "Docker Subnet: $docker_subnet"; fi)
+$(if [[ -n "$networks_avoided" ]]; then echo "Private Networks Avoided: $networks_avoided"; fi)
+
+# Setup Mode Information
+Setup Mode: $setup_mode
+$(if [[ "$setup_mode" == "wizard" ]]; then
+    echo "# Setup Wizard: Use the credentials above during initial setup"
+    echo "# Access: http://$(hostname -I | awk '{print $1}') and complete the wizard"
+else
+    echo "# Automated Setup: Login directly with the credentials above"
+    echo "# Access: http://$(hostname -I | awk '{print $1}') and login"
+fi)
+
+# Connection Strings
+# Database: mariadb+pymysql://bunkerweb:$mysql_password@bw-db:3306/db
+$(if [[ "$redis_enabled" == "yes" ]]; then
+echo "# Redis: redis://:$redis_password@bw-redis:6379/0"
+echo "# Redis CLI: docker exec -it bw-redis redis-cli -a '$redis_password'"
+fi)
+
+# Security Information:
+# MySQL passwords: 264-bit entropy (~44 characters)
+# Admin password: 12 characters with uppercase, lowercase, numbers, and special characters
+# All other secrets: 264-bit entropy for maximum security
+EOF
+    
+    chmod 600 "$creds_file"
+    echo -e "${GREEN}✓ Credentials saved successfully${NC}"
+    
+    # Export credentials for use in template processing
+    export MYSQL_PASSWORD="$mysql_password"
+    export REDIS_PASSWORD="$redis_password"
+    export TOTP_SECRET="$totp_secret"
+    export ADMIN_PASSWORD="$admin_password"
+    export FLASK_SECRET="$flask_secret"
+    export ADMIN_USERNAME="$admin_username"
+    
+    # Show summary
+    echo -e "${BLUE}Credential Summary:${NC}"
+    echo -e "${GREEN}• Admin Username: $admin_username${NC}"
+    echo -e "${GREEN}• Admin Password: ${admin_password:0:4}... (${#admin_password} chars)${NC}"
+    echo -e "${GREEN}• MySQL Password: ${mysql_password:0:8}... (${#mysql_password} chars)${NC}"
+    echo -e "${GREEN}• TOTP Secret: ${totp_secret:0:8}... (${#totp_secret} chars)${NC}"
+    echo -e "${GREEN}• Flask Secret: ${flask_secret:0:8}... (${#flask_secret} chars)${NC}"
+    
+    if [[ "$redis_enabled" == "yes" ]]; then
+        echo -e "${GREEN}• Redis Password: ${redis_password:0:8}... (${#redis_password} chars)${NC}"
+    fi
+    
+    echo ""
+    return 0
+}
+
 # Display setup summary
 show_setup_summary() {
     echo ""
@@ -509,12 +857,11 @@ show_setup_summary() {
     echo -e "${YELLOW}Template Used:${NC} $TEMPLATE_FILE"
     echo -e "${YELLOW}Setup Mode:${NC} $SETUP_MODE"
     echo -e "${YELLOW}Domain (FQDN):${NC} $FQDN"
-    echo -e "${YELLOW}Release Channel:${NC} $RELEASE_CHANNEL ($(get_image_tag_for_channel "$RELEASE_CHANNEL"))"
     echo -e "${YELLOW}Redis Enabled:${NC} $REDIS_ENABLED"
     echo -e "${YELLOW}Network Detection:${NC} $AUTO_DETECT_NETWORK_CONFLICTS"
     
-    local detected_subnet=$(get_detected_subnet)
-    if [[ -n "$detected_subnet" ]]; then
+    local detected_subnet=$(get_detected_subnet 2>/dev/null || echo "Default")
+    if [[ -n "$detected_subnet" && "$detected_subnet" != "Default" ]]; then
         echo -e "${YELLOW}Docker Subnet:${NC} $detected_subnet"
     fi
     
@@ -532,8 +879,14 @@ show_setup_summary() {
         echo -e "${GREEN}2. Access web interface: http://$(hostname -I | awk '{print $1}')${NC}"
         echo -e "${GREEN}3. Login with credentials from: $INSTALL_DIR/credentials.txt${NC}"
     else
-        echo -e "${GREEN}2. Complete setup wizard: http://$(hostname -I | awk '{print $1}')/setup${NC}"
+        echo -e "${GREEN}2. Complete setup wizard: http://$(hostname -I | awk '{print $1}')${NC}"
         echo -e "${GREEN}3. Use pre-generated credentials from: $INSTALL_DIR/credentials.txt${NC}"
+        echo ""
+        echo -e "${BLUE}Wizard Setup Information:${NC}"
+        echo -e "${GREEN}• Username: $ADMIN_USERNAME${NC}"
+        echo -e "${GREEN}• Password: $ADMIN_PASSWORD${NC}"
+        echo -e "${YELLOW}• The setup wizard will guide you through initial configuration${NC}"
+        echo -e "${YELLOW}• All necessary credentials are pre-generated and ready to use${NC}"
     fi
     
     if [[ -n "$AUTO_CERT_TYPE" ]]; then
@@ -544,31 +897,12 @@ show_setup_summary() {
         echo -e "${GREEN}• Check certificate status after a few minutes${NC}"
     fi
     
-    # Show release channel specific warnings
-    case "$RELEASE_CHANNEL" in
-        "RC")
-            echo ""
-            echo -e "${YELLOW}⚠ RELEASE CANDIDATE WARNING:${NC}"
-            echo -e "${YELLOW}• You are using pre-release software${NC}"
-            echo -e "${YELLOW}• Some features may be experimental${NC}"
-            echo -e "${YELLOW}• Monitor logs closely for any issues${NC}"
-            ;;
-        "nightly")
-            echo ""
-            echo -e "${RED}⚠ NIGHTLY BUILD WARNING:${NC}"
-            echo -e "${RED}• You are using development builds - may be unstable!${NC}"
-            echo -e "${RED}• Features may change or break between updates${NC}"
-            echo -e "${RED}• DO NOT use in production environments${NC}"
-            echo -e "${RED}• Report issues to the BunkerWeb development team${NC}"
-            ;;
-    esac
-    
     echo ""
     echo -e "${BLUE}Troubleshooting:${NC}"
     echo -e "${GREEN}• Check logs: docker compose logs -f${NC}"
     echo -e "${GREEN}• Check API connectivity: docker compose logs bunkerweb | grep API${NC}"
     echo -e "${GREEN}• Monitor Let's Encrypt: docker compose logs bw-scheduler | grep -i lets${NC}"
-    echo -e "${GREEN}• Check image versions: docker compose images${NC}"
+    echo -e "${GREEN}• View credentials: cat $INSTALL_DIR/credentials.txt${NC}"
     
     echo ""
     echo -e "${GREEN}Setup completed successfully!${NC}"
@@ -578,7 +912,7 @@ show_setup_summary() {
 main() {
     echo -e "${BLUE}================================================${NC}"
     echo -e "${BLUE}      BunkerWeb Enhanced Setup Script${NC}"
-    echo -e "${BLUE}       with Release Channel Support${NC}"
+    echo -e "${BLUE}     with Secure Password Generation${NC}"
     echo -e "${BLUE}================================================${NC}"
     echo ""
     
@@ -601,9 +935,6 @@ main() {
     # Load configuration
     load_configuration
     
-    # Show release channel information
-    show_channel_info "$RELEASE_CHANNEL"
-    
     # Auto-detect FQDN
     detect_fqdn
     
@@ -625,56 +956,48 @@ main() {
     echo -e "${GREEN}• Template File: $TEMPLATE_FILE${NC}"
     echo -e "${GREEN}• Setup Mode: $SETUP_MODE${NC}"
     echo -e "${GREEN}• Domain (FQDN): $FQDN${NC}"
-    echo -e "${GREEN}• Release Channel: $RELEASE_CHANNEL ($(get_image_tag_for_channel "$RELEASE_CHANNEL"))${NC}"
     echo -e "${GREEN}• Redis Enabled: $REDIS_ENABLED${NC}"
     echo -e "${GREEN}• Network Detection: $AUTO_DETECT_NETWORK_CONFLICTS${NC}"
     echo ""
     
     # 1. Network Conflict Detection
     echo -e "${BLUE}Step 1: Network Conflict Detection${NC}"
-    if ! detect_network_conflicts "$AUTO_DETECT_NETWORK_CONFLICTS" "$PRIVATE_NETWORKS_ALREADY_IN_USE" "$PREFERRED_DOCKER_SUBNET"; then
+    if ! detect_network_conflicts "$AUTO_DETECT_NETWORK_CONFLICTS" "$PRIVATE_NETWORKS_ALREADY_IN_USE" "$PREFERRED_DOCKER_SUBNET" 2>/dev/null; then
         echo -e "${RED}✗ Network detection failed${NC}"
         exit 1
     fi
-    local docker_subnet=$(get_detected_subnet)
+    local docker_subnet=$(get_detected_subnet 2>/dev/null || echo "")
     
     # 2. Build Comprehensive API Whitelist
     echo -e "${BLUE}Step 2: API Whitelist Auto-Detection${NC}"
     local api_whitelist=$(build_comprehensive_api_whitelist "$docker_subnet")
     
-    # 3. Credential Management  
-    echo -e "${BLUE}Step 3: Credential Management${NC}"
-    if ! manage_credentials "$creds_file" "$REDIS_ENABLED" "$DEPLOYMENT_NAME" "$TEMPLATE_FILE" "$SETUP_MODE" "$FQDN" "$SERVER_NAME" "$docker_subnet" "$PRIVATE_NETWORKS_ALREADY_IN_USE"; then
+    # 3. Enhanced Credential Management  
+    echo -e "${BLUE}Step 3: Enhanced Credential Management${NC}"
+    if ! manage_enhanced_credentials "$creds_file" "$REDIS_ENABLED" "$DEPLOYMENT_NAME" "$TEMPLATE_FILE" "$SETUP_MODE" "$FQDN" "$SERVER_NAME" "$docker_subnet" "$PRIVATE_NETWORKS_ALREADY_IN_USE"; then
         echo -e "${RED}✗ Credential management failed${NC}"
         exit 1
     fi
     
-    # Load the generated passwords
-    eval "$(get_passwords)"
-    
-    # 4. Get the appropriate Docker image tag for the release channel
-    local image_tag=$(get_image_tag_for_channel "$RELEASE_CHANNEL")
-    echo -e "${BLUE}Using Docker image tag: $image_tag for release channel: $RELEASE_CHANNEL${NC}"
-    
-    # 5. Template Processing with Release Channel Support
-    echo -e "${BLUE}Step 4: Template Processing with Release Channel Support${NC}"
-    if ! process_template "$template_path" "$compose_file" "$MYSQL_PASSWORD" "$REDIS_PASSWORD" "$TOTP_SECRET" "$ADMIN_PASSWORD" "$FLASK_SECRET" "$ADMIN_USERNAME" "$AUTO_CERT_TYPE" "$AUTO_CERT_CONTACT" "$FQDN" "$SERVER_NAME" "$docker_subnet" "$SETUP_MODE" "$REDIS_ENABLED" "$image_tag"; then
+    # 4. Enhanced Template Processing
+    echo -e "${BLUE}Step 4: Enhanced Template Processing${NC}"
+    if ! process_template_enhanced "$template_path" "$compose_file" "$MYSQL_PASSWORD" "$REDIS_PASSWORD" "$TOTP_SECRET" "$ADMIN_PASSWORD" "$FLASK_SECRET" "$ADMIN_USERNAME" "$AUTO_CERT_TYPE" "$AUTO_CERT_CONTACT" "$FQDN" "$SERVER_NAME" "$docker_subnet" "$SETUP_MODE" "$REDIS_ENABLED"; then
         echo -e "${RED}✗ Template processing failed${NC}"
         exit 1
     fi
     
-    # 6. Update API Whitelist
+    # 5. Update API Whitelist
     echo -e "${BLUE}Step 5: API Whitelist Configuration${NC}"
     if ! update_api_whitelist "$compose_file" "$api_whitelist"; then
         echo -e "${RED}✗ API whitelist update failed${NC}"
         exit 1
     fi
     
-    # 7. Directory Setup
+    # 6. Directory Setup
     echo -e "${BLUE}Step 6: Directory Setup${NC}"
     setup_directories
     
-    # 8. Final Summary
+    # 7. Final Summary
     show_setup_summary
 }
 
