@@ -72,6 +72,36 @@ download_file() {
     return 1
 }
 
+# Process a single file download
+process_file() {
+    local file="$1"
+    local url="$2"
+    local force_download="${3:-no}"
+    
+    echo -n "Processing $file... "
+    
+    # Skip if file already exists and is not empty (unless force download)
+    if [[ "$force_download" != "yes" && -f "$file" && -s "$file" ]]; then
+        echo "SKIPPED (exists)"
+        return 2  # Return 2 for skipped
+    fi
+    
+    # Download the file
+    if download_file "$url" "$file"; then
+        if [[ -f "$file" && -s "$file" ]]; then
+            echo "SUCCESS"
+            return 0  # Success
+        else
+            echo "FAILED (empty file)"
+            rm -f "$file" 2>/dev/null || true
+            return 1  # Failed
+        fi
+    else
+        echo "FAILED (download error)"
+        return 1  # Failed
+    fi
+}
+
 # Main execution
 main() {
     log_step "Starting BunkerWeb deployment..."
@@ -82,7 +112,7 @@ main() {
     cd "/data/BunkerWeb"
     
     # Base URL for the repository
-    BASE_URL="https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/refs/heads/main/linux/waf/BunkerWeb"
+    local BASE_URL="https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/refs/heads/main/linux/waf/BunkerWeb"
     
     # Check download tools
     if ! command_exists curl && ! command_exists wget; then
@@ -94,7 +124,8 @@ main() {
     log_step "Checking for BunkerWeb.conf..."
     if [[ -f "/root/BunkerWeb.conf" ]]; then
         # Check if file exists but is empty or contains only whitespace/comments
-        local non_empty_content=$(grep -v '^[[:space:]]*$' /root/BunkerWeb.conf 2>/dev/null | grep -v '^[[:space:]]*#' | head -1)
+        local non_empty_content=""
+        non_empty_content=$(grep -v '^[[:space:]]*$' /root/BunkerWeb.conf 2>/dev/null | grep -v '^[[:space:]]*#' | head -1 || true)
         if [[ -z "$non_empty_content" ]]; then
             log_info "Found empty BunkerWeb.conf - downloading template"
             if download_file "$BASE_URL/BunkerWeb.conf" "/root/BunkerWeb.conf"; then
@@ -131,7 +162,7 @@ main() {
     log_step "Downloading BunkerWeb project files..."
     
     # Define files to download from main repository
-    FILES=(
+    declare -a FILES=(
         "script_autoconf_display.sh"
         "script_password_reset_display.sh"
         "template_autoconf_display.yml"
@@ -153,8 +184,8 @@ main() {
     )
     
     # Special files with different URLs
-    SPECIAL_FILES=(
-        "helper_fqdn.sh:https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/refs/heads/main/linux/deploy_scripts/helper-scripts/helper_fqdn.sh"
+    declare -A SPECIAL_FILES=(
+        ["helper_fqdn.sh"]="https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/refs/heads/main/linux/deploy_scripts/helper-scripts/helper_fqdn.sh"
     )
     
     local downloaded_count=0
@@ -163,59 +194,38 @@ main() {
     
     # Process regular files from main repository
     for file in "${FILES[@]}"; do
-        echo -n "Processing $file... "
+        local result=0
+        process_file "$file" "$BASE_URL/$file" || result=$?
         
-        # Skip if file already exists and is not empty
-        if [[ -f "$file" && -s "$file" ]]; then
-            echo "SKIPPED (exists)"
-            ((skipped_count++))
-            continue
-        fi
-        
-        # Download the file
-        if download_file "$BASE_URL/$file" "$file"; then
-            if [[ -f "$file" && -s "$file" ]]; then
-                echo "SUCCESS"
-                ((downloaded_count++))
-            else
-                echo "FAILED (empty file)"
-                ((failed_count++))
-                rm -f "$file"
-            fi
-        else
-            echo "FAILED (download error)"
-            ((failed_count++))
-        fi
+        case $result in
+            0) ((downloaded_count++)) ;;
+            1) ((failed_count++)) ;;
+            2) ((skipped_count++)) ;;
+        esac
     done
     
     # Process special files with custom URLs
-    for file_info in "${SPECIAL_FILES[@]}"; do
-        local file="${file_info%%:*}"
-        local url="${file_info#*:}"
+    for file in "${!SPECIAL_FILES[@]}"; do
+        local url="${SPECIAL_FILES[$file]}"
+        local result=0
         
         echo -n "Processing $file (special URL)... "
+        process_file "$file" "$url" || result=$?
         
-        # Skip if file already exists and is not empty
-        if [[ -f "$file" && -s "$file" ]]; then
-            echo "SKIPPED (exists)"
-            ((skipped_count++))
-            continue
-        fi
-        
-        # Download the file
-        if download_file "$url" "$file"; then
-            if [[ -f "$file" && -s "$file" ]]; then
+        case $result in
+            0) 
                 echo "SUCCESS"
-                ((downloaded_count++))
-            else
-                echo "FAILED (empty file)"
-                ((failed_count++))
-                rm -f "$file"
-            fi
-        else
-            echo "FAILED (download error)"
-            ((failed_count++))
-        fi
+                ((downloaded_count++)) 
+                ;;
+            1) 
+                echo "FAILED"
+                ((failed_count++)) 
+                ;;
+            2) 
+                echo "SKIPPED (exists)"
+                ((skipped_count++)) 
+                ;;
+        esac
     done
     
     # Report statistics
@@ -230,12 +240,12 @@ main() {
     
     # Make shell scripts executable
     log_step "Setting executable permissions..."
-    chmod +x *.sh 2>/dev/null || true
+    find . -name "*.sh" -type f -exec chmod +x {} \; 2>/dev/null || true
     log_success "✓ Made scripts executable"
     
     # Verify critical files
     log_step "Verifying critical files..."
-    local critical_files=(
+    declare -a critical_files=(
         "script_autoconf_display.sh"
         "helper_release_channel_manager.sh"
         "helper_fqdn.sh"
@@ -249,7 +259,7 @@ main() {
             echo "✓ $file"
         else
             echo "✗ Missing: $file"
-            ((missing_critical++))
+            missing_critical=$((missing_critical + 1))
         fi
     done
     
@@ -261,8 +271,14 @@ main() {
     
     # Test release channel manager
     if [[ -f "helper_release_channel_manager.sh" && -x "helper_release_channel_manager.sh" ]]; then
-        if source helper_release_channel_manager.sh >/dev/null 2>&1 && validate_release_channel "latest" >/dev/null 2>&1; then
-            log_success "✓ Release channel system ready"
+        if source helper_release_channel_manager.sh >/dev/null 2>&1; then
+            if validate_release_channel "latest" >/dev/null 2>&1; then
+                log_success "✓ Release channel system ready"
+            else
+                log_warning "⚠ Release channel validation failed"
+            fi
+        else
+            log_warning "⚠ Release channel manager failed to load"
         fi
     fi
     
@@ -270,6 +286,9 @@ main() {
     echo ""
     echo "Files downloaded to: /data/BunkerWeb"
     echo "Configuration: /root/BunkerWeb.conf"
+    echo ""
+    echo "Downloaded files:"
+    ls -la /data/BunkerWeb/ | grep -v "^total" | grep -v "^d"
     echo ""
     echo "Next steps:"
     echo "  1. Edit configuration: nano /root/BunkerWeb.conf"
