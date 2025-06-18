@@ -53,6 +53,64 @@ replace_placeholder() {
     fi
 }
 
+# NEW: Function to replace Docker image tag placeholders
+replace_image_tag_placeholders() {
+    local compose_file="$1"
+    local image_tag="$2"
+    local description="${3:-Docker image tags}"
+    
+    echo -e "${BLUE}Replacing $description with: $image_tag${NC}" >&2
+    
+    # Check if file exists
+    if [[ ! -f "$compose_file" ]]; then
+        echo -e "${RED}✗ File not found: $compose_file${NC}" >&2
+        return 1
+    fi
+    
+    if [[ -z "$image_tag" ]]; then
+        echo -e "${RED}✗ Image tag cannot be empty${NC}" >&2
+        return 1
+    fi
+    
+    # Create backup before making changes
+    local backup_file="$compose_file.backup.image-tags.$(date +%Y%m%d_%H%M%S)"
+    cp "$compose_file" "$backup_file"
+    
+    # Count existing REPLACEME_TAG placeholders
+    local tag_count=$(grep -c "REPLACEME_TAG" "$compose_file" 2>/dev/null || echo "0")
+    echo -e "${BLUE}Found $tag_count image tag placeholders to replace${NC}" >&2
+    
+    # Escape special characters for sed
+    local escaped_tag=$(printf '%s\n' "$image_tag" | sed 's/[[\.*^$()+?{|]/\\&/g')
+    
+    # Replace REPLACEME_TAG with the actual tag
+    if sed -i "s|REPLACEME_TAG|$escaped_tag|g" "$compose_file"; then
+        echo -e "${GREEN}✓ $description updated to: $image_tag${NC}" >&2
+        
+        # Verify the replacement worked
+        local remaining_tags=$(grep -c "REPLACEME_TAG" "$compose_file" 2>/dev/null || echo "0")
+        
+        if [[ $remaining_tags -eq 0 ]]; then
+            echo -e "${GREEN}✓ All image tag placeholders successfully replaced${NC}" >&2
+            
+            # Show which images were updated
+            echo -e "${BLUE}Updated images:${NC}" >&2
+            grep "image: bunkerity" "$compose_file" | sed 's/^\s*/  /' >&2
+            
+            REPLACED_PLACEHOLDERS+=("REPLACEME_TAG")
+            return 0
+        else
+            echo -e "${YELLOW}⚠ Some REPLACEME_TAG placeholders may remain: $remaining_tags${NC}" >&2
+            FAILED_REPLACEMENTS+=("REPLACEME_TAG")
+            return 1
+        fi
+    else
+        echo -e "${RED}✗ Failed to replace image tags${NC}" >&2
+        FAILED_REPLACEMENTS+=("REPLACEME_TAG")
+        return 1
+    fi
+}
+
 # Function to replace all credential placeholders
 replace_credential_placeholders() {
     local compose_file="$1"
@@ -231,43 +289,6 @@ replace_network_placeholders() {
     fi
 }
 
-# Function to replace image tag placeholders
-replace_image_tag_placeholders() {
-    local compose_file="$1"
-    local image_tag="$2"
-    
-    echo -e "${BLUE}Replacing Docker image tags with: $image_tag...${NC}" >&2
-    
-    # Check if REPLACEME_TAG exists in the file
-    if ! grep -q "REPLACEME_TAG" "$compose_file"; then
-        echo -e "${YELLOW}⚠ No REPLACEME_TAG placeholders found in $compose_file${NC}" >&2
-        return 0  # Not an error, just no placeholders to replace
-    fi
-    
-    # Replace REPLACEME_TAG with the actual image tag using sed
-    if sed -i "s/REPLACEME_TAG/$image_tag/g" "$compose_file"; then
-        echo -e "${GREEN}✓ Docker image tags updated to: $image_tag${NC}" >&2
-        
-        # Verify the replacement worked
-        local remaining_tags=$(grep -c "REPLACEME_TAG" "$compose_file" 2>/dev/null || echo "0")
-        
-        if [[ $remaining_tags -eq 0 ]]; then
-            echo -e "${GREEN}✓ All REPLACEME_TAG placeholders successfully replaced${NC}" >&2
-            # Update tracking arrays
-            REPLACED_PLACEHOLDERS+=("REPLACEME_TAG")
-            return 0
-        else
-            echo -e "${YELLOW}⚠ Some REPLACEME_TAG placeholders may remain: $remaining_tags${NC}" >&2
-            FAILED_REPLACEMENTS+=("REPLACEME_TAG")
-            return 1
-        fi
-    else
-        echo -e "${RED}✗ Failed to replace REPLACEME_TAG placeholders${NC}" >&2
-        FAILED_REPLACEMENTS+=("REPLACEME_TAG")
-        return 1
-    fi
-}
-
 # Function to enable/disable automated admin credentials
 configure_automated_setup() {
     local compose_file="$1"
@@ -380,8 +401,8 @@ show_replacement_summary() {
     fi
 }
 
-# Main function to process a template file completely
-process_template() {
+# NEW: Main function to process a template file completely with release channel support
+process_template_with_release_channel() {
     local template_file="$1"
     local compose_file="$2"
     local mysql_password="$3"
@@ -397,20 +418,26 @@ process_template() {
     local docker_subnet="${13}"
     local setup_mode="${14}"
     local redis_enabled="${15:-yes}"
-    local image_tag="${16:-latest}"
+    local release_channel="${16:-latest}"
+    local image_tag="${17}"
     
     # Clear tracking arrays
     REPLACED_PLACEHOLDERS=()
     FAILED_REPLACEMENTS=()
     
     echo -e "${BLUE}=================================================================================${NC}" >&2
-    echo -e "${BLUE}                        TEMPLATE PROCESSING                        ${NC}" >&2
+    echo -e "${BLUE}                 TEMPLATE PROCESSING WITH RELEASE CHANNEL                 ${NC}" >&2
     echo -e "${BLUE}=================================================================================${NC}" >&2
     echo "" >&2
     
     # Validate inputs
     if [[ ! -f "$template_file" ]]; then
         echo -e "${RED}✗ Template file not found: $template_file${NC}" >&2
+        return 1
+    fi
+    
+    if [[ -z "$image_tag" ]]; then
+        echo -e "${RED}✗ Image tag is required${NC}" >&2
         return 1
     fi
     
@@ -441,32 +468,41 @@ process_template() {
     # Process replacements step by step
     local processing_errors=0
     
-    # 1. Replace image tag placeholders first (since everything depends on this)
-    if ! replace_image_tag_placeholders "$compose_file" "$image_tag"; then
+    # 1. NEW: Replace Docker image tags first
+    echo -e "${BLUE}1. Replacing Docker image tags...${NC}" >&2
+    if ! replace_image_tag_placeholders "$compose_file" "$image_tag" "Docker image tags"; then
         ((processing_errors++))
+        echo -e "${RED}✗ Failed to replace Docker image tags${NC}" >&2
+    else
+        echo -e "${GREEN}✓ Docker image tags updated to: $image_tag (release channel: $release_channel)${NC}" >&2
     fi
     
     # 2. Replace network placeholders (if needed)
+    echo -e "${BLUE}2. Replacing network placeholders...${NC}" >&2
     if ! replace_network_placeholders "$compose_file" "$docker_subnet"; then
         ((processing_errors++))
     fi
     
     # 3. Replace credential placeholders
+    echo -e "${BLUE}3. Replacing credential placeholders...${NC}" >&2
     if ! replace_credential_placeholders "$compose_file" "$mysql_password" "$redis_password" "$totp_secret" "$admin_password" "$flask_secret" "$redis_enabled"; then
         ((processing_errors++))
     fi
     
     # 4. Replace SSL/domain placeholders
+    echo -e "${BLUE}4. Replacing SSL/domain placeholders...${NC}" >&2
     if ! replace_ssl_placeholders "$compose_file" "$auto_cert_type" "$auto_cert_contact" "$fqdn" "$server_name"; then
         ((processing_errors++))
     fi
     
     # 5. Configure automated setup if requested
+    echo -e "${BLUE}5. Configuring setup mode...${NC}" >&2
     if ! configure_automated_setup "$compose_file" "$setup_mode" "$admin_username" "$admin_password" "$flask_secret"; then
         ((processing_errors++))
     fi
     
     # 6. Verify all placeholders are replaced
+    echo -e "${BLUE}6. Verifying placeholder replacement...${NC}" >&2
     if ! verify_placeholder_replacement "$compose_file"; then
         echo -e "${YELLOW}⚠ Restoring backup due to placeholder issues...${NC}" >&2
         cp "$backup_file" "$compose_file"
@@ -474,6 +510,7 @@ process_template() {
     fi
     
     # 7. Validate Docker Compose syntax
+    echo -e "${BLUE}7. Validating Docker Compose syntax...${NC}" >&2
     if ! validate_compose_syntax "$compose_file"; then
         echo -e "${YELLOW}⚠ Compose syntax validation failed${NC}" >&2
         ((processing_errors++))
@@ -484,7 +521,9 @@ process_template() {
     
     echo "" >&2
     if [[ $processing_errors -eq 0 ]]; then
-        echo -e "${GREEN}✓ Template processing completed successfully${NC}" >&2
+        echo -e "${GREEN}✓ Template processing with release channel completed successfully${NC}" >&2
+        echo -e "${GREEN}✓ Release channel: $release_channel${NC}" >&2
+        echo -e "${GREEN}✓ Docker image tag: $image_tag${NC}" >&2
         echo -e "${BLUE}✓ Backup available at: $backup_file${NC}" >&2
         echo "" >&2
         return 0
@@ -496,25 +535,54 @@ process_template() {
     fi
 }
 
+# Main function to process a template file completely (LEGACY - kept for compatibility)
+process_template() {
+    local template_file="$1"
+    local compose_file="$2"
+    local mysql_password="$3"
+    local redis_password="$4"
+    local totp_secret="$5"
+    local admin_password="$6"
+    local flask_secret="$7"
+    local admin_username="$8"
+    local auto_cert_type="$9"
+    local auto_cert_contact="${10}"
+    local fqdn="${11}"
+    local server_name="${12}"
+    local docker_subnet="${13}"
+    local setup_mode="${14}"
+    local redis_enabled="${15:-yes}"
+    
+    # Call the new function with default release channel
+    process_template_with_release_channel "$template_file" "$compose_file" "$mysql_password" "$redis_password" "$totp_secret" "$admin_password" "$flask_secret" "$admin_username" "$auto_cert_type" "$auto_cert_contact" "$fqdn" "$server_name" "$docker_subnet" "$setup_mode" "$redis_enabled" "latest" "latest"
+}
+
 # If script is run directly, show usage
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    echo "BunkerWeb Template Processor Script"
+    echo "BunkerWeb Template Processor Script (Enhanced with Release Channel Support)"
     echo ""
     echo "This script is designed to be sourced by other scripts."
     echo ""
     echo "Available functions:"
-    echo "  process_template <template> <compose> <mysql_pass> <redis_pass> <totp> <admin_pass> <flask> <admin_user> [ssl_type] [ssl_contact] [fqdn] [server_name] [subnet] [setup_mode] [redis_enabled] [image_tag]"
+    echo "  process_template_with_release_channel <template> <compose> <mysql_pass> <redis_pass> <totp> <admin_pass> <flask> <admin_user> [ssl_type] [ssl_contact] [fqdn] [server_name] [subnet] [setup_mode] [redis_enabled] [release_channel] [image_tag]"
+    echo "  process_template <template> <compose> <mysql_pass> <redis_pass> <totp> <admin_pass> <flask> <admin_user> [ssl_type] [ssl_contact] [fqdn] [server_name] [subnet] [setup_mode] [redis_enabled]"
     echo "  replace_placeholder <file> <placeholder> <value> [description]"
+    echo "  replace_image_tag_placeholders <file> <image_tag> [description]"
     echo "  replace_credential_placeholders <file> <mysql> <redis> <totp> <admin> <flask> [redis_enabled]"
     echo "  replace_ssl_placeholders <file> <ssl_type> <ssl_contact> <fqdn> <server_name>"
     echo "  replace_network_placeholders <file> <subnet> [default_subnet]"
-    echo "  replace_image_tag_placeholders <file> <image_tag>"
     echo "  configure_automated_setup <file> <mode> <admin_user> <admin_pass> <flask>"
     echo "  verify_placeholder_replacement <file>"
     echo "  validate_compose_syntax <file>"
     echo "  create_backup <file> [suffix]"
     echo ""
+    echo "New features:"
+    echo "  • Release channel support (latest, RC, nightly, X.Y.Z)"
+    echo "  • Docker image tag management"
+    echo "  • Enhanced placeholder validation"
+    echo "  • Comprehensive error handling"
+    echo ""
     echo "Example usage:"
     echo "  source helper_template_processor.sh"
-    echo "  process_template template.yml docker-compose.yml \"\$MYSQL_PASS\" \"\$REDIS_PASS\" ... \"\$IMAGE_TAG\""
+    echo "  process_template_with_release_channel template.yml docker-compose.yml \"\$MYSQL_PASS\" \"\$REDIS_PASS\" ... \"latest\" \"1.6.1\""
 fi
