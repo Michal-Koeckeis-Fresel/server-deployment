@@ -1,7 +1,14 @@
 # BunkerWeb Autoconf Docker Compose Template (RELEASE CHANNEL SUPPORT)
+#
+# Copyright (c) 2025 Michal Koeckeis-Fresel
+# 
+# This software is dual-licensed under your choice of:
+# - MIT License (see LICENSE-MIT)
+# - GNU Affero General Public License v3.0 (see LICENSE-AGPL)
+# 
+# SPDX-License-Identifier: MIT OR AGPL-3.0-or-later
 
 x-ui-env: &ui-env
-  # We anchor the environment variables to avoid duplication
   DATABASE_URI: "mariadb+pymysql://bunkerweb:REPLACEME_MYSQL@bw-db:3306/db"
 
 services:
@@ -10,11 +17,11 @@ services:
     ports:
       - "80:8080/tcp"
       - "443:8443/tcp"
-      - "443:8443/udp" # For QUIC / HTTP3 support
+      - "443:8443/udp"
     labels:
-      - "bunkerweb.INSTANCE=yes" # We set the instance label to allow the autoconf to detect the instance
+      - "bunkerweb.INSTANCE=yes"
     environment:
-      API_WHITELIST_IP: "127.0.0.0/8 10.20.30.0/24" # Will be automatically expanded by script
+      API_WHITELIST_IP: "127.0.0.0/8 10.20.30.0/24"
     restart: "unless-stopped"
     depends_on:
       - bw-db
@@ -26,33 +33,30 @@ services:
     image: bunkerity/bunkerweb-scheduler:REPLACEME_TAG
     environment:
       <<: *ui-env
-      BUNKERWEB_INSTANCES: "bunkerweb" # Make sure to set the correct instance name
+      BUNKERWEB_INSTANCES: "bunkerweb"
       SERVER_NAME: ""
       MULTISITE: "yes"
-      API_WHITELIST_IP: "127.0.0.0/8 10.20.30.0/24" # Will be automatically expanded by script
-      DNS_RESOLVERS: "127.0.0.11" # Use local DNS server
+      API_WHITELIST_IP: "127.0.0.0/8 10.20.30.0/24"
+      DNS_RESOLVERS: "127.0.0.11"
       SERVE_FILES: "no"
       DISABLE_DEFAULT_SERVER: "yes"
       USE_CLIENT_CACHE: "yes"
-      # Compression settings - Maximum performance
       USE_GZIP: "yes"
-      GZIP_COMP_LEVEL: "9" # Maximum compression (1-9)
+      GZIP_COMP_LEVEL: "9"
       GZIP_MIN_LENGTH: "1000"
       USE_BROTLI: "yes"
-      BROTLI_COMP_LEVEL: "11" # Maximum compression (0-11)
+      BROTLI_COMP_LEVEL: "11"
       BROTLI_MIN_LENGTH: "1000"
-      # Let's Encrypt configuration (will be enabled if DNS resolves correctly)
       AUTO_LETS_ENCRYPT: "REPLACEME_AUTO_LETS_ENCRYPT"
       EMAIL_LETS_ENCRYPT: "REPLACEME_EMAIL_LETS_ENCRYPT"
       LETS_ENCRYPT_CHALLENGE: "http"
       USE_LETS_ENCRYPT_STAGING: "yes"
-      # Web UI configuration - FIXED: Will be replaced by script with actual domain and path
       REPLACEME_DOMAIN_USE_TEMPLATE: "ui"
       REPLACEME_DOMAIN_USE_REVERSE_PROXY: "yes"
       REPLACEME_DOMAIN_REVERSE_PROXY_URL: "REPLACEME_UI_PATH"
       REPLACEME_DOMAIN_REVERSE_PROXY_HOST: "http://bw-ui:7000"
     volumes:
-      - /data/BunkerWeb/storage:/data # This is used to persist the cache and other data like the backups
+      - /data/BunkerWeb/storage:/data
     restart: "unless-stopped"
     depends_on:
       - bw-db
@@ -87,11 +91,8 @@ services:
 
   bw-ui:
     image: bunkerity/bunkerweb-ui:REPLACEME_TAG
-    # Labels will be automatically added by script with proper domain and random UI path
     environment:
       <<: *ui-env
-      # FIXED: Properly structured admin credentials (will be handled by script)
-      # Optional: Automated admin credentials (uncomment to skip setup wizard)
       # OVERRIDE_ADMIN_CREDS: "no"
       ADMIN_USERNAME: "REPLACEME_ADMIN_USERNAME"  
       ADMIN_PASSWORD: "REPLACEME_ADMIN_PASSWORD"

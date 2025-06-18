@@ -1,15 +1,35 @@
 #!/bin/bash
 #
+# Copyright (c) 2025 Michal Koeckeis-Fresel
+# 
+# This software is dual-licensed under your choice of:
+# - MIT License (see LICENSE-MIT)
+# - GNU Affero General Public License v3.0 (see LICENSE-AGPL)
+# 
+# SPDX-License-Identifier: MIT OR AGPL-3.0-or-later
+#
+
 # BunkerWeb Password Manager Script
 # Handles all password generation, loading, and credential management
-#
+
+# Load debug configuration if available
+if [[ -f "/data/BunkerWeb/BunkerWeb.conf" ]]; then
+    source "/data/BunkerWeb/BunkerWeb.conf" 2>/dev/null || true
+elif [[ -f "/root/BunkerWeb.conf" ]]; then
+    source "/root/BunkerWeb.conf" 2>/dev/null || true
+fi
+
+# Enable debug mode if requested
+if [[ "${DEBUG:-no}" == "yes" ]]; then
+    set -x
+fi
 
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 # Global variables for passwords
 MYSQL_PASSWORD=""
@@ -126,7 +146,6 @@ save_credentials() {
     
     echo -e "${BLUE}Saving credentials to: $creds_file${NC}" >&2
     
-    # Create backup if file exists
     if [[ -f "$creds_file" ]]; then
         cp "$creds_file" "$creds_file.backup.$(date +%Y%m%d_%H%M%S)"
         echo -e "${GREEN}✓ Existing credentials backed up${NC}" >&2
@@ -250,29 +269,24 @@ manage_credentials() {
     echo -e "${BLUE}=================================================================================${NC}" >&2
     echo "" >&2
     
-    # Try to load existing credentials
     if load_existing_credentials "$creds_file"; then
         echo -e "${GREEN}✓ Existing credentials loaded successfully${NC}" >&2
     else
         echo -e "${BLUE}ℹ No existing credentials found or incomplete${NC}" >&2
     fi
     
-    # Generate any missing credentials
     generate_missing_credentials "$redis_enabled"
     
-    # Validate all credentials are present
     if ! validate_credentials "$redis_enabled"; then
         echo -e "${RED}✗ Credential validation failed${NC}" >&2
         return 1
     fi
     
-    # Save credentials to file
     if ! save_credentials "$creds_file" "$deployment_name" "$template_file" "$setup_mode" "$fqdn" "$server_name" "$docker_subnet" "$redis_enabled" "$networks_avoided"; then
         echo -e "${RED}✗ Failed to save credentials${NC}" >&2
         return 1
     fi
     
-    # Show summary
     show_credential_summary "$redis_enabled"
     
     echo "" >&2
@@ -296,8 +310,4 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     echo "  validate_credentials [redis_enabled]"
     echo "  get_passwords"
     echo "  show_credential_summary [redis_enabled]"
-    echo ""
-    echo "Example usage:"
-    echo "  source bunkerweb_password_manager.sh"
-    echo "  manage_credentials \"/data/BunkerWeb/credentials.txt\" \"yes\" \"Autoconf\" \"template.yml\" \"automated\""
 fi

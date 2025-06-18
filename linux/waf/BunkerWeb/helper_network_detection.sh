@@ -1,8 +1,28 @@
 #!/bin/bash
 #
+# Copyright (c) 2025 Michal Koeckeis-Fresel
+# 
+# This software is dual-licensed under your choice of:
+# - MIT License (see LICENSE-MIT)
+# - GNU Affero General Public License v3.0 (see LICENSE-AGPL)
+# 
+# SPDX-License-Identifier: MIT OR AGPL-3.0-or-later
+#
+
 # BunkerWeb Network Conflict Detection Script
 # Handles network scanning, conflict detection, and safe subnet suggestion
-#
+
+# Load debug configuration if available
+if [[ -f "/data/BunkerWeb/BunkerWeb.conf" ]]; then
+    source "/data/BunkerWeb/BunkerWeb.conf" 2>/dev/null || true
+elif [[ -f "/root/BunkerWeb.conf" ]]; then
+    source "/root/BunkerWeb.conf" 2>/dev/null || true
+fi
+
+# Enable debug mode if requested
+if [[ "${DEBUG:-no}" == "yes" ]]; then
+    set -x
+fi
 
 # Colors for output
 RED='\033[0;31m'
@@ -10,7 +30,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 # Global variables
 DETECTED_DOCKER_SUBNET=""
@@ -89,12 +109,10 @@ networks_overlap() {
 get_existing_networks() {
     local networks=()
     
-    # Method 1: Get routes from 'ip route'
     if check_command ip; then
         while IFS= read -r line; do
             if [[ "$line" =~ ^([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+) ]]; then
                 local network="${BASH_REMATCH[1]}"
-                # Skip default routes and host routes (/32)
                 if [[ "$network" != "0.0.0.0/0" && "$network" != *"/32" ]]; then
                     networks+=("$network")
                 fi
@@ -102,12 +120,10 @@ get_existing_networks() {
         done < <(ip route show 2>/dev/null | grep -E "^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+" || true)
     fi
     
-    # Method 2: Get interfaces from 'ip addr'
     if check_command ip; then
         while IFS= read -r line; do
             if [[ "$line" =~ inet[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+) ]]; then
                 local network="${BASH_REMATCH[1]}"
-                # Skip loopback and host routes
                 if [[ "$network" != "127."* && "$network" != *"/32" ]]; then
                     networks+=("$network")
                 fi
@@ -115,13 +131,11 @@ get_existing_networks() {
         done < <(ip addr show 2>/dev/null || true)
     fi
     
-    # Method 3: Fallback to ifconfig if available
     if check_command ifconfig && [[ ${#networks[@]} -eq 0 ]]; then
         while IFS= read -r line; do
             if [[ "$line" =~ inet[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+).*netmask[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+) ]]; then
                 local ip="${BASH_REMATCH[1]}"
                 local netmask="${BASH_REMATCH[2]}"
-                # Convert netmask to CIDR
                 local cidr=$(netmask_to_cidr "$netmask")
                 if [[ "$ip" != "127."* && "$cidr" != "32" ]]; then
                     networks+=("$ip/$cidr")
@@ -130,7 +144,6 @@ get_existing_networks() {
         done < <(ifconfig 2>/dev/null || true)
     fi
     
-    # Method 4: Check existing Docker networks
     if check_command docker; then
         while IFS= read -r line; do
             if [[ "$line" =~ \"Subnet\":[[:space:]]*\"([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+)\" ]]; then
@@ -140,7 +153,6 @@ get_existing_networks() {
         done < <(docker network ls -q 2>/dev/null | xargs -I {} docker network inspect {} 2>/dev/null | grep -E "\"Subnet\":" || true)
     fi
     
-    # Remove duplicates and return
     printf '%s\n' "${networks[@]}" | sort -u
 }
 
@@ -166,10 +178,9 @@ netmask_to_cidr() {
 suggest_safe_subnet() {
     local existing_networks=("$@")
     
-    # Common safe subnets to try (in order of preference)
     local candidate_subnets=(
-        "10.20.30.0/24"    # Default BunkerWeb subnet
-        "172.20.0.0/24"    # Docker default range
+        "10.20.30.0/24"
+        "172.20.0.0/24"
         "172.21.0.0/24"
         "172.22.0.0/24"
         "10.10.10.0/24"
@@ -180,7 +191,6 @@ suggest_safe_subnet() {
         "192.168.50.0/24"
     )
     
-    # Test each candidate subnet
     for subnet in "${candidate_subnets[@]}"; do
         local conflict=false
         
@@ -197,12 +207,9 @@ suggest_safe_subnet() {
         fi
     done
     
-    # If no predefined subnet works, generate one
-    # Try different ranges in RFC1918 space
     for base_range in "10" "172" "192"; do
         case "$base_range" in
             "10")
-                # Try 10.x.0.0/24 where x is 50-254
                 for ((i=50; i<=254; i++)); do
                     local test_subnet="10.$i.0.0/24"
                     local conflict=false
@@ -219,7 +226,6 @@ suggest_safe_subnet() {
                 done
                 ;;
             "172")
-                # Try 172.x.0.0/24 where x is 16-31
                 for ((i=20; i<=31; i++)); do
                     local test_subnet="172.$i.0.0/24"
                     local conflict=false
@@ -236,7 +242,6 @@ suggest_safe_subnet() {
                 done
                 ;;
             "192")
-                # Try 192.168.x.0/24 where x is 100-254
                 for ((i=100; i<=254; i++)); do
                     local test_subnet="192.168.$i.0/24"
                     local conflict=false
@@ -255,7 +260,6 @@ suggest_safe_subnet() {
         esac
     done
     
-    # Fallback - this should rarely happen
     echo "10.240.0.0/24"
 }
 
@@ -297,7 +301,6 @@ detect_network_conflicts() {
     local preferred_subnet="$3"
     local default_subnet="${4:-10.20.30.0/24}"
     
-    # Clear global variables
     DETECTED_DOCKER_SUBNET=""
     DETECTED_CONFLICTS=()
     
@@ -314,20 +317,17 @@ detect_network_conflicts() {
     
     echo -e "${BLUE}Scanning existing network configurations...${NC}" >&2
     
-    # Get existing networks from system
     local existing_networks=()
     echo -e "${CYAN}• Checking routing table...${NC}" >&2
     echo -e "${CYAN}• Checking network interfaces...${NC}" >&2
     echo -e "${CYAN}• Checking existing Docker networks...${NC}" >&2
     
-    # Capture only valid CIDR networks
     while IFS= read -r network; do
         if [[ -n "$network" ]] && is_valid_cidr "$network"; then
             existing_networks+=("$network")
         fi
     done < <(get_existing_networks)
     
-    # Add user-specified networks
     if [[ -n "$user_networks_string" ]]; then
         echo -e "${BLUE}User-specified networks to avoid: $user_networks_string${NC}" >&2
         while IFS= read -r network; do
@@ -347,7 +347,6 @@ detect_network_conflicts() {
     done
     echo "" >&2
     
-    # Check for conflicts with default subnet
     local conflict_found=false
     local conflicting_networks=()
     
@@ -367,7 +366,6 @@ detect_network_conflicts() {
         done
         echo "" >&2
         
-        # Suggest safe subnet
         echo -e "${BLUE}Finding safe Docker subnet...${NC}" >&2
         local safe_subnet=$(suggest_safe_subnet "${existing_networks[@]}")
         
@@ -379,7 +377,6 @@ detect_network_conflicts() {
         DETECTED_DOCKER_SUBNET="$default_subnet"
     fi
     
-    # Use user-preferred subnet if specified and safe
     if [[ -n "$preferred_subnet" ]]; then
         if is_valid_cidr "$preferred_subnet"; then
             local preferred_conflict=false
@@ -440,7 +437,6 @@ test_network_functions() {
     echo "Testing network utility functions..."
     echo ""
     
-    # Test CIDR validation
     echo "Testing CIDR validation:"
     local test_cidrs=("192.168.1.0/24" "10.0.0.0/8" "invalid" "256.1.1.1/24" "192.168.1.0/33")
     for cidr in "${test_cidrs[@]}"; do
@@ -452,7 +448,6 @@ test_network_functions() {
     done
     echo ""
     
-    # Test network overlap
     echo "Testing network overlap detection:"
     local test_pairs=(
         "192.168.1.0/24 192.168.1.100/32"
@@ -471,7 +466,6 @@ test_network_functions() {
     done
     echo ""
     
-    # Test existing network detection
     echo "Testing existing network detection:"
     local existing_nets=()
     while IFS= read -r network; do
@@ -503,7 +497,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
         echo "  suggest_safe_subnet <existing_networks...>"
         echo ""
         echo "Example usage:"
-        echo "  source bunkerweb_network_detector.sh"
+        echo "  source helper_network_detection.sh"
         echo "  detect_network_conflicts \"yes\" \"192.168.1.0/24\" \"\" \"10.20.30.0/24\""
         echo "  SUBNET=\$(get_detected_subnet)"
         echo ""

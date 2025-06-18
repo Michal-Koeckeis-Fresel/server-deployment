@@ -11,7 +11,18 @@
 
 # BunkerWeb Allowlist Management Script
 # Handles allowlist detection, validation, and configuration
-#
+
+# Load debug configuration if available
+if [[ -f "/data/BunkerWeb/BunkerWeb.conf" ]]; then
+    source "/data/BunkerWeb/BunkerWeb.conf" 2>/dev/null || true
+elif [[ -f "/root/BunkerWeb.conf" ]]; then
+    source "/root/BunkerWeb.conf" 2>/dev/null || true
+fi
+
+# Enable debug mode if requested
+if [[ "${DEBUG:-no}" == "yes" ]]; then
+    set -x
+fi
 
 # Colors for output
 RED='\033[0;31m'
@@ -19,7 +30,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 # Global variables
 DETECTED_ALLOWLIST_IP=""
@@ -30,7 +41,6 @@ ALLOWLIST_DETECTION_METHOD=""
 validate_ip_or_cidr() {
     local ip="$1"
     
-    # Check if it's a valid IPv4 address
     if [[ "$ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
         local IFS='.'
         local -a octets=($ip)
@@ -42,17 +52,14 @@ validate_ip_or_cidr() {
         return 0
     fi
     
-    # Check if it's a valid CIDR notation
     if [[ "$ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$ ]]; then
         local network="${ip%/*}"
         local prefix="${ip#*/}"
         
-        # Validate network part
         if ! validate_ip_or_cidr "$network"; then
             return 1
         fi
         
-        # Validate prefix length
         if (( prefix < 0 || prefix > 32 )); then
             return 1
         fi
@@ -67,9 +74,7 @@ validate_ip_or_cidr() {
 validate_country_code() {
     local country="$1"
     
-    # Check if it's exactly 2 uppercase letters
     if [[ "$country" =~ ^[A-Z]{2}$ ]]; then
-        # List of common valid country codes (not exhaustive but covers most cases)
         local valid_codes=(
             "AD" "AE" "AF" "AG" "AI" "AL" "AM" "AO" "AQ" "AR" "AS" "AT" "AU" "AW" "AX" "AZ"
             "BA" "BB" "BD" "BE" "BF" "BG" "BH" "BI" "BJ" "BL" "BM" "BN" "BO" "BQ" "BR" "BS"
@@ -103,9 +108,7 @@ validate_country_code() {
 validate_dns_suffix() {
     local dns="$1"
     
-    # Check if it's a valid domain name format
     if [[ "$dns" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9]$ ]] && [[ "$dns" == *.* ]]; then
-        # Check for valid characters and structure
         if [[ ! "$dns" =~ \.\. ]] && [[ ! "$dns" =~ ^- ]] && [[ ! "$dns" =~ -$ ]]; then
             return 0
         fi
@@ -120,7 +123,6 @@ detect_ssh_connection_ip() {
     
     echo -e "${BLUE}Detecting SSH connection IP addresses...${NC}" >&2
     
-    # Method 1: Check SSH_CLIENT environment variable
     if [[ -n "${SSH_CLIENT:-}" ]]; then
         local ssh_ip=$(echo "$SSH_CLIENT" | cut -d' ' -f1)
         if validate_ip_or_cidr "$ssh_ip"; then
@@ -129,7 +131,6 @@ detect_ssh_connection_ip() {
         fi
     fi
     
-    # Method 2: Check SSH_CONNECTION environment variable
     if [[ -n "${SSH_CONNECTION:-}" ]]; then
         local ssh_ip=$(echo "$SSH_CONNECTION" | cut -d' ' -f1)
         if validate_ip_or_cidr "$ssh_ip" && [[ ! " ${ssh_ips[*]} " =~ " $ssh_ip " ]]; then
@@ -138,7 +139,6 @@ detect_ssh_connection_ip() {
         fi
     fi
     
-    # Method 3: Check who/w command for current session
     if command -v who >/dev/null 2>&1; then
         local current_tty=$(tty 2>/dev/null | sed 's|/dev/||')
         if [[ -n "$current_tty" ]]; then
@@ -150,7 +150,6 @@ detect_ssh_connection_ip() {
         fi
     fi
     
-    # Method 4: Check netstat for established SSH connections
     if command -v netstat >/dev/null 2>&1; then
         while IFS= read -r line; do
             if [[ "$line" =~ ([0-9]{1,3}\.){3}[0-9]{1,3}:22.*ESTABLISHED ]]; then
@@ -163,7 +162,6 @@ detect_ssh_connection_ip() {
         done < <(netstat -tn 2>/dev/null | grep ":22 ")
     fi
     
-    # Output results
     if [[ ${#ssh_ips[@]} -gt 0 ]]; then
         printf '%s\n' "${ssh_ips[@]}"
         return 0
@@ -177,6 +175,8 @@ detect_ssh_connection_ip() {
 auto_detect_allowlist() {
     local user_allowlist_ip="$1"
     local user_allowlist_dns="$2"
+    local add_ssh_to_trusted="${3:-yes}"
+    local ssh_trusted="$4"
     
     echo -e "${BLUE}=================================================================================${NC}" >&2
     echo -e "${BLUE}                    ALLOWLIST AUTO-DETECTION                    ${NC}" >&2
@@ -185,44 +185,93 @@ auto_detect_allowlist() {
     
     ALLOWLIST_DETECTION_METHOD="auto-detection"
     
-    # Start with user-provided values
     local final_allowlist_ip="$user_allowlist_ip"
     local final_allowlist_dns="$user_allowlist_dns"
     
-    # Auto-detect SSH connection IPs
-    local ssh_ips=()
-    if mapfile -t ssh_ips < <(detect_ssh_connection_ip); then
-        echo -e "${GREEN}✓ Detected ${#ssh_ips[@]} SSH connection IP(s)${NC}" >&2
+    # Add SSH_TRUSTED IPs if specified
+    if [[ -n "$ssh_trusted" ]]; then
+        echo -e "${BLUE}Adding SSH trusted IP addresses/networks: $ssh_trusted${NC}" >&2
+        if [[ -n "$final_allowlist_ip" ]]; then
+            final_allowlist_ip="$final_allowlist_ip $ssh_trusted"
+        else
+            final_allowlist_ip="$ssh_trusted"
+        fi
+        echo -e "${GREEN}✓ Added SSH trusted networks to allowlist${NC}" >&2
+    fi
+    
+    # Auto-detect SSH connections if enabled
+    if [[ "$add_ssh_to_trusted" == "yes" ]]; then
+        echo -e "${BLUE}SSH auto-detection enabled - detecting current SSH connections...${NC}" >&2
         
-        # Add SSH IPs directly to allowlist (no network generation)
-        for ip in "${ssh_ips[@]}"; do
-            if [[ ! "$final_allowlist_ip" =~ $ip ]]; then
-                if [[ -n "$final_allowlist_ip" ]]; then
-                    final_allowlist_ip="$final_allowlist_ip $ip"
-                else
-                    final_allowlist_ip="$ip"
+        local ssh_ips=()
+        if mapfile -t ssh_ips < <(detect_ssh_connection_ip); then
+            echo -e "${GREEN}✓ Detected ${#ssh_ips[@]} SSH connection IP(s)${NC}" >&2
+            
+            for ip in "${ssh_ips[@]}"; do
+                if [[ ! "$final_allowlist_ip" =~ $ip ]]; then
+                    if [[ -n "$final_allowlist_ip" ]]; then
+                        final_allowlist_ip="$final_allowlist_ip $ip"
+                    else
+                        final_allowlist_ip="$ip"
+                    fi
+                    echo -e "${GREEN}✓ Added SSH IP to allowlist: $ip${NC}" >&2
                 fi
-                echo -e "${GREEN}✓ Added SSH IP to allowlist: $ip${NC}" >&2
-            fi
-        done
+            done
+        else
+            echo -e "${YELLOW}⚠ SSH IP auto-detection failed${NC}" >&2
+            ALLOWLIST_DETECTION_METHOD="manual"
+        fi
     else
-        echo -e "${YELLOW}⚠ SSH IP auto-detection failed${NC}" >&2
+        echo -e "${BLUE}SSH auto-detection disabled - skipping SSH IP detection${NC}" >&2
         ALLOWLIST_DETECTION_METHOD="manual"
     fi
     
-    # Set global variables
     DETECTED_ALLOWLIST_IP="$final_allowlist_ip"
     DETECTED_ALLOWLIST_DNS="$final_allowlist_dns"
     
-    # Show results
     echo "" >&2
     echo -e "${GREEN}Allowlist Auto-Detection Results:${NC}" >&2
     echo -e "${GREEN}• IP Allowlist: ${DETECTED_ALLOWLIST_IP:-"(none)"}${NC}" >&2
     echo -e "${GREEN}• DNS Allowlist: ${DETECTED_ALLOWLIST_DNS:-"(none)"}${NC}" >&2
     echo -e "${GREEN}• Detection Method: $ALLOWLIST_DETECTION_METHOD${NC}" >&2
+    echo -e "${GREEN}• SSH Auto-Detection: $add_ssh_to_trusted${NC}" >&2
+    if [[ -n "$ssh_trusted" ]]; then
+        echo -e "${GREEN}• SSH Trusted Networks: $ssh_trusted${NC}" >&2
+    fi
     echo "" >&2
     
     return 0
+}
+
+# Function to validate user-provided networks
+validate_user_networks() {
+    local networks_string="$1"
+    local valid_networks=()
+    local invalid_networks=()
+    
+    if [[ -z "$networks_string" ]]; then
+        return 0
+    fi
+    
+    IFS=' ' read -ra user_networks <<< "$networks_string"
+    for network in "${user_networks[@]}"; do
+        if validate_ip_or_cidr "$network"; then
+            valid_networks+=("$network")
+        else
+            invalid_networks+=("$network")
+        fi
+    done
+    
+    if [[ ${#invalid_networks[@]} -gt 0 ]]; then
+        echo -e "${YELLOW}⚠ Invalid network formats ignored: ${invalid_networks[*]}${NC}" >&2
+    fi
+    
+    if [[ ${#valid_networks[@]} -gt 0 ]]; then
+        printf '%s\n' "${valid_networks[@]}"
+        return 0
+    else
+        return 1
+    fi
 }
 
 # Function to validate allowlist configuration
@@ -238,7 +287,6 @@ validate_allowlist_config() {
     
     local validation_errors=0
     
-    # Validate IP allowlist
     if [[ -n "$allowlist_ip" ]]; then
         local invalid_ips=()
         for ip in $allowlist_ip; do
@@ -255,7 +303,6 @@ validate_allowlist_config() {
         fi
     fi
     
-    # Validate allowlist country codes
     if [[ -n "$allowlist_country" ]]; then
         local invalid_countries=()
         for country in $allowlist_country; do
@@ -272,7 +319,6 @@ validate_allowlist_config() {
         fi
     fi
     
-    # Validate blacklist country codes
     if [[ -n "$blacklist_country" ]]; then
         local invalid_countries=()
         for country in $blacklist_country; do
@@ -289,7 +335,6 @@ validate_allowlist_config() {
         fi
     fi
     
-    # Validate DNS suffixes
     if [[ -n "$allowlist_dns" ]]; then
         local invalid_dns=()
         for dns in $allowlist_dns; do
@@ -306,7 +351,6 @@ validate_allowlist_config() {
         fi
     fi
     
-    # Validate allowlist mode
     if [[ -n "$allowlist_mode" ]]; then
         if [[ "$allowlist_mode" != "block" && "$allowlist_mode" != "deny" ]]; then
             echo -e "${RED}✗ Invalid allowlist mode: $allowlist_mode (must be 'block' or 'deny')${NC}" >&2
@@ -316,7 +360,6 @@ validate_allowlist_config() {
         fi
     fi
     
-    # Validate status code
     if [[ -n "$allowlist_status" ]]; then
         if [[ ! "$allowlist_status" =~ ^[0-9]{3}$ ]] || (( allowlist_status < 100 || allowlist_status > 599 )); then
             echo -e "${RED}✗ Invalid HTTP status code: $allowlist_status${NC}" >&2
@@ -351,7 +394,6 @@ configure_allowlist_in_compose() {
     if [[ "$use_allowlist" == "yes" ]]; then
         echo -e "${BLUE}Enabling allowlist protection...${NC}" >&2
         
-        # Add allowlist environment variables to bunkerweb service
         local allowlist_env=""
         
         if [[ -n "$allowlist_ip" ]]; then
@@ -388,9 +430,7 @@ configure_allowlist_in_compose() {
             echo -e "${GREEN}✓ Set allowlist status code: $allowlist_status${NC}" >&2
         fi
         
-        # Insert allowlist configuration into bunkerweb service environment
         if [[ -n "$allowlist_env" ]]; then
-            # Use awk to insert allowlist environment variables
             awk -v allowlist_env="$allowlist_env" '
             /^  bunkerweb:/ { in_bunkerweb = 1 }
             in_bunkerweb && /^    environment:/ {
@@ -431,7 +471,6 @@ save_allowlist_to_credentials() {
     
     echo -e "${BLUE}Saving allowlist configuration to credentials file...${NC}" >&2
     
-    # Add allowlist section to credentials file
     cat >> "$creds_file" << EOF
 
 # Allowlist Configuration (Global Access Control)
@@ -456,11 +495,6 @@ $(if [[ "$use_allowlist" == "yes" ]]; then
         echo "HTTP Status Code: $allowlist_status"
     fi
     echo "Detection Method: ${detection_method:-"manual"}"
-    echo ""
-    echo "# SECURITY WARNING: Allowlist controls access to your ENTIRE application!"
-    echo "# Only the above IP addresses/networks/countries can access your application"
-    echo "# Test thoroughly before enabling in production environments"
-    echo "# Consider using greylist instead for admin-only protection"
 fi)
 
 # Allowlist Management Commands:
@@ -518,7 +552,7 @@ show_allowlist_summary() {
     fi
 }
 
-# Function to manage allowlist configuration (main function)
+# Main function to manage allowlist configuration
 manage_allowlist_configuration() {
     local user_allowlist_ip="$1"
     local user_allowlist_country="$2"
@@ -530,6 +564,8 @@ manage_allowlist_configuration() {
     local compose_file="$8"
     local creds_file="$9"
     local fqdn="${10}"
+    local add_ssh_to_trusted="${11:-yes}"
+    local ssh_trusted="${12}"
     
     echo -e "${BLUE}=================================================================================${NC}" >&2
     echo -e "${BLUE}                    ALLOWLIST CONFIGURATION MANAGEMENT                    ${NC}" >&2
@@ -540,7 +576,6 @@ manage_allowlist_configuration() {
         echo -e "${YELLOW}⚠ Allowlist disabled in configuration${NC}" >&2
         echo -e "${BLUE}ℹ Skipping allowlist configuration${NC}" >&2
         
-        # Still save the disabled status to credentials
         if [[ -n "$creds_file" ]]; then
             save_allowlist_to_credentials "$creds_file" "" "" "" "" "$use_allowlist" "" "" "disabled"
         fi
@@ -553,30 +588,24 @@ manage_allowlist_configuration() {
     echo -e "${RED}WARNING: This will control access to your ENTIRE application!${NC}" >&2
     echo "" >&2
     
-    # Auto-detect allowlist configuration
-    auto_detect_allowlist "$user_allowlist_ip" "$user_allowlist_dns"
+    auto_detect_allowlist "$user_allowlist_ip" "$user_allowlist_dns" "$add_ssh_to_trusted" "$ssh_trusted"
     
-    # Use detected values or fall back to user-provided
     local final_allowlist_ip="${DETECTED_ALLOWLIST_IP:-$user_allowlist_ip}"
     local final_allowlist_dns="${DETECTED_ALLOWLIST_DNS:-$user_allowlist_dns}"
     
-    # Validate configuration
     if ! validate_allowlist_config "$final_allowlist_ip" "$user_allowlist_country" "$blacklist_country" "$final_allowlist_dns" "$allowlist_mode" "$allowlist_status"; then
         echo -e "${RED}✗ Allowlist validation failed${NC}" >&2
         return 1
     fi
     
-    # Configure in docker-compose file
     if [[ -n "$compose_file" ]]; then
         configure_allowlist_in_compose "$compose_file" "$use_allowlist" "$final_allowlist_ip" "$user_allowlist_country" "$blacklist_country" "$final_allowlist_dns" "$allowlist_mode" "$allowlist_status"
     fi
     
-    # Save to credentials file
     if [[ -n "$creds_file" ]]; then
         save_allowlist_to_credentials "$creds_file" "$final_allowlist_ip" "$user_allowlist_country" "$blacklist_country" "$final_allowlist_dns" "$use_allowlist" "$allowlist_mode" "$allowlist_status" "$ALLOWLIST_DETECTION_METHOD"
     fi
     
-    # Show summary
     show_allowlist_summary "$final_allowlist_ip" "$user_allowlist_country" "$blacklist_country" "$final_allowlist_dns" "$use_allowlist"
     
     echo "" >&2
@@ -616,14 +645,6 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     echo "  get_detected_allowlist_dns"
     echo "  get_allowlist_detection_method"
     echo "  show_allowlist_summary <ip> <country> <blacklist_country> <dns> <use>"
-    echo ""
-    echo "Example usage:"
-    echo "  source helper_allowlist.sh"
-    echo "  manage_allowlist_configuration \"203.0.113.0/24\" \"US CA\" \"CN RU\" \"company.com\" \"yes\" \"block\" \"403\" \"docker-compose.yml\" \"credentials.txt\" \"example.com\""
-    echo ""
-    echo "Test functions:"
-    echo "  $0 test-detect    # Test SSH IP detection"
-    echo "  $0 test-validate  # Test validation functions"
     
     # Handle test commands
     if [[ "$1" == "test-detect" ]]; then

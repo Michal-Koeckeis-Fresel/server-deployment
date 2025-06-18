@@ -1,8 +1,28 @@
 #!/bin/bash
 #
+# Copyright (c) 2025 Michal Koeckeis-Fresel
+# 
+# This software is dual-licensed under your choice of:
+# - MIT License (see LICENSE-MIT)
+# - GNU Affero General Public License v3.0 (see LICENSE-AGPL)
+# 
+# SPDX-License-Identifier: MIT OR AGPL-3.0-or-later
+#
+
 # BunkerWeb Template Processor Script
 # Handles placeholder replacement and template processing
-#
+
+# Load debug configuration if available
+if [[ -f "/data/BunkerWeb/BunkerWeb.conf" ]]; then
+    source "/data/BunkerWeb/BunkerWeb.conf" 2>/dev/null || true
+elif [[ -f "/root/BunkerWeb.conf" ]]; then
+    source "/root/BunkerWeb.conf" 2>/dev/null || true
+fi
+
+# Enable debug mode if requested
+if [[ "${DEBUG:-no}" == "yes" ]]; then
+    set -x
+fi
 
 # Colors for output
 RED='\033[0;31m'
@@ -559,7 +579,7 @@ process_template() {
 
 # If script is run directly, show usage
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    echo "BunkerWeb Template Processor Script (Enhanced with Release Channel Support)"
+    echo "BunkerWeb Template Processor Script"
     echo ""
     echo "This script is designed to be sourced by other scripts."
     echo ""
@@ -575,12 +595,6 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     echo "  verify_placeholder_replacement <file>"
     echo "  validate_compose_syntax <file>"
     echo "  create_backup <file> [suffix]"
-    echo ""
-    echo "New features:"
-    echo "  • Release channel support (latest, RC, nightly, X.Y.Z)"
-    echo "  • Docker image tag management"
-    echo "  • Enhanced placeholder validation"
-    echo "  • Comprehensive error handling"
     echo ""
     echo "Example usage:"
     echo "  source helper_template_processor.sh"
