@@ -39,6 +39,44 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# Robust download function with timeout and retry logic
+download_file() {
+    local url="$1"
+    local output_file="$2"
+    local description="${3:-$output_file}"
+    
+    log_info "Downloading $description..."
+    
+    if [[ "$DOWNLOAD_METHOD" == "curl" ]]; then
+        # curl with robust options:
+        # -s: silent mode
+        # -S: show errors even in silent mode
+        # --connect-timeout: connection timeout
+        # --max-time: maximum time for entire operation
+        # --retry: number of retries
+        # --retry-delay: delay between retries
+        # --retry-max-time: maximum time for retries
+        # -L: follow redirects
+        # --fail: fail silently on server errors
+        if curl -sSL --connect-timeout 10 --max-time 60 --retry 3 --retry-delay 2 --retry-max-time 180 --fail "$url" -o "$output_file"; then
+            return 0
+        else
+            local curl_exit_code=$?
+            log_warning "curl failed with exit code $curl_exit_code for $description"
+            return 1
+        fi
+    else
+        # wget with timeout options as fallback
+        if timeout 60 wget -q --timeout=10 --tries=3 --retry-connrefused --waitretry=2 "$url" -O "$output_file"; then
+            return 0
+        else
+            local wget_exit_code=$?
+            log_warning "wget failed with exit code $wget_exit_code for $description"
+            return 1
+        fi
+    fi
+}
+
 # Main execution
 main() {
     log_step "Starting BunkerWeb deployment with Release Channel Support..."
@@ -73,10 +111,20 @@ main() {
         "helper_release_channel_manager.sh"
     )
     
-    # Check if wget or curl is available
-    if ! command_exists wget && ! command_exists curl; then
-        log_error "Neither wget nor curl is available. Please install one of them."
+    # Check if curl or wget is available (prefer curl)
+    if ! command_exists curl && ! command_exists wget; then
+        log_error "Neither curl nor wget is available. Please install one of them."
+        log_info "Recommended: apt update && apt install curl"
         exit 1
+    fi
+    
+    # Set download method preference (curl preferred due to better reliability)
+    if command_exists curl; then
+        DOWNLOAD_METHOD="curl"
+        log_info "Using curl for downloads (preferred method)"
+    else
+        DOWNLOAD_METHOD="wget"
+        log_info "Using wget for downloads (fallback method)"
     fi
     
     # Handle BunkerWeb.conf separately
@@ -89,19 +137,31 @@ main() {
         
         if [[ -f "/root/BunkerWeb.conf" ]]; then
             log_success "✓ Created /root/BunkerWeb.conf"
-            log_info "Downloading BunkerWeb.conf to /root/BunkerWeb.conf..."
             
-            if command_exists wget; then
-                wget -q "$BASE_URL/BunkerWeb.conf" -O "/root/BunkerWeb.conf"
-            elif command_exists curl; then
-                curl -s "$BASE_URL/BunkerWeb.conf" -o "/root/BunkerWeb.conf"
-            fi
-            
-            if [ $? -eq 0 ]; then
+            if download_file "$BASE_URL/BunkerWeb.conf" "/root/BunkerWeb.conf" "BunkerWeb.conf"; then
                 log_success "✓ Successfully downloaded BunkerWeb.conf to /root/"
             else
                 log_error "✗ Failed to download BunkerWeb.conf"
-                exit 1
+                log_info "Attempting alternative download method..."
+                
+                # Try alternative method if primary failed
+                if [[ "$DOWNLOAD_METHOD" == "curl" ]] && command_exists wget; then
+                    if timeout 60 wget -q --timeout=15 --tries=2 "$BASE_URL/BunkerWeb.conf" -O "/root/BunkerWeb.conf"; then
+                        log_success "✓ Downloaded BunkerWeb.conf with wget (fallback)"
+                    else
+                        log_error "✗ All download methods failed for BunkerWeb.conf"
+                        exit 1
+                    fi
+                elif [[ "$DOWNLOAD_METHOD" == "wget" ]] && command_exists curl; then
+                    if curl -sSL --connect-timeout 15 --max-time 60 --retry 2 --fail "$BASE_URL/BunkerWeb.conf" -o "/root/BunkerWeb.conf"; then
+                        log_success "✓ Downloaded BunkerWeb.conf with curl (fallback)"
+                    else
+                        log_error "✗ All download methods failed for BunkerWeb.conf"
+                        exit 1
+                    fi
+                else
+                    exit 1
+                fi
             fi
         else
             log_error "✗ Failed to create /root/BunkerWeb.conf"
@@ -128,33 +188,88 @@ main() {
         exit 1
     fi
     
-    # Download each file to current directory
-    log_step "Downloading BunkerWeb project files..."
+    # Download each file to current directory with robust error handling
+    log_step "Downloading BunkerWeb project files with $DOWNLOAD_METHOD..."
     local downloaded_count=0
     local failed_count=0
+    local skipped_count=0
+    declare -a failed_files=()
     
     for file in "${FILES[@]}"; do
-        log_info "Downloading $file..."
-        if command_exists wget; then
-            wget -q "$BASE_URL/$file" -O "$file"
-        elif command_exists curl; then
-            curl -s "$BASE_URL/$file" -o "$file"
+        # Skip if file already exists and is not empty
+        if [[ -f "$file" && -s "$file" ]]; then
+            log_info "Skipping $file (already exists)"
+            ((skipped_count++))
+            continue
         fi
         
-        if [ $? -eq 0 ]; then
-            log_success "✓ Successfully downloaded $file"
-            ((downloaded_count++))
+        if download_file "$BASE_URL/$file" "$file" "$file"; then
+            # Verify file was downloaded and is not empty
+            if [[ -f "$file" && -s "$file" ]]; then
+                log_success "✓ Successfully downloaded $file"
+                ((downloaded_count++))
+            else
+                log_error "✗ Download succeeded but file is empty: $file"
+                failed_files+=("$file")
+                ((failed_count++))
+                rm -f "$file"  # Remove empty file
+            fi
         else
             log_error "✗ Failed to download $file"
+            failed_files+=("$file")
             ((failed_count++))
+            
+            # Try alternative download method for failed files
+            log_info "Attempting alternative download method for $file..."
+            if [[ "$DOWNLOAD_METHOD" == "curl" ]] && command_exists wget; then
+                if timeout 60 wget -q --timeout=15 --tries=2 "$BASE_URL/$file" -O "$file"; then
+                    if [[ -f "$file" && -s "$file" ]]; then
+                        log_success "✓ Downloaded $file with wget (fallback)"
+                        ((downloaded_count++))
+                        ((failed_count--))
+                        # Remove from failed_files array
+                        failed_files=("${failed_files[@]/$file}")
+                    fi
+                fi
+            elif [[ "$DOWNLOAD_METHOD" == "wget" ]] && command_exists curl; then
+                if curl -sSL --connect-timeout 15 --max-time 60 --retry 2 --fail "$BASE_URL/$file" -o "$file"; then
+                    if [[ -f "$file" && -s "$file" ]]; then
+                        log_success "✓ Downloaded $file with curl (fallback)"
+                        ((downloaded_count++))
+                        ((failed_count--))
+                        # Remove from failed_files array
+                        failed_files=("${failed_files[@]/$file}")
+                    fi
+                fi
+            fi
         fi
     done
     
     # Report download statistics
     log_step "Download Summary"
     log_success "✓ Successfully downloaded: $downloaded_count files"
+    if [[ $skipped_count -gt 0 ]]; then
+        log_info "ℹ Skipped (already exist): $skipped_count files"
+    fi
     if [[ $failed_count -gt 0 ]]; then
         log_warning "⚠ Failed downloads: $failed_count files"
+        if [[ ${#failed_files[@]} -gt 0 ]]; then
+            log_warning "Failed files: ${failed_files[*]}"
+        fi
+        
+        # Check if critical files failed
+        local critical_failed=false
+        for failed_file in "${failed_files[@]}"; do
+            if [[ "$failed_file" == "script_autoconf_display.sh" ]] || [[ "$failed_file" == "helper_release_channel_manager.sh" ]] || [[ "$failed_file" == "template_autoconf_display.yml" ]]; then
+                critical_failed=true
+                break
+            fi
+        done
+        
+        if [[ "$critical_failed" == "true" ]]; then
+            log_error "✗ Critical files failed to download - setup may not work properly"
+            log_info "You can try running this script again or download manually"
+        fi
     fi
     
     # Make shell scripts executable
@@ -222,7 +337,31 @@ main() {
         log_error "✗ Release Channel Manager not found or not executable"
     fi
     
-    log_success "BunkerWeb deployment completed successfully!"
+    log_success "BunkerWeb deployment completed!"
+    
+    # Show manual retry instructions if some downloads failed
+    if [[ $failed_count -gt 0 ]] && [[ ${#failed_files[@]} -gt 0 ]]; then
+        echo ""
+        log_warning "Some files failed to download. You can retry manually:"
+        echo ""
+        echo "cd /data/BunkerWeb"
+        echo "BASE_URL=\"$BASE_URL\""
+        echo ""
+        for failed_file in "${failed_files[@]}"; do
+            if [[ -n "$failed_file" ]]; then  # Skip empty entries
+                echo "# Retry $failed_file:"
+                if command_exists curl; then
+                    echo "curl -sSL --connect-timeout 10 --max-time 60 --retry 3 --fail \"\$BASE_URL/$failed_file\" -o \"$failed_file\""
+                else
+                    echo "wget -q --timeout=10 --tries=3 \"\$BASE_URL/$failed_file\" -O \"$failed_file\""
+                fi
+                echo ""
+            fi
+        done
+        echo "# Then make scripts executable:"
+        echo "chmod +x *.sh"
+        echo ""
+    fi
     echo ""
     echo "📁 Files downloaded to: /data/BunkerWeb"
     echo "📁 BunkerWeb.conf location: /root/BunkerWeb.conf"
