@@ -50,7 +50,7 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
-# Simple download function with curl (primary) and wget (fallback)
+# Download function with curl (primary) and wget (fallback)
 download_file() {
     local url="$1"
     local output_file="$2"
@@ -93,8 +93,9 @@ main() {
     # Handle BunkerWeb.conf separately
     log_step "Checking for BunkerWeb.conf..."
     if [[ -f "/root/BunkerWeb.conf" ]]; then
-        # Check if file exists but is empty or contains only whitespace
-        if [[ ! -s "/root/BunkerWeb.conf" ]] || [[ -z "$(grep -v '^[[:space:]]*$' /root/BunkerWeb.conf 2>/dev/null)" ]]; then
+        # Check if file exists but is empty or contains only whitespace/comments
+        local non_empty_content=$(grep -v '^[[:space:]]*$' /root/BunkerWeb.conf 2>/dev/null | grep -v '^[[:space:]]*#' | head -1)
+        if [[ -z "$non_empty_content" ]]; then
             log_info "Found empty BunkerWeb.conf - downloading template"
             if download_file "$BASE_URL/BunkerWeb.conf" "/root/BunkerWeb.conf"; then
                 log_success "✓ Downloaded BunkerWeb.conf template"
@@ -126,10 +127,10 @@ main() {
     ln -s "/root/BunkerWeb.conf" "/data/BunkerWeb/BunkerWeb.conf"
     log_success "✓ Created symbolic link: /data/BunkerWeb/BunkerWeb.conf → /root/BunkerWeb.conf"
     
-    # Download files one by one (simple approach)
+    # Download files
     log_step "Downloading BunkerWeb project files..."
     
-    # Define files to download
+    # Define files to download from main repository
     FILES=(
         "script_autoconf_display.sh"
         "script_password_reset_display.sh"
@@ -144,6 +145,11 @@ main() {
         "helper_greylist.sh"
         "helper_allowlist.sh"
         "helper_release_channel_manager.sh"
+        "helper_directory_layout.sh"
+        "helper_bunkerweb_config_checker.sh"
+        "helper_fqdn_lookup.sh"
+        "fluent-bit.conf"
+        "fluent_bit_parsers.txt"
     )
     
     # Special files with different URLs
@@ -266,9 +272,10 @@ main() {
     echo "Configuration: /root/BunkerWeb.conf"
     echo ""
     echo "Next steps:"
-    echo "  sudo ./script_autoconf_display.sh --type autoconf"
+    echo "  1. Edit configuration: nano /root/BunkerWeb.conf"
+    echo "  2. Run setup: sudo ./script_autoconf_display.sh --type autoconf"
     echo ""
-    log_info "Setup ready. Edit /root/BunkerWeb.conf if needed."
+    log_info "Setup ready. Edit /root/BunkerWeb.conf if needed before running setup."
 }
 
 # Run main function
