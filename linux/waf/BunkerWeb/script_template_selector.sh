@@ -9,11 +9,14 @@
 # SPDX-License-Identifier: MIT OR AGPL-3.0-or-later
 #
 
+# BunkerWeb Template Selector Script
+# Provides interactive selection of BunkerWeb Docker image versions from Docker Hub
+
 CONFIG_FILE="/data/BunkerWeb/BunkerWeb.conf"
 IMAGE_NAME="bunkerity/bunkerweb"
 TAG_LIMIT=15
 
-# Ensure required tools are installed
+# Install required packages if missing
 for pkg in curl jq; do
     if ! command -v "$pkg" &>/dev/null; then
         echo "Installing missing package: $pkg"
@@ -23,7 +26,7 @@ done
 
 echo "Fetching available tags for $IMAGE_NAME..."
 
-# Get and sort tags by last updated, descending
+# Retrieve and sort tags by last updated date
 TAGS=$(curl -s "https://hub.docker.com/v2/repositories/${IMAGE_NAME}/tags?page_size=100" | jq -r '.results[] | "\(.name)\t\(.last_updated)"' | sort -rk2 | head -n "$TAG_LIMIT")
 
 if [ -z "$TAGS" ]; then
@@ -31,7 +34,7 @@ if [ -z "$TAGS" ]; then
     exit 1
 fi
 
-# Display selection
+# Display available versions for selection
 echo "Available versions:"
 i=1
 declare -A TAG_MAP
@@ -53,7 +56,7 @@ fi
 echo "Selected version: $SELECTED_TAG"
 echo ""
 
-# Update config
+# Update configuration file with selected version
 if [ ! -f "$CONFIG_FILE" ]; then
     echo "Config file not found: $CONFIG_FILE"
     exit 1
@@ -64,7 +67,5 @@ echo "Configuration updated: RELEASE_CHANNEL=\"$SELECTED_TAG\""
 
 echo "Next step: edit /data/BunkerWeb/BunkerWeb.conf"
 echo "nano /data/BunkerWeb/BunkerWeb.conf"
-
-
 
 exit 0
