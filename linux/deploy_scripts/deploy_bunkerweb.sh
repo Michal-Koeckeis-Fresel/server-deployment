@@ -241,16 +241,37 @@ main() {
         fi
     fi
     
-    # Create symbolic link
+    # Create symbolic link for BunkerWeb.conf
     log_step "Creating symbolic link for BunkerWeb.conf..."
-    if [ -L "/data/BunkerWeb/BunkerWeb.conf" ]; then
-        rm "/data/BunkerWeb/BunkerWeb.conf"
-    elif [ -f "/data/BunkerWeb/BunkerWeb.conf" ]; then
-        mv "/data/BunkerWeb/BunkerWeb.conf" "/data/BunkerWeb/BunkerWeb.conf.backup.$(date +%Y%m%d_%H%M%S)"
-    fi
     
-    ln -s "/root/BunkerWeb.conf" "/data/BunkerWeb/BunkerWeb.conf"
-    log_success "Created symbolic link: /data/BunkerWeb/BunkerWeb.conf -> /root/BunkerWeb.conf"
+    # Handle existing BunkerWeb.conf in /data/BunkerWeb/ - move to /root/ and create symlink
+    if [ -f "/data/BunkerWeb/BunkerWeb.conf" ] && [ ! -L "/data/BunkerWeb/BunkerWeb.conf" ]; then
+        log_info "Found existing BunkerWeb.conf in /data/BunkerWeb/ - moving to /root/ and creating symlink"
+        
+        # Backup existing file in /root/ if it exists
+        if [ -f "/root/BunkerWeb.conf" ]; then
+            mv "/root/BunkerWeb.conf" "/root/BunkerWeb.conf.backup.$(date +%Y%m%d_%H%M%S)"
+            log_info "Backed up existing /root/BunkerWeb.conf"
+        fi
+        
+        # Move file to /root/ and create symlink
+        mv "/data/BunkerWeb/BunkerWeb.conf" "/root/BunkerWeb.conf"
+        ln -s "/root/BunkerWeb.conf" "/data/BunkerWeb/BunkerWeb.conf"
+        log_success "Moved BunkerWeb.conf to /root/ and created symlink"
+        
+    elif [ -L "/data/BunkerWeb/BunkerWeb.conf" ]; then
+        log_info "BunkerWeb.conf symlink already exists"
+        
+    elif [ -f "/root/BunkerWeb.conf" ] && [ ! -f "/data/BunkerWeb/BunkerWeb.conf" ]; then
+        log_info "Found BunkerWeb.conf in /root/ - creating symlink"
+        ln -s "/root/BunkerWeb.conf" "/data/BunkerWeb/BunkerWeb.conf"
+        log_success "Created symlink for existing /root/BunkerWeb.conf"
+        
+    else
+        # This should already be handled by the download section above
+        ln -s "/root/BunkerWeb.conf" "/data/BunkerWeb/BunkerWeb.conf"
+        log_success "Created symbolic link: /data/BunkerWeb/BunkerWeb.conf -> /root/BunkerWeb.conf"
+    fi
     
     # Handle credentials.txt if it exists - move to /root/ and create symlink
     log_step "Checking for existing credentials.txt..."
