@@ -764,7 +764,7 @@ is_valid_ascii_fqdn() {
             fi
         fi
         
-        # RFC 952/1123: Labels cannot start or end with hyphen
+        # Labels should not start or end with hyphen (except punycode)
         # Exception: Punycode labels starting with xn-- are allowed to start with hyphen sequence
         if [[ ! "$label" =~ ^xn-- ]]; then
             if [[ "$label" =~ ^- ]]; then
@@ -785,13 +785,13 @@ is_valid_ascii_fqdn() {
         if [[ "$strict" == "yes" ]]; then
             # RFC 952: Hostnames should not be all numeric (but domain names can be)
             # Only apply this restriction to single-label hostnames
-            if [[ ${#labels[@]} -eq 1 ]] && [[ "$label" =~ ^[0-9]+$ ]]; then
+            if [[ ${#labels[@]} -eq 1 && "$label" =~ ^[0-9]+$ ]]; then
                 log_debug "RFC strict: Single-label hostname cannot be all numeric: $label"
                 return 1
             fi
             
             # RFC compliance: Labels should start with a letter (strict interpretation)
-            if [[ ! "$label" =~ ^[a-zA-Z] ]] && [[ ! "$label" =~ ^xn-- ]]; then
+            if [[ ! "$label" =~ ^[a-zA-Z] && ! "$label" =~ ^xn-- ]]; then
                 log_debug "RFC strict: Label should start with a letter: $label"
                 return 1
             fi
@@ -1134,7 +1134,7 @@ check_dns_resolution() {
         log_debug "DNS resolution successful via $resolution_method"
         return 0
     else
-        log_debug "DNS resolution failed for $fqdn"
+        log_debug "DNS resolution failed for $fqdn (normalized: $normalized_fqdn)"
         return 1
     fi
 }
