@@ -520,6 +520,7 @@ process_template_with_release_channel() {
     local setup_mode="${14}"
     local redis_enabled="${15:-yes}"
     local release_channel="${16:-latest}"
+    local image_tag="${17}"
     
     echo -e "${BLUE}=================================================================================${NC}"
     echo -e "${BLUE}                 TEMPLATE PROCESSING WITH RELEASE CHANNEL                 ${NC}"
@@ -531,13 +532,17 @@ process_template_with_release_channel() {
         return 1
     fi
     
+    if [[ -z "$image_tag" ]]; then
+        echo -e "${RED}✗ Image tag is required${NC}"
+        return 1
+    fi
+    
     echo -e "${BLUE}Processing release channel: $release_channel${NC}"
     if ! validate_release_channel "$release_channel"; then
         echo -e "${RED}✗ Invalid release channel: $release_channel${NC}"
         return 1
     fi
     
-    local image_tag=$(get_image_tag_for_channel "$release_channel")
     echo -e "${GREEN}✓ Using Docker image tag: $image_tag${NC}"
     
     echo -e "${BLUE}Copying template to docker-compose.yml...${NC}"
@@ -1211,7 +1216,18 @@ main() {
     fi
     
     echo -e "${BLUE}Step 4: Template Processing with Release Channel${NC}"
-    if ! process_template_with_release_channel "$template_path" "$compose_file" "$MYSQL_PASSWORD" "$REDIS_PASSWORD" "$TOTP_SECRET" "$ADMIN_PASSWORD" "$FLASK_SECRET" "$ADMIN_USERNAME" "$AUTO_CERT_TYPE" "$AUTO_CERT_CONTACT" "$FQDN" "$SERVER_NAME" "$docker_subnet" "$SETUP_MODE" "$REDIS_ENABLED" "$RELEASE_CHANNEL"; then
+    
+    # Get the image tag from the release channel BEFORE calling the function
+    local image_tag=$(get_image_tag_for_channel "$RELEASE_CHANNEL")
+    if [[ -z "$image_tag" ]]; then
+        echo -e "${RED}✗ Failed to get image tag for release channel: $RELEASE_CHANNEL${NC}"
+        exit 1
+    fi
+    
+    echo -e "${BLUE}Release channel: $RELEASE_CHANNEL → Docker image tag: $image_tag${NC}"
+    
+    # Now call the function with the image_tag as the 17th parameter
+    if ! process_template_with_release_channel "$template_path" "$compose_file" "$MYSQL_PASSWORD" "$REDIS_PASSWORD" "$TOTP_SECRET" "$ADMIN_PASSWORD" "$FLASK_SECRET" "$ADMIN_USERNAME" "$AUTO_CERT_TYPE" "$AUTO_CERT_CONTACT" "$FQDN" "$SERVER_NAME" "$docker_subnet" "$SETUP_MODE" "$REDIS_ENABLED" "$RELEASE_CHANNEL" "$image_tag"; then
         echo -e "${RED}✗ Template processing failed${NC}"
         exit 1
     fi

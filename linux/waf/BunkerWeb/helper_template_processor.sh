@@ -1,13 +1,9 @@
 #!/bin/bash
-#
 # Copyright (c) 2025 Michal Koeckeis-Fresel
-# 
 # This software is dual-licensed under your choice of:
 # - MIT License (see LICENSE-MIT)
 # - GNU Affero General Public License v3.0 (see LICENSE-AGPL)
-# 
 # SPDX-License-Identifier: MIT OR AGPL-3.0-or-later
-#
 
 # BunkerWeb Template Processor Script
 # Handles placeholder replacement and template processing
@@ -73,7 +69,6 @@ replace_placeholder() {
     fi
 }
 
-# NEW: Function to replace Docker image tag placeholders
 replace_image_tag_placeholders() {
     local compose_file="$1"
     local image_tag="$2"
@@ -421,7 +416,6 @@ show_replacement_summary() {
     fi
 }
 
-# NEW: Main function to process a template file completely with release channel support
 process_template_with_release_channel() {
     local template_file="$1"
     local compose_file="$2"

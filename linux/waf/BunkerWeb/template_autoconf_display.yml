@@ -41,6 +41,8 @@ services:
       SERVE_FILES: "no"
       DISABLE_DEFAULT_SERVER: "yes"
       USE_CLIENT_CACHE: "yes"
+      HTTP3: "yes"
+      HTTP3_ALT_SVC_PORT: "443"
       USE_GZIP: "yes"
       GZIP_COMP_LEVEL: "9"
       GZIP_MIN_LENGTH: "1000"
