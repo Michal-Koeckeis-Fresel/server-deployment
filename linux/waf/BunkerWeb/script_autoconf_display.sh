@@ -54,6 +54,21 @@ PREFERRED_DOCKER_SUBNET=""
 REDIS_ENABLED="yes"
 REDIS_PASSWORD=""
 
+# DNS Configuration
+DNS_RESOLVERS="127.0.0.11"
+
+# HTTP/3 Configuration
+HTTP3="yes"
+HTTP3_ALT_SVC_PORT="443"
+
+# Let's Encrypt Configuration
+LETS_ENCRYPT_CHALLENGE="http"
+LETS_ENCRYPT_STAGING="yes"
+LETS_ENCRYPT_WILDCARD="no"
+
+# DNSBL Configuration
+DNSBL_LIST="bl.blocklist.de sbl.spamhaus.org xbl.spamhaus.org"
+
 # Allowlist Configuration (Global Access Control)
 USE_ALLOWLIST="no"
 ALLOWLIST_IP=""
@@ -502,7 +517,7 @@ configure_setup_mode() {
     fi
 }
 
-# Template processing function with release channel support
+# Template processing function with release channel support and comprehensive configuration
 process_template_with_release_channel() {
     local template_file="$1"
     local compose_file="$2"
@@ -600,7 +615,44 @@ process_template_with_release_channel() {
         fi
     fi
     
-    echo -e "${BLUE}4. Processing SSL configuration...${NC}"
+    echo -e "${BLUE}4. Processing DNS configuration...${NC}"
+    if [[ -n "$DNS_RESOLVERS" ]]; then
+        sed -i "s|REPLACEME_DNS_RESOLVERS|$DNS_RESOLVERS|g" "$compose_file"
+        echo -e "${GREEN}✓ DNS resolvers updated to: $DNS_RESOLVERS${NC}"
+    else
+        sed -i "s|REPLACEME_DNS_RESOLVERS|127.0.0.11|g" "$compose_file"
+        echo -e "${GREEN}✓ DNS resolvers set to default: 127.0.0.11${NC}"
+    fi
+    
+    echo -e "${BLUE}5. Processing HTTP/3 configuration...${NC}"
+    if [[ -n "$HTTP3" ]]; then
+        sed -i "s|HTTP3: \"yes\"|HTTP3: \"$HTTP3\"|g" "$compose_file"
+        echo -e "${GREEN}✓ HTTP3 configured: $HTTP3${NC}"
+    fi
+    
+    if [[ -n "$HTTP3_ALT_SVC_PORT" ]]; then
+        sed -i "s|HTTP3_ALT_SVC_PORT: \"443\"|HTTP3_ALT_SVC_PORT: \"$HTTP3_ALT_SVC_PORT\"|g" "$compose_file"
+        echo -e "${GREEN}✓ HTTP3 alternate service port: $HTTP3_ALT_SVC_PORT${NC}"
+    fi
+    
+    echo -e "${BLUE}6. Processing Let's Encrypt configuration...${NC}"
+    if [[ -n "$LETS_ENCRYPT_CHALLENGE" ]]; then
+        sed -i "s|LETS_ENCRYPT_CHALLENGE: \"http\"|LETS_ENCRYPT_CHALLENGE: \"$LETS_ENCRYPT_CHALLENGE\"|g" "$compose_file"
+        echo -e "${GREEN}✓ Let's Encrypt challenge type: $LETS_ENCRYPT_CHALLENGE${NC}"
+    fi
+    
+    if [[ -n "$LETS_ENCRYPT_STAGING" ]]; then
+        sed -i "s|USE_LETS_ENCRYPT_STAGING: \"yes\"|USE_LETS_ENCRYPT_STAGING: \"$LETS_ENCRYPT_STAGING\"|g" "$compose_file"
+        echo -e "${GREEN}✓ Let's Encrypt staging: $LETS_ENCRYPT_STAGING${NC}"
+    fi
+    
+    echo -e "${BLUE}7. Processing multisite configuration...${NC}"
+    if [[ -n "$MULTISITE" ]]; then
+        sed -i "s|MULTISITE: \"yes\"|MULTISITE: \"$MULTISITE\"|g" "$compose_file"
+        echo -e "${GREEN}✓ Multisite mode: $MULTISITE${NC}"
+    fi
+    
+    echo -e "${BLUE}8. Processing SSL configuration...${NC}"
     if [[ -n "$auto_cert_type" ]]; then
         sed -i "s|REPLACEME_AUTO_LETS_ENCRYPT|yes|g" "$compose_file"
         sed -i "s|REPLACEME_EMAIL_LETS_ENCRYPT|$auto_cert_contact|g" "$compose_file"
@@ -610,21 +662,21 @@ process_template_with_release_channel() {
         echo -e "${GREEN}✓ SSL certificates disabled${NC}"
     fi
     
-    echo -e "${BLUE}5. Processing domain configuration...${NC}"
+    echo -e "${BLUE}9. Processing domain configuration...${NC}"
     if [[ -n "$fqdn" ]]; then
         sed -i "s|REPLACEME_DOMAIN|$fqdn|g" "$compose_file"
         sed -i "s|SERVER_NAME: \"\"|SERVER_NAME: \"$fqdn\"|g" "$compose_file"
         echo -e "${GREEN}✓ Domain configured: $fqdn${NC}"
     fi
     
-    echo -e "${BLUE}6. Adding UI labels and syncing scheduler...${NC}"
+    echo -e "${BLUE}10. Adding UI labels and syncing scheduler...${NC}"
     add_bw_ui_labels "$compose_file" "$fqdn"
     
-    echo -e "${BLUE}7. Configuring setup mode and credentials...${NC}"
+    echo -e "${BLUE}11. Configuring setup mode and credentials...${NC}"
     configure_setup_mode "$compose_file" "$setup_mode" "$admin_username" "$admin_password" "$flask_secret"
     
-    echo -e "${BLUE}8. Validating placeholder replacement...${NC}"
-    local remaining_critical=$(grep -o "REPLACEME_MYSQL\|REPLACEME_DEFAULT\|REPLACEME_AUTO_LETS_ENCRYPT\|REPLACEME_EMAIL_LETS_ENCRYPT\|REPLACEME_TAG" "$compose_file" || true)
+    echo -e "${BLUE}12. Validating placeholder replacement...${NC}"
+    local remaining_critical=$(grep -o "REPLACEME_MYSQL\|REPLACEME_DEFAULT\|REPLACEME_AUTO_LETS_ENCRYPT\|REPLACEME_EMAIL_LETS_ENCRYPT\|REPLACEME_TAG\|REPLACEME_DNS_RESOLVERS" "$compose_file" || true)
     if [[ -n "$remaining_critical" ]]; then
         echo -e "${RED}✗ Critical placeholders not replaced: $remaining_critical${NC}"
         return 1
@@ -639,7 +691,7 @@ process_template_with_release_channel() {
         echo -e "${GREEN}  UI Labels: $ui_path${NC}"
     fi
     
-    echo -e "${BLUE}9. Validating Docker Compose syntax...${NC}"
+    echo -e "${BLUE}13. Validating Docker Compose syntax...${NC}"
     local current_dir=$(pwd)
     cd "$(dirname "$compose_file")"
     if docker compose config >/dev/null 2>&1; then
@@ -657,6 +709,9 @@ process_template_with_release_channel() {
     echo -e "${GREEN}✓ Template processing with release channel completed successfully${NC}"
     echo -e "${GREEN}✓ Release channel: $release_channel${NC}"
     echo -e "${GREEN}✓ Docker image tag: $image_tag${NC}"
+    echo -e "${GREEN}✓ DNS resolvers: $DNS_RESOLVERS${NC}"
+    echo -e "${GREEN}✓ HTTP/3 enabled: $HTTP3${NC}"
+    echo -e "${GREEN}✓ Multisite mode: $MULTISITE${NC}"
     echo -e "${GREEN}✓ All placeholders properly replaced${NC}"
     echo -e "${GREEN}✓ Admin credentials correctly configured${NC}"
     echo -e "${GREEN}✓ UI path synchronized between scheduler and UI service${NC}"
@@ -985,6 +1040,17 @@ Docker Image Tag: $image_tag
 Channel Description: $(get_channel_description "$release_channel")
 Stability Level: $(get_stability_level "$release_channel")
 
+# DNS Configuration
+DNS Resolvers: ${DNS_RESOLVERS:-"127.0.0.11"}
+
+# HTTP/3 Configuration
+HTTP3 Enabled: ${HTTP3:-"yes"}
+HTTP3 Alt-Svc Port: ${HTTP3_ALT_SVC_PORT:-"443"}
+
+# Let's Encrypt Configuration
+LE Challenge Type: ${LETS_ENCRYPT_CHALLENGE:-"http"}
+LE Staging Mode: ${LETS_ENCRYPT_STAGING:-"yes"}
+
 # Network Configuration
 $(if [[ -n "$docker_subnet" ]]; then echo "Docker Subnet: $docker_subnet"; fi)
 $(if [[ -n "$networks_avoided" ]]; then echo "Private Networks Avoided: $networks_avoided"; fi)
@@ -1037,6 +1103,7 @@ EOF
     echo -e "${GREEN}• Flask Secret: ${flask_secret:0:8}... (${#flask_secret} chars)${NC}"
     echo -e "${GREEN}• Release Channel: $release_channel${NC}"
     echo -e "${GREEN}• Docker Image Tag: $image_tag${NC}"
+    echo -e "${GREEN}• DNS Resolvers: ${DNS_RESOLVERS:-"127.0.0.11"}${NC}"
     
     if [[ "$redis_enabled" == "yes" ]]; then
         echo -e "${GREEN}• Redis Password: ${redis_password:0:8}... (${#redis_password} chars)${NC}"
@@ -1076,6 +1143,9 @@ show_setup_summary() {
     echo -e "${YELLOW}Docker Image Tag:${NC} $(get_image_tag_for_channel "$RELEASE_CHANNEL")"
     echo -e "${YELLOW}Domain (FQDN):${NC} $FQDN"
     echo -e "${YELLOW}FQDN Detection Method:${NC} $(get_detection_method 2>/dev/null || echo "manual/fallback")"
+    echo -e "${YELLOW}DNS Resolvers:${NC} ${DNS_RESOLVERS:-"127.0.0.11"}"
+    echo -e "${YELLOW}HTTP/3 Enabled:${NC} ${HTTP3:-"yes"}"
+    echo -e "${YELLOW}Multisite Mode:${NC} ${MULTISITE:-"yes"}"
     echo -e "${YELLOW}Redis Enabled:${NC} $REDIS_ENABLED"
     echo -e "${YELLOW}Allowlist Enabled:${NC} $USE_ALLOWLIST"
     echo -e "${YELLOW}Greylist Enabled:${NC} $USE_GREYLIST"
@@ -1083,6 +1153,8 @@ show_setup_summary() {
     
     if [[ -n "$AUTO_CERT_TYPE" ]]; then
         echo -e "${YELLOW}SSL Certificates:${NC} $AUTO_CERT_TYPE ($AUTO_CERT_CONTACT)"
+        echo -e "${YELLOW}LE Challenge Type:${NC} ${LETS_ENCRYPT_CHALLENGE:-"http"}"
+        echo -e "${YELLOW}LE Staging Mode:${NC} ${LETS_ENCRYPT_STAGING:-"yes"}"
     else
         echo -e "${YELLOW}SSL Certificates:${NC} Manual configuration"
     fi
@@ -1136,6 +1208,8 @@ show_setup_summary() {
         echo ""
         echo -e "${BLUE}SSL Certificate Information:${NC}"
         echo -e "${GREEN}• Let's Encrypt will automatically generate certificates for: $FQDN${NC}"
+        echo -e "${GREEN}• Challenge type: ${LETS_ENCRYPT_CHALLENGE:-"http"}${NC}"
+        echo -e "${GREEN}• Staging mode: ${LETS_ENCRYPT_STAGING:-"yes"}${NC}"
         echo -e "${GREEN}• Monitor certificate generation: docker compose logs -f bw-scheduler | grep -i cert${NC}"
         echo -e "${GREEN}• Check certificate status after a few minutes${NC}"
     fi
@@ -1196,6 +1270,9 @@ main() {
     echo -e "${GREEN}• Docker Image Tag: $(get_image_tag_for_channel "$RELEASE_CHANNEL")${NC}"
     echo -e "${GREEN}• Domain (FQDN): $FQDN${NC}"
     echo -e "${GREEN}• FQDN Detection Method: $(get_detection_method)${NC}"
+    echo -e "${GREEN}• DNS Resolvers: ${DNS_RESOLVERS:-"127.0.0.11"}${NC}"
+    echo -e "${GREEN}• HTTP/3 Enabled: ${HTTP3:-"yes"}${NC}"
+    echo -e "${GREEN}• Multisite Mode: ${MULTISITE:-"yes"}${NC}"
     echo -e "${GREEN}• Allowlist Enabled: $USE_ALLOWLIST${NC}"
     echo -e "${GREEN}• Greylist Enabled: $USE_GREYLIST${NC}"
     echo -e "${GREEN}• Redis Enabled: $REDIS_ENABLED${NC}"
