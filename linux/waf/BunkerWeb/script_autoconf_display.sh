@@ -96,6 +96,9 @@ FQDN_MIN_DOMAIN_PARTS="2"
 FQDN_LOG_LEVEL="INFO"
 FQDN_STRICT_MODE="no"
 
+# Log Level Configuration (will be set based on DEBUG setting from BunkerWeb.conf)
+LOG_LEVEL="INFO"
+
 # Global variable to store generated UI path
 UI_ACCESS_PATH=""
 
@@ -238,7 +241,7 @@ configure_fqdn_detection() {
     export MIN_DOMAIN_PARTS="$FQDN_MIN_DOMAIN_PARTS"
     export LOG_LEVEL="$FQDN_LOG_LEVEL"
     
-    echo -e "${GREEN}✓ FQDN detection configured${NC}"
+    echo -e "${GREEN}✓ FQDN detection configured with log level: $FQDN_LOG_LEVEL${NC}"
 }
 
 # Enhanced FQDN detection using helper_fqdn.sh
@@ -729,6 +732,17 @@ load_configuration() {
         source "$config_file"
         echo -e "${GREEN}✓ Configuration loaded${NC}"
         
+        # Set all log levels based on DEBUG setting from BunkerWeb.conf
+        if [[ "${DEBUG:-no}" == "yes" ]]; then
+            FQDN_LOG_LEVEL="DEBUG"
+            LOG_LEVEL="DEBUG"
+            echo -e "${GREEN}✓ Debug mode enabled - all log levels set to DEBUG${NC}"
+        else
+            FQDN_LOG_LEVEL="${FQDN_LOG_LEVEL:-INFO}"
+            LOG_LEVEL="${LOG_LEVEL:-INFO}"
+            echo -e "${BLUE}ℹ Debug mode disabled - using INFO log level${NC}"
+        fi
+        
         if [[ -n "${RELEASE_CHANNEL:-}" ]]; then
             RELEASE_CHANNEL="$RELEASE_CHANNEL"
             echo -e "${GREEN}✓ Release channel from config: $RELEASE_CHANNEL${NC}"
@@ -745,9 +759,7 @@ load_configuration() {
         if [[ -n "${FQDN_ALLOW_LOCALHOST:-}" ]]; then
             FQDN_ALLOW_LOCALHOST="$FQDN_ALLOW_LOCALHOST"
         fi
-        if [[ -n "${FQDN_LOG_LEVEL:-}" ]]; then
-            FQDN_LOG_LEVEL="$FQDN_LOG_LEVEL"
-        fi
+        # FQDN_LOG_LEVEL is now set based on DEBUG setting above
         
         if [[ -n "$AUTO_CERT_TYPE" ]]; then
             if [[ "$AUTO_CERT_CONTACT" == "me@example.com" ]] || [[ "$AUTO_CERT_CONTACT" == *"@example.com"* ]] || [[ "$AUTO_CERT_CONTACT" == *"@yourdomain.com"* ]]; then
@@ -769,6 +781,7 @@ load_configuration() {
         fi
     else
         echo -e "${YELLOW}No configuration file found - using defaults${NC}"
+        echo -e "${BLUE}ℹ Using default INFO log level${NC}"
     fi
 }
 
@@ -1017,6 +1030,8 @@ manage_credentials() {
 # Setup Mode: ${setup_mode:-"Unknown"}
 # Release Channel: ${release_channel:-"latest"}
 # Docker Image Tag: ${image_tag:-"latest"}
+# Debug Mode: ${DEBUG:-"no"}
+# Log Level: ${FQDN_LOG_LEVEL:-"INFO"}
 # Generated on: $(date)
 # Keep this file secure and backed up!
 
@@ -1039,6 +1054,10 @@ Release Channel: $release_channel
 Docker Image Tag: $image_tag
 Channel Description: $(get_channel_description "$release_channel")
 Stability Level: $(get_stability_level "$release_channel")
+
+# Debug and Logging Configuration
+Debug Mode: ${DEBUG:-"no"}
+Log Level: ${FQDN_LOG_LEVEL:-"INFO"}
 
 # DNS Configuration
 DNS Resolvers: ${DNS_RESOLVERS:-"127.0.0.11"}
@@ -1104,6 +1123,8 @@ EOF
     echo -e "${GREEN}• Release Channel: $release_channel${NC}"
     echo -e "${GREEN}• Docker Image Tag: $image_tag${NC}"
     echo -e "${GREEN}• DNS Resolvers: ${DNS_RESOLVERS:-"127.0.0.11"}${NC}"
+    echo -e "${GREEN}• Log Level: ${FQDN_LOG_LEVEL:-"INFO"}${NC}"
+    echo -e "${GREEN}• Debug Mode: ${DEBUG:-"no"}${NC}"
     
     if [[ "$redis_enabled" == "yes" ]]; then
         echo -e "${GREEN}• Redis Password: ${redis_password:0:8}... (${#redis_password} chars)${NC}"
@@ -1146,6 +1167,8 @@ show_setup_summary() {
     echo -e "${YELLOW}DNS Resolvers:${NC} ${DNS_RESOLVERS:-"127.0.0.11"}"
     echo -e "${YELLOW}HTTP/3 Enabled:${NC} ${HTTP3:-"yes"}"
     echo -e "${YELLOW}Multisite Mode:${NC} ${MULTISITE:-"yes"}"
+    echo -e "${YELLOW}Log Level:${NC} $FQDN_LOG_LEVEL"
+    echo -e "${YELLOW}Debug Mode:${NC} ${DEBUG:-"no"}"
     echo -e "${YELLOW}Redis Enabled:${NC} $REDIS_ENABLED"
     echo -e "${YELLOW}Allowlist Enabled:${NC} $USE_ALLOWLIST"
     echo -e "${YELLOW}Greylist Enabled:${NC} $USE_GREYLIST"
@@ -1273,6 +1296,8 @@ main() {
     echo -e "${GREEN}• DNS Resolvers: ${DNS_RESOLVERS:-"127.0.0.11"}${NC}"
     echo -e "${GREEN}• HTTP/3 Enabled: ${HTTP3:-"yes"}${NC}"
     echo -e "${GREEN}• Multisite Mode: ${MULTISITE:-"yes"}${NC}"
+    echo -e "${GREEN}• Log Level: $FQDN_LOG_LEVEL${NC}"
+    echo -e "${GREEN}• Debug Mode: ${DEBUG:-"no"}${NC}"
     echo -e "${GREEN}• Allowlist Enabled: $USE_ALLOWLIST${NC}"
     echo -e "${GREEN}• Greylist Enabled: $USE_GREYLIST${NC}"
     echo -e "${GREEN}• Redis Enabled: $REDIS_ENABLED${NC}"
