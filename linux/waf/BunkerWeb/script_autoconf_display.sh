@@ -434,7 +434,7 @@ add_bw_ui_labels() {
     echo -e "${BLUE}Adding BunkerWeb labels to bw-ui service and syncing with scheduler...${NC}"
     
     local random_ui_path=$(generate_random_ui_path)
-    UI_ACCESS_PATH="/$random_ui_path"
+    UI_ACCESS_PATH="$random_ui_path"
     
     local labels_block="    labels:
       - \"bunkerweb.SERVER_NAME=$fqdn\"
