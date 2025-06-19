@@ -98,221 +98,21 @@ main() {
         if [[ "$file_size" -le 1 ]]; then
             log_info "Found empty/corrupted BunkerWeb.conf (${file_size} bytes) - downloading template"
             if download_file "$BASE_URL/BunkerWeb.conf" "/root/BunkerWeb.conf"; then
-                log_success "✓ Downloaded BunkerWeb.conf template"
+                log_success "Downloaded BunkerWeb.conf template"
             else
-                log_error "✗ Failed to download BunkerWeb.conf template"
+                log_error "Failed to download BunkerWeb.conf template"
                 exit 1
             fi
         else
             # Check if file exists but contains only whitespace/comments
             local non_empty_content
-            non_empty_content=$(grep -v '^[[:space:]]*
-    
-    # Create symbolic link
-    log_step "Creating symbolic link for BunkerWeb.conf..."
-    if [[ -L "/data/BunkerWeb/BunkerWeb.conf" ]]; then
-        rm "/data/BunkerWeb/BunkerWeb.conf"
-    elif [[ -f "/data/BunkerWeb/BunkerWeb.conf" ]]; then
-        mv "/data/BunkerWeb/BunkerWeb.conf" "/data/BunkerWeb/BunkerWeb.conf.backup.$(date +%Y%m%d_%H%M%S)"
-    fi
-    
-    ln -s "/root/BunkerWeb.conf" "/data/BunkerWeb/BunkerWeb.conf"
-    log_success "✓ Created symbolic link: /data/BunkerWeb/BunkerWeb.conf → /root/BunkerWeb.conf"
-    
-    # Download files
-    log_step "Downloading BunkerWeb project files..."
-    
-    # Initialize counters
-    local downloaded_count=0
-    local failed_count=0
-    local skipped_count=0
-    
-    # List of files to download from main repository
-    echo "Downloading main repository files..."
-    
-    # Process each file individually
-    for file in \
-        "script_autoconf_display.sh" \
-        "script_password_reset_display.sh" \
-        "script_template_selector.sh" \
-        "template_autoconf_display.yml" \
-        "template_basic_display.yml" \
-        "template_ui_integrated_display.yml" \
-        "template_sample_app_display.yml" \
-        "uninstall_BunkerWeb.sh" \
-        "helper_password_manager.sh" \
-        "helper_network_detection.sh" \
-        "helper_template_processor.sh" \
-        "helper_greylist.sh" \
-        "helper_allowlist.sh" \
-        "helper_release_channel_manager.sh" \
-        "helper_directory_layout.sh" \
-        "helper_bunkerweb_config_checker.sh" \
-        "helper_fqdn_lookup.sh" \
-        "fluent-bit.conf" \
-        "fluent_bit_parsers.txt"
-    do
-        echo -n "Processing $file... "
-        
-        # Skip if file already exists and is not empty
-        if [[ -f "$file" && -s "$file" ]]; then
-            echo "SKIPPED (exists)"
-            skipped_count=$((skipped_count + 1))
-            continue
-        fi
-        
-        # Download the file
-        if download_file "$BASE_URL/$file" "$file"; then
-            if [[ -f "$file" && -s "$file" ]]; then
-                echo "SUCCESS"
-                downloaded_count=$((downloaded_count + 1))
-            else
-                echo "FAILED (empty file)"
-                rm -f "$file" 2>/dev/null || true
-                failed_count=$((failed_count + 1))
-            fi
-        else
-            echo "FAILED (download error)"
-            failed_count=$((failed_count + 1))
-        fi
-    done
-    
-    # Download special files with custom URLs
-    echo "Downloading special files..."
-    
-    # helper_fqdn.sh from different repository
-    file="helper_fqdn.sh"
-    url="https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/refs/heads/main/linux/deploy_scripts/helper-scripts/helper_fqdn.sh"
-    
-    echo -n "Processing $file (special URL)... "
-    
-    # Skip if file already exists and is not empty
-    if [[ -f "$file" && -s "$file" ]]; then
-        echo "SKIPPED (exists)"
-        skipped_count=$((skipped_count + 1))
-    else
-        # Download the file
-        if download_file "$url" "$file"; then
-            if [[ -f "$file" && -s "$file" ]]; then
-                echo "SUCCESS"
-                downloaded_count=$((downloaded_count + 1))
-            else
-                echo "FAILED (empty file)"
-                rm -f "$file" 2>/dev/null || true
-                failed_count=$((failed_count + 1))
-            fi
-        else
-            echo "FAILED (download error)"
-            failed_count=$((failed_count + 1))
-        fi
-    fi
-    
-    # Report statistics
-    log_step "Download Summary"
-    log_success "✓ Downloaded: $downloaded_count files"
-    if [[ $skipped_count -gt 0 ]]; then
-        log_info "ℹ Skipped: $skipped_count files (already exist)"
-    fi
-    if [[ $failed_count -gt 0 ]]; then
-        log_warning "⚠ Failed: $failed_count files"
-    fi
-    
-    # Set executable permissions for shell scripts
-    log_step "Setting executable permissions..."
-    local script_files=(
-        "script_autoconf_display.sh"
-        "script_password_reset_display.sh"
-        "script_template_selector.sh"
-        "uninstall_BunkerWeb.sh"
-        "helper_password_manager.sh"
-        "helper_network_detection.sh"
-        "helper_template_processor.sh"
-        "helper_greylist.sh"
-        "helper_allowlist.sh"
-        "helper_release_channel_manager.sh"
-        "helper_directory_layout.sh"
-        "helper_bunkerweb_config_checker.sh"
-        "helper_fqdn_lookup.sh"
-        "helper_fqdn.sh"
-    )
-    
-    local executable_count=0
-    for script in "${script_files[@]}"; do
-        if [[ -f "$script" ]]; then
-            chmod +x "$script" && executable_count=$((executable_count + 1))
-        fi
-    done
-    
-    log_success "✓ Made $executable_count scripts executable"
-    
-    # Verify critical files
-    log_step "Verifying critical files..."
-    local missing_critical=0
-    
-    for file in \
-        "script_autoconf_display.sh" \
-        "script_template_selector.sh" \
-        "helper_release_channel_manager.sh" \
-        "helper_fqdn.sh" \
-        "template_autoconf_display.yml" \
-        "BunkerWeb.conf"
-    do
-        if [[ -f "$file" ]] || [[ -L "$file" ]]; then
-            echo "✓ $file"
-        else
-            echo "✗ Missing: $file"
-            missing_critical=$((missing_critical + 1))
-        fi
-    done
-    
-    if [[ $missing_critical -gt 0 ]]; then
-        log_error "✗ $missing_critical critical files missing"
-        log_info "Try running the script again or check network connection."
-        exit 1
-    fi
-    
-    # Test release channel manager
-    if [[ -f "helper_release_channel_manager.sh" && -x "helper_release_channel_manager.sh" ]]; then
-        if source helper_release_channel_manager.sh >/dev/null 2>&1; then
-            if command -v validate_release_channel >/dev/null 2>&1; then
-                if validate_release_channel "latest" >/dev/null 2>&1; then
-                    log_success "✓ Release channel system ready"
-                else
-                    log_warning "⚠ Release channel validation failed"
-                fi
-            else
-                log_warning "⚠ Release channel function not found"
-            fi
-        else
-            log_warning "⚠ Release channel manager failed to load"
-        fi
-    fi
-    
-    # Show what was downloaded
-    log_step "Files in directory:"
-    ls -la /data/BunkerWeb/ | grep -v "^total" | grep -v "^d" || true
-    
-    log_success "BunkerWeb deployment completed successfully!"
-    echo ""
-    echo "Files downloaded to: /data/BunkerWeb"
-    echo "Configuration: /root/BunkerWeb.conf"
-    echo ""
-    echo "Next steps:"
-    echo "  1. Edit configuration: nano /root/BunkerWeb.conf"
-    echo "  2. Select template: sudo ./script_template_selector.sh"
-    echo "  3. Run setup: sudo ./script_autoconf_display.sh --type autoconf"
-    echo ""
-    log_info "Setup ready. Edit /root/BunkerWeb.conf if needed before running setup."
-}
-
-# Run main function
-main "$@" /root/BunkerWeb.conf 2>/dev/null | grep -v '^[[:space:]]*#' | head -1 || echo "")
+            non_empty_content=$(grep -v '^[[:space:]]*$' /root/BunkerWeb.conf 2>/dev/null | grep -v '^[[:space:]]*#' | head -1 || echo "")
             if [[ -z "$non_empty_content" ]]; then
                 log_info "Found empty BunkerWeb.conf - downloading template"
                 if download_file "$BASE_URL/BunkerWeb.conf" "/root/BunkerWeb.conf"; then
-                    log_success "✓ Downloaded BunkerWeb.conf template"
+                    log_success "Downloaded BunkerWeb.conf template"
                 else
-                    log_error "✗ Failed to download BunkerWeb.conf template"
+                    log_error "Failed to download BunkerWeb.conf template"
                     exit 1
                 fi
             else
@@ -322,9 +122,9 @@ main "$@" /root/BunkerWeb.conf 2>/dev/null | grep -v '^[[:space:]]*#' | head -1 
     else
         log_info "Creating new BunkerWeb.conf..."
         if download_file "$BASE_URL/BunkerWeb.conf" "/root/BunkerWeb.conf"; then
-            log_success "✓ Downloaded BunkerWeb.conf template"
+            log_success "Downloaded BunkerWeb.conf template"
         else
-            log_error "✗ Failed to download BunkerWeb.conf"
+            log_error "Failed to download BunkerWeb.conf"
             exit 1
         fi
     fi
@@ -338,7 +138,7 @@ main "$@" /root/BunkerWeb.conf 2>/dev/null | grep -v '^[[:space:]]*#' | head -1 
     fi
     
     ln -s "/root/BunkerWeb.conf" "/data/BunkerWeb/BunkerWeb.conf"
-    log_success "✓ Created symbolic link: /data/BunkerWeb/BunkerWeb.conf → /root/BunkerWeb.conf"
+    log_success "Created symbolic link: /data/BunkerWeb/BunkerWeb.conf → /root/BunkerWeb.conf"
     
     # Download files
     log_step "Downloading BunkerWeb project files..."
@@ -351,28 +151,31 @@ main "$@" /root/BunkerWeb.conf 2>/dev/null | grep -v '^[[:space:]]*#' | head -1 
     # List of files to download from main repository
     echo "Downloading main repository files..."
     
-    # Process each file individually
-    for file in \
-        "script_autoconf_display.sh" \
-        "script_password_reset_display.sh" \
-        "script_template_selector.sh" \
-        "template_autoconf_display.yml" \
-        "template_basic_display.yml" \
-        "template_ui_integrated_display.yml" \
-        "template_sample_app_display.yml" \
-        "uninstall_BunkerWeb.sh" \
-        "helper_password_manager.sh" \
-        "helper_network_detection.sh" \
-        "helper_template_processor.sh" \
-        "helper_greylist.sh" \
-        "helper_allowlist.sh" \
-        "helper_release_channel_manager.sh" \
-        "helper_directory_layout.sh" \
-        "helper_bunkerweb_config_checker.sh" \
-        "helper_fqdn_lookup.sh" \
-        "fluent-bit.conf" \
+    # Define file list
+    local files=(
+        "script_autoconf_display.sh"
+        "script_password_reset_display.sh"
+        "script_template_selector.sh"
+        "template_autoconf_display.yml"
+        "template_basic_display.yml"
+        "template_ui_integrated_display.yml"
+        "template_sample_app_display.yml"
+        "uninstall_BunkerWeb.sh"
+        "helper_password_manager.sh"
+        "helper_network_detection.sh"
+        "helper_template_processor.sh"
+        "helper_greylist.sh"
+        "helper_allowlist.sh"
+        "helper_release_channel_manager.sh"
+        "helper_directory_layout.sh"
+        "helper_bunkerweb_config_checker.sh"
+        "helper_fqdn_lookup.sh"
+        "fluent-bit.conf"
         "fluent_bit_parsers.txt"
-    do
+    )
+    
+    # Process each file individually
+    for file in "${files[@]}"; do
         echo -n "Processing $file... "
         
         # Skip if file already exists and is not empty
@@ -430,12 +233,12 @@ main "$@" /root/BunkerWeb.conf 2>/dev/null | grep -v '^[[:space:]]*#' | head -1 
     
     # Report statistics
     log_step "Download Summary"
-    log_success "✓ Downloaded: $downloaded_count files"
+    log_success "Downloaded: $downloaded_count files"
     if [[ $skipped_count -gt 0 ]]; then
-        log_info "ℹ Skipped: $skipped_count files (already exist)"
+        log_info "Skipped: $skipped_count files (already exist)"
     fi
     if [[ $failed_count -gt 0 ]]; then
-        log_warning "⚠ Failed: $failed_count files"
+        log_warning "Failed: $failed_count files"
     fi
     
     # Set executable permissions for shell scripts
@@ -464,20 +267,22 @@ main "$@" /root/BunkerWeb.conf 2>/dev/null | grep -v '^[[:space:]]*#' | head -1 
         fi
     done
     
-    log_success "✓ Made $executable_count scripts executable"
+    log_success "Made $executable_count scripts executable"
     
     # Verify critical files
     log_step "Verifying critical files..."
     local missing_critical=0
     
-    for file in \
-        "script_autoconf_display.sh" \
-        "script_template_selector.sh" \
-        "helper_release_channel_manager.sh" \
-        "helper_fqdn.sh" \
-        "template_autoconf_display.yml" \
+    local critical_files=(
+        "script_autoconf_display.sh"
+        "script_template_selector.sh"
+        "helper_release_channel_manager.sh"
+        "helper_fqdn.sh"
+        "template_autoconf_display.yml"
         "BunkerWeb.conf"
-    do
+    )
+    
+    for file in "${critical_files[@]}"; do
         if [[ -f "$file" ]] || [[ -L "$file" ]]; then
             echo "✓ $file"
         else
@@ -487,7 +292,7 @@ main "$@" /root/BunkerWeb.conf 2>/dev/null | grep -v '^[[:space:]]*#' | head -1 
     done
     
     if [[ $missing_critical -gt 0 ]]; then
-        log_error "✗ $missing_critical critical files missing"
+        log_error "$missing_critical critical files missing"
         log_info "Try running the script again or check network connection."
         exit 1
     fi
@@ -497,15 +302,15 @@ main "$@" /root/BunkerWeb.conf 2>/dev/null | grep -v '^[[:space:]]*#' | head -1 
         if source helper_release_channel_manager.sh >/dev/null 2>&1; then
             if command -v validate_release_channel >/dev/null 2>&1; then
                 if validate_release_channel "latest" >/dev/null 2>&1; then
-                    log_success "✓ Release channel system ready"
+                    log_success "Release channel system ready"
                 else
-                    log_warning "⚠ Release channel validation failed"
+                    log_warning "Release channel validation failed"
                 fi
             else
-                log_warning "⚠ Release channel function not found"
+                log_warning "Release channel function not found"
             fi
         else
-            log_warning "⚠ Release channel manager failed to load"
+            log_warning "Release channel manager failed to load"
         fi
     fi
     
