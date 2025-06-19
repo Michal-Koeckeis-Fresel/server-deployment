@@ -37,7 +37,7 @@ services:
       SERVER_NAME: ""
       MULTISITE: "yes"
       API_WHITELIST_IP: "127.0.0.0/8 10.20.30.0/24"
-      DNS_RESOLVERS: "127.0.0.11"
+      DNS_RESOLVERS: REPLACEME_DNS_RESOLVERS
       SERVE_FILES: "no"
       DISABLE_DEFAULT_SERVER: "yes"
       USE_CLIENT_CACHE: "yes"
