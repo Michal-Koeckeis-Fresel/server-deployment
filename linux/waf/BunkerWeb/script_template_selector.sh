@@ -62,4 +62,9 @@ fi
 sed -i "s|^RELEASE_CHANNEL=\".*\"|RELEASE_CHANNEL=\"${SELECTED_TAG}\"|" "$CONFIG_FILE"
 echo "Configuration updated: RELEASE_CHANNEL=\"$SELECTED_TAG\""
 
+echo "Next step: edit /data/BunkerWeb/BunkerWeb.conf"
+echo "nano /data/BunkerWeb/BunkerWeb.conf"
+
+
+
 exit 0

@@ -56,7 +56,7 @@ install_required_packages() {
     local missing_packages=""
     
     # Check for required tools
-    for tool in curl wget jq sudo; do
+    for tool in curl wget jq sudo nano vi; do
         if ! command_exists "$tool"; then
             missing_packages="$missing_packages $tool"
             packages_to_install="$packages_to_install $tool"
@@ -386,6 +386,12 @@ main() {
     echo ""
     echo "Files downloaded to: /data/BunkerWeb"
     echo "Configuration: /root/BunkerWeb.conf"
+    echo ""
+    echo -e "\033[31mWARNING: YOU MUST EDIT THE LINE CONTAINING\033[0m"
+    echo -e "\033[31mAUTO_CERT_CONTACT\033[0m"
+    echo -e "\033[31min /root/BunkerWeb.conf\033[0m"
+    echo ""
+    echo "SET IT TO YOUR VALID EMAIL-ADRESS - OTHERWISE THE SCRIPT WILL FAIL"
     echo ""
     echo "Next steps:"
     echo "  1. Edit configuration: nano /root/BunkerWeb.conf"
