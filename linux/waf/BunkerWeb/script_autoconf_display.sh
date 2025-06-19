@@ -10,7 +10,7 @@
 #
 
 # BunkerWeb Setup Script with Release Channel Support
-# MUST BE RUN AS ROOT: sudo ./script_autoconf_display.sh --type <autoconf|basic|integrated>
+# Configures and deploys BunkerWeb with enhanced FQDN detection, network management, and security features
 
 set -e
 
@@ -32,7 +32,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALL_DIR="/data/BunkerWeb"
 SETUP_MODE="wizard"
 
-# Default values (can be overridden by BunkerWeb.conf or command line)
+# Default configuration values
 ADMIN_USERNAME="admin"
 AUTO_CERT_TYPE=""
 AUTO_CERT_CONTACT=""
@@ -96,7 +96,7 @@ FQDN_MIN_DOMAIN_PARTS="2"
 FQDN_LOG_LEVEL="INFO"
 FQDN_STRICT_MODE="no"
 
-# Log Level Configuration (will be set based on DEBUG setting from BunkerWeb.conf)
+# Log Level Configuration
 LOG_LEVEL="INFO"
 
 # Global variable to store generated UI path
@@ -110,7 +110,7 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-# Enhanced password generation function for admin password
+# Generates secure admin password with mixed character types
 generate_secure_admin_password() {
     local uppercase="ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     local lowercase="abcdefghijklmnopqrstuvwxyz"
@@ -143,7 +143,7 @@ generate_secure_admin_password() {
     echo "$password" | fold -w1 | shuf | tr -d '\n'
 }
 
-# Function to generate random 8-character string for UI path
+# Generates random 8-character string for secure UI access path
 generate_random_ui_path() {
     local chars="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
     local random_path=""
@@ -155,7 +155,7 @@ generate_random_ui_path() {
     echo "$random_path"
 }
 
-# Source the modular scripts
+# Loads and initializes modular helper scripts
 source_modules() {
     local modules=(
         "helper_password_manager.sh"
@@ -190,7 +190,7 @@ source_modules() {
     return 0
 }
 
-# Function to validate and display release channel information
+# Validates release channel and displays channel information
 validate_release_channel() {
     local channel="$1"
     
@@ -222,7 +222,7 @@ validate_release_channel() {
     fi
 }
 
-# Configure FQDN detection settings based on SSL requirements
+# Configures FQDN detection parameters based on SSL requirements
 configure_fqdn_detection() {
     echo -e "${BLUE}Configuring FQDN detection parameters...${NC}"
     
@@ -244,7 +244,7 @@ configure_fqdn_detection() {
     echo -e "${GREEN}✓ FQDN detection configured with log level: $FQDN_LOG_LEVEL${NC}"
 }
 
-# Enhanced FQDN detection using helper_fqdn.sh
+# Enhanced FQDN detection with comprehensive validation and SSL readiness check
 detect_fqdn_enhanced() {
     local provided_fqdn="$1"
     
@@ -320,7 +320,7 @@ detect_fqdn_enhanced() {
     fi
 }
 
-# Function to detect and build comprehensive API whitelist
+# Builds comprehensive API whitelist including Docker network ranges and existing networks
 build_comprehensive_api_whitelist() {
     local docker_subnet="$1"
     local api_whitelist="127.0.0.0/8"
@@ -401,7 +401,7 @@ build_comprehensive_api_whitelist() {
     echo "$api_whitelist"
 }
 
-# Function to update API whitelist in docker-compose file
+# Updates API whitelist entries in docker-compose file
 update_api_whitelist() {
     local compose_file="$1"
     local api_whitelist="$2"
@@ -426,7 +426,7 @@ update_api_whitelist() {
     fi
 }
 
-# Function to add BunkerWeb labels to bw-ui service AND sync with scheduler
+# Adds BunkerWeb labels to bw-ui service and synchronizes with scheduler configuration
 add_bw_ui_labels() {
     local compose_file="$1"
     local fqdn="$2"
@@ -481,7 +481,7 @@ add_bw_ui_labels() {
     return 0
 }
 
-# Function to configure automated vs wizard setup
+# Configures automated vs wizard setup mode and admin credentials
 configure_setup_mode() {
     local compose_file="$1"
     local setup_mode="$2"
@@ -520,7 +520,7 @@ configure_setup_mode() {
     fi
 }
 
-# Template processing function with release channel support and comprehensive configuration
+# Comprehensive template processing with release channel support and all configurations
 process_template_with_release_channel() {
     local template_file="$1"
     local compose_file="$2"
@@ -672,13 +672,13 @@ process_template_with_release_channel() {
         echo -e "${GREEN}✓ Domain configured: $fqdn${NC}"
     fi
     
-    echo -e "${BLUE}10. Adding UI labels and syncing scheduler...${NC}"
+    echo -e "${BLUE}6. Adding UI labels and syncing scheduler...${NC}"
     add_bw_ui_labels "$compose_file" "$fqdn"
     
-    echo -e "${BLUE}11. Configuring setup mode and credentials...${NC}"
+    echo -e "${BLUE}7. Configuring setup mode and credentials...${NC}"
     configure_setup_mode "$compose_file" "$setup_mode" "$admin_username" "$admin_password" "$flask_secret"
     
-    echo -e "${BLUE}12. Validating placeholder replacement...${NC}"
+    echo -e "${BLUE}8. Validating placeholder replacement...${NC}"
     local remaining_critical=$(grep -o "REPLACEME_MYSQL\|REPLACEME_DEFAULT\|REPLACEME_AUTO_LETS_ENCRYPT\|REPLACEME_EMAIL_LETS_ENCRYPT\|REPLACEME_TAG\|REPLACEME_DNS_RESOLVERS" "$compose_file" || true)
     if [[ -n "$remaining_critical" ]]; then
         echo -e "${RED}✗ Critical placeholders not replaced: $remaining_critical${NC}"
@@ -694,7 +694,7 @@ process_template_with_release_channel() {
         echo -e "${GREEN}  UI Labels: $ui_path${NC}"
     fi
     
-    echo -e "${BLUE}13. Validating Docker Compose syntax...${NC}"
+    echo -e "${BLUE}9. Validating Docker Compose syntax...${NC}"
     local current_dir=$(pwd)
     cd "$(dirname "$compose_file")"
     if docker compose config >/dev/null 2>&1; then
@@ -721,23 +721,10 @@ process_template_with_release_channel() {
     echo -e "${GREEN}✓ Setup mode properly configured: $setup_mode${NC}"
     
     return 0
-    
-    echo ""
-    echo -e "${GREEN}✓ Template processing with release channel completed successfully${NC}"
-    echo -e "${GREEN}✓ Release channel: $release_channel${NC}"
-    echo -e "${GREEN}✓ Docker image tag: $image_tag${NC}"
-    echo -e "${GREEN}✓ DNS resolvers: $DNS_RESOLVERS${NC}"
-    echo -e "${GREEN}✓ HTTP/3 enabled: $HTTP3${NC}"
-    echo -e "${GREEN}✓ Multisite mode: $MULTISITE${NC}"
-    echo -e "${GREEN}✓ All placeholders properly replaced${NC}"
-    echo -e "${GREEN}✓ Admin credentials correctly configured${NC}"
-    echo -e "${GREEN}✓ UI path synchronized between scheduler and UI service${NC}"
-    echo -e "${GREEN}✓ Setup mode properly configured: $setup_mode${NC}"
-    
-    return 0
+}
 }
 
-# Load configuration from BunkerWeb.conf if it exists
+# Loads configuration from BunkerWeb.conf file with validation
 load_configuration() {
     local config_file="$INSTALL_DIR/BunkerWeb.conf"
     
@@ -746,7 +733,7 @@ load_configuration() {
         source "$config_file"
         echo -e "${GREEN}✓ Configuration loaded${NC}"
         
-        # Set all log levels based on DEBUG setting from BunkerWeb.conf
+        # Set all log levels based on DEBUG setting
         if [[ "${DEBUG:-no}" == "yes" ]]; then
             FQDN_LOG_LEVEL="DEBUG"
             LOG_LEVEL="DEBUG"
@@ -773,7 +760,6 @@ load_configuration() {
         if [[ -n "${FQDN_ALLOW_LOCALHOST:-}" ]]; then
             FQDN_ALLOW_LOCALHOST="$FQDN_ALLOW_LOCALHOST"
         fi
-        # FQDN_LOG_LEVEL is now set based on DEBUG setting above
         
         if [[ -n "$AUTO_CERT_TYPE" ]]; then
             if [[ "$AUTO_CERT_CONTACT" == "me@example.com" ]] || [[ "$AUTO_CERT_CONTACT" == *"@example.com"* ]] || [[ "$AUTO_CERT_CONTACT" == *"@yourdomain.com"* ]]; then
@@ -799,7 +785,7 @@ load_configuration() {
     fi
 }
 
-# Function to display usage
+# Displays script usage and available options
 show_usage() {
     echo -e "${BLUE}Usage: $0 --type <autoconf|basic|integrated> [OPTIONS]${NC}"
     echo ""
@@ -835,7 +821,7 @@ show_usage() {
     echo ""
 }
 
-# Parse command line arguments
+# Parses command line arguments and sets deployment configuration
 parse_arguments() {
     DEPLOYMENT_TYPE=""
     FORCE_INSTALL="no"
@@ -910,7 +896,7 @@ parse_arguments() {
     esac
 }
 
-# Create required directories with proper permissions
+# Creates required directories with proper permissions for BunkerWeb containers
 setup_directories() {
     echo -e "${BLUE}Creating directories...${NC}"
     
@@ -962,7 +948,7 @@ setup_directories() {
     echo -e "${GREEN}✓ All directories created and permissions properly set${NC}"
 }
 
-# Credential management
+# Manages credential generation, loading, and saving with comprehensive validation
 manage_credentials() {
     local creds_file="$1"
     local redis_enabled="$2"
@@ -1038,7 +1024,7 @@ manage_credentials() {
     echo -e "${BLUE}Saving credentials to: $creds_file${NC}"
     
     cat > "$creds_file" << EOF
-# BunkerWeb Generated Credentials (ENHANCED WITH RELEASE CHANNEL SUPPORT)
+# BunkerWeb Generated Credentials (Enhanced with Release Channel Support)
 # Deployment Type: ${deployment_name:-"Unknown"}
 # Template Used: ${template_file:-"Unknown"}
 # Setup Mode: ${setup_mode:-"Unknown"}
@@ -1047,7 +1033,6 @@ manage_credentials() {
 # Debug Mode: ${DEBUG:-"no"}
 # Log Level: ${FQDN_LOG_LEVEL:-"INFO"}
 # Generated on: $(date)
-# Keep this file secure and backed up!
 
 MySQL Database Password: $mysql_password
 TOTP Secret Key: $totp_secret
@@ -1148,7 +1133,7 @@ EOF
     return 0
 }
 
-# Simplified network detection for fallback
+# Simple network detection for fallback when advanced detection fails
 simple_network_detection() {
     local subnet="10.20.30.0/24"
     
@@ -1163,7 +1148,7 @@ simple_network_detection() {
     echo "$subnet"
 }
 
-# Display setup summary
+# Displays comprehensive setup summary with all configuration details
 show_setup_summary() {
     echo ""
     echo -e "${GREEN}================================================${NC}"
@@ -1255,7 +1240,7 @@ show_setup_summary() {
     echo -e "${GREEN}Setup completed successfully!${NC}"
 }
 
-# Main execution function
+# Main execution function coordinating all setup phases
 main() {
     echo -e "${BLUE}================================================${NC}"
     echo -e "${BLUE}      BunkerWeb Setup Script${NC}"
@@ -1333,7 +1318,7 @@ main() {
     
     echo -e "${BLUE}Step 4: Template Processing with Release Channel${NC}"
     
-    # Get the image tag from the release channel BEFORE calling the function
+    # Get the image tag from the release channel before calling the function
     local image_tag=$(get_image_tag_for_channel "$RELEASE_CHANNEL")
     if [[ -z "$image_tag" ]]; then
         echo -e "${RED}✗ Failed to get image tag for release channel: $RELEASE_CHANNEL${NC}"
@@ -1342,7 +1327,7 @@ main() {
     
     echo -e "${BLUE}Release channel: $RELEASE_CHANNEL → Docker image tag: $image_tag${NC}"
     
-    # Now call the function with the image_tag as the 17th parameter
+    # Call the template processing function with the image tag
     if ! process_template_with_release_channel "$template_path" "$compose_file" "$MYSQL_PASSWORD" "$REDIS_PASSWORD" "$TOTP_SECRET" "$ADMIN_PASSWORD" "$FLASK_SECRET" "$ADMIN_USERNAME" "$AUTO_CERT_TYPE" "$AUTO_CERT_CONTACT" "$FQDN" "$SERVER_NAME" "$docker_subnet" "$SETUP_MODE" "$REDIS_ENABLED" "$RELEASE_CHANNEL" "$image_tag"; then
         echo -e "${RED}✗ Template processing failed${NC}"
         exit 1
