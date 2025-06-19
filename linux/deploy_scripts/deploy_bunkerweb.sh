@@ -252,6 +252,31 @@ main() {
     ln -s "/root/BunkerWeb.conf" "/data/BunkerWeb/BunkerWeb.conf"
     log_success "Created symbolic link: /data/BunkerWeb/BunkerWeb.conf -> /root/BunkerWeb.conf"
     
+    # Handle credentials.txt if it exists - move to /root/ and create symlink
+    log_step "Checking for existing credentials.txt..."
+    if [ -f "/data/BunkerWeb/credentials.txt" ] && [ ! -L "/data/BunkerWeb/credentials.txt" ]; then
+        log_info "Found existing credentials.txt - moving to /root/ and creating symlink"
+        
+        # Backup existing file in /root/ if it exists
+        if [ -f "/root/credentials.txt" ]; then
+            mv "/root/credentials.txt" "/root/credentials.txt.backup.$(date +%Y%m%d_%H%M%S)"
+            log_info "Backed up existing /root/credentials.txt"
+        fi
+        
+        # Move file to /root/ and create symlink
+        mv "/data/BunkerWeb/credentials.txt" "/root/credentials.txt"
+        ln -s "/root/credentials.txt" "/data/BunkerWeb/credentials.txt"
+        log_success "Moved credentials.txt to /root/ and created symlink"
+    elif [ -f "/root/credentials.txt" ] && [ ! -L "/data/BunkerWeb/credentials.txt" ]; then
+        log_info "Found credentials.txt in /root/ - creating symlink"
+        ln -s "/root/credentials.txt" "/data/BunkerWeb/credentials.txt"
+        log_success "Created symlink for existing /root/credentials.txt"
+    elif [ -L "/data/BunkerWeb/credentials.txt" ]; then
+        log_info "Credentials.txt symlink already exists"
+    else
+        log_info "No existing credentials.txt found (will be created during setup)"
+    fi
+    
     # Download files
     log_step "Downloading BunkerWeb project files..."
     
