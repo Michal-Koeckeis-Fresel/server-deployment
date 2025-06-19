@@ -101,6 +101,7 @@ LOG_LEVEL="INFO"
 
 # Global variable to store generated UI path
 UI_ACCESS_PATH=""
+GENERATED_UI_PATH=""
 
 # Colors for output
 RED='\033[0;31m'
@@ -143,16 +144,61 @@ generate_secure_admin_password() {
     echo "$password" | fold -w1 | shuf | tr -d '\n'
 }
 
-# Generates random 8-character string for secure UI access path
-generate_random_ui_path() {
+# Generates secure random UI access path with specified length
+generate_secure_ui_path() {
+    local length="${1:-8}"
     local chars="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-    local random_path=""
+    local path=""
     
-    for i in {1..8}; do
-        random_path+="${chars:$((RANDOM % ${#chars})):1}"
+    echo -e "${BLUE}Generating secure UI access path (${length} characters)...${NC}" >&2
+    
+    for ((i=0; i<length; i++)); do
+        path+="${chars:$((RANDOM % ${#chars})):1}"
     done
     
-    echo "$random_path"
+    # Ensure path doesn't start with number (better URL compatibility)
+    if [[ "$path" =~ ^[0-9] ]]; then
+        local first_char="${chars:$((RANDOM % 52)):1}"  # Only letters
+        path="${first_char}${path:1}"
+    fi
+    
+    GENERATED_UI_PATH="$path"
+    echo -e "${GREEN}✓ Generated UI path: /$path${NC}" >&2
+    echo "$path"
+}
+
+# Validates UI path format and security
+validate_ui_path() {
+    local path="$1"
+    
+    if [[ -z "$path" ]]; then
+        echo -e "${RED}✗ UI path is empty${NC}" >&2
+        return 1
+    fi
+    
+    if [[ ${#path} -lt 6 ]]; then
+        echo -e "${RED}✗ UI path too short (minimum 6 characters)${NC}" >&2
+        return 1
+    fi
+    
+    if [[ ! "$path" =~ ^[a-zA-Z0-9]+$ ]]; then
+        echo -e "${RED}✗ UI path contains invalid characters${NC}" >&2
+        return 1
+    fi
+    
+    # Check for common/predictable paths
+    local forbidden_paths=("admin" "ui" "panel" "control" "manage" "dashboard" "bunkerweb" "login" "auth")
+    local path_lower=$(echo "$path" | tr '[:upper:]' '[:lower:]')
+    
+    for forbidden in "${forbidden_paths[@]}"; do
+        if [[ "$path_lower" == "$forbidden" ]]; then
+            echo -e "${RED}✗ UI path too predictable: $path${NC}" >&2
+            return 1
+        fi
+    done
+    
+    echo -e "${GREEN}✓ UI path validation passed${NC}" >&2
+    return 0
 }
 
 # Loads and initializes modular helper scripts
@@ -426,24 +472,55 @@ update_api_whitelist() {
     fi
 }
 
-# Adds BunkerWeb labels to bw-ui service and synchronizes with scheduler configuration
-add_bw_ui_labels() {
+# Configures BunkerWeb UI labels and synchronizes with scheduler configuration
+configure_bw_ui_labels_and_path() {
     local compose_file="$1"
     local fqdn="$2"
+    local ui_path="$3"
     
-    echo -e "${BLUE}Adding BunkerWeb labels to bw-ui service and syncing with scheduler...${NC}"
+    echo -e "${BLUE}Configuring BunkerWeb UI labels and path synchronization...${NC}" >&2
     
-    local random_ui_path=$(generate_random_ui_path)
-    UI_ACCESS_PATH="/$random_ui_path"
+    if [[ ! -f "$compose_file" ]]; then
+        echo -e "${RED}✗ Docker compose file not found: $compose_file${NC}" >&2
+        return 1
+    fi
     
-    local labels_block="    labels:
+    if [[ -z "$fqdn" ]]; then
+        echo -e "${RED}✗ FQDN not provided${NC}" >&2
+        return 1
+    fi
+    
+    if [[ -z "$ui_path" ]]; then
+        echo -e "${RED}✗ UI path not provided${NC}" >&2
+        return 1
+    fi
+    
+    if ! validate_ui_path "$ui_path"; then
+        echo -e "${RED}✗ UI path validation failed${NC}" >&2
+        return 1
+    fi
+    
+    # Replace REPLACEME_UI_PATH placeholder first
+    echo -e "${BLUE}Replacing UI path placeholder...${NC}" >&2
+    if sed -i "s|REPLACEME_UI_PATH|$ui_path|g" "$compose_file"; then
+        echo -e "${GREEN}✓ UI path placeholder replaced with: /$ui_path${NC}" >&2
+    else
+        echo -e "${RED}✗ Failed to replace UI path placeholder${NC}" >&2
+        return 1
+    fi
+    
+    # Add BunkerWeb labels to bw-ui service if they don't exist
+    if grep -q "bw-ui:" "$compose_file" && ! grep -q "bunkerweb.SERVER_NAME" "$compose_file"; then
+        echo -e "${BLUE}Adding BunkerWeb labels to bw-ui service...${NC}" >&2
+        
+        local labels_block="    labels:
       - \"bunkerweb.SERVER_NAME=$fqdn\"
       - \"bunkerweb.USE_TEMPLATE=ui\"
       - \"bunkerweb.USE_REVERSE_PROXY=yes\"
-      - \"bunkerweb.REVERSE_PROXY_URL=/$random_ui_path\"
+      - \"bunkerweb.REVERSE_PROXY_URL=/$ui_path\"
       - \"bunkerweb.REVERSE_PROXY_HOST=http://bw-ui:7000\""
-    
-    if grep -q "bw-ui:" "$compose_file"; then
+        
+        # Insert labels after the image line in bw-ui service
         awk -v labels="$labels_block" '
         /^  bw-ui:/ { in_ui_service = 1 }
         in_ui_service && /^    image:/ { 
@@ -455,29 +532,106 @@ add_bw_ui_labels() {
         { print }
         ' "$compose_file" > "$compose_file.tmp" && mv "$compose_file.tmp" "$compose_file"
         
-        echo -e "${GREEN}✓ BunkerWeb labels added to bw-ui service${NC}"
+        echo -e "${GREEN}✓ BunkerWeb labels added to bw-ui service${NC}" >&2
+    else
+        echo -e "${BLUE}ℹ BunkerWeb labels already configured or bw-ui service not found${NC}" >&2
     fi
     
-    echo -e "${BLUE}Updating scheduler configuration for domain: $fqdn${NC}"
+    # Update scheduler environment variables for domain-specific configuration
+    echo -e "${BLUE}Updating scheduler configuration for domain: $fqdn${NC}" >&2
     
+    # Replace domain-specific placeholders in scheduler environment
     sed -i "s|REPLACEME_DOMAIN_USE_TEMPLATE|${fqdn}_USE_TEMPLATE|g" "$compose_file"
     sed -i "s|REPLACEME_DOMAIN_USE_REVERSE_PROXY|${fqdn}_USE_REVERSE_PROXY|g" "$compose_file"
     sed -i "s|REPLACEME_DOMAIN_REVERSE_PROXY_URL|${fqdn}_REVERSE_PROXY_URL|g" "$compose_file"
     sed -i "s|REPLACEME_DOMAIN_REVERSE_PROXY_HOST|${fqdn}_REVERSE_PROXY_HOST|g" "$compose_file"
     
-    sed -i "s|REPLACEME_UI_PATH|$random_ui_path|g" "$compose_file"
+    # Set the actual values for the scheduler
+    sed -i "s|${fqdn}_USE_TEMPLATE: \".*\"|${fqdn}_USE_TEMPLATE: \"ui\"|g" "$compose_file"
+    sed -i "s|${fqdn}_USE_REVERSE_PROXY: \".*\"|${fqdn}_USE_REVERSE_PROXY: \"yes\"|g" "$compose_file"
+    sed -i "s|${fqdn}_REVERSE_PROXY_URL: \".*\"|${fqdn}_REVERSE_PROXY_URL: \"/$ui_path\"|g" "$compose_file"
+    sed -i "s|${fqdn}_REVERSE_PROXY_HOST: \".*\"|${fqdn}_REVERSE_PROXY_HOST: \"http://bw-ui:7000\"|g" "$compose_file"
     
-    echo -e "${GREEN}✓ Scheduler configuration updated for domain: $fqdn${NC}"
-    echo -e "${GREEN}✓ UI access path synchronized: /$random_ui_path${NC}"
+    echo -e "${GREEN}✓ Scheduler configuration updated for domain: $fqdn${NC}" >&2
+    echo -e "${GREEN}✓ UI access path configured: /$ui_path${NC}" >&2
     
-    if [[ -f "${compose_file%/*}/credentials.txt" ]]; then
-        echo "" >> "${compose_file%/*}/credentials.txt"
-        echo "# BunkerWeb UI Access Information" >> "${compose_file%/*}/credentials.txt"
-        echo "UI Access Path: /$random_ui_path" >> "${compose_file%/*}/credentials.txt"
-        echo "Full UI URL: http://$fqdn/$random_ui_path" >> "${compose_file%/*}/credentials.txt"
-        echo "Direct Access: http://$(hostname -I | awk '{print $1}')/$random_ui_path" >> "${compose_file%/*}/credentials.txt"
+    return 0
+}
+
+# Manages UI path configuration with validation and synchronization
+manage_ui_path_configuration() {
+    local compose_file="$1"
+    local fqdn="$2"
+    local creds_file="$3"
+    
+    echo -e "${BLUE}=================================================================================${NC}" >&2
+    echo -e "${BLUE}                    UI PATH CONFIGURATION MANAGEMENT                    ${NC}" >&2
+    echo -e "${BLUE}=================================================================================${NC}" >&2
+    echo "" >&2
+    
+    if [[ ! -f "$compose_file" ]]; then
+        echo -e "${RED}✗ Docker compose file not found: $compose_file${NC}" >&2
+        return 1
     fi
     
+    # Generate secure UI path
+    local ui_path=$(generate_secure_ui_path)
+    if [[ -z "$ui_path" ]]; then
+        echo -e "${RED}✗ Failed to generate UI path${NC}" >&2
+        return 1
+    fi
+    
+    # Configure BunkerWeb UI labels and path synchronization
+    echo -e "${BLUE}Step 1: Configuring BunkerWeb UI labels and path...${NC}" >&2
+    if ! configure_bw_ui_labels_and_path "$compose_file" "$fqdn" "$ui_path"; then
+        echo -e "${RED}✗ Failed to configure BunkerWeb UI labels and path${NC}" >&2
+        return 1
+    fi
+    
+    # Save UI access information to credentials file
+    if [[ -n "$creds_file" ]] && [[ -f "$creds_file" ]]; then
+        echo -e "${BLUE}Step 2: Saving UI access information...${NC}" >&2
+        
+        local hostname_ip=$(hostname -I | awk '{print $1}' 2>/dev/null || echo "")
+        
+        {
+            echo ""
+            echo "# BunkerWeb UI Access Information"
+            echo "UI Access Path: /$ui_path"
+            if [[ -n "$fqdn" && "$fqdn" != "localhost" ]]; then
+                echo "Full UI URL: https://$fqdn/$ui_path"
+                echo "HTTP UI URL: http://$fqdn/$ui_path"
+            fi
+            if [[ -n "$hostname_ip" ]]; then
+                echo "Direct Access: http://$hostname_ip/$ui_path"
+            fi
+            echo "UI Path Length: ${#ui_path} characters"
+            echo "UI Path Security: Randomly generated alphanumeric"
+        } >> "$creds_file"
+        
+        echo -e "${GREEN}✓ UI access information saved to credentials file${NC}" >&2
+    fi
+    
+    # Export UI path for use by other functions
+    export UI_ACCESS_PATH="/$ui_path"
+    export GENERATED_UI_PATH="$ui_path"
+    
+    echo "" >&2
+    echo -e "${GREEN}✓ UI path configuration completed successfully${NC}" >&2
+    echo -e "${GREEN}✓ UI Access Path: /$ui_path${NC}" >&2
+    echo -e "${GREEN}✓ Path Length: ${#ui_path} characters${NC}" >&2
+    echo -e "${GREEN}✓ Security Level: High (randomly generated)${NC}" >&2
+    
+    if [[ -n "$fqdn" && "$fqdn" != "localhost" ]]; then
+        echo -e "${GREEN}✓ Full URL: https://$fqdn/$ui_path${NC}" >&2
+    fi
+    
+    local hostname_ip=$(hostname -I | awk '{print $1}' 2>/dev/null || echo "")
+    if [[ -n "$hostname_ip" ]]; then
+        echo -e "${GREEN}✓ Direct Access: http://$hostname_ip/$ui_path${NC}" >&2
+    fi
+    
+    echo "" >&2
     return 0
 }
 
@@ -517,6 +671,65 @@ configure_setup_mode() {
         echo -e "${GREEN}✓ Setup wizard mode enabled${NC}"
         echo -e "${GREEN}✓ Credentials available for wizard setup${NC}"
         return 0
+    fi
+}
+
+# Creates backup files with timestamp and description
+create_backup() {
+    local compose_file="$1"
+    local backup_suffix="$2"
+    
+    local backup_file="${compose_file}.backup.${backup_suffix}.$(date +%Y%m%d_%H%M%S)"
+    if cp "$compose_file" "$backup_file"; then
+        echo -e "${GREEN}✓ Backup created: $backup_file${NC}" >&2
+        echo "$backup_file"
+        return 0
+    else
+        echo -e "${RED}✗ Failed to create backup${NC}" >&2
+        return 1
+    fi
+}
+
+# Verifies all placeholders have been replaced
+verify_placeholder_replacement() {
+    local compose_file="$1"
+    
+    echo -e "${BLUE}Verifying placeholder replacement...${NC}" >&2
+    
+    local remaining_placeholders=$(grep -o "REPLACEME_[A-Z_]*" "$compose_file" 2>/dev/null || echo "")
+    if [[ -n "$remaining_placeholders" ]]; then
+        echo -e "${RED}✗ Some placeholders were not replaced!${NC}" >&2
+        echo -e "${RED}Remaining placeholders:${NC}" >&2
+        echo "$remaining_placeholders" | sort -u | while read -r placeholder; do
+            echo -e "${RED}  • $placeholder${NC}" >&2
+        done
+        return 1
+    fi
+    
+    echo -e "${GREEN}✓ All placeholders successfully replaced${NC}" >&2
+    return 0
+}
+
+# Validates Docker Compose file syntax
+validate_compose_syntax() {
+    local compose_file="$1"
+    local install_dir="$(dirname "$compose_file")"
+    
+    echo -e "${BLUE}Validating Docker Compose syntax...${NC}" >&2
+    
+    local current_dir=$(pwd)
+    cd "$install_dir"
+    
+    if docker compose config >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ Docker Compose syntax is valid${NC}" >&2
+        cd "$current_dir"
+        return 0
+    else
+        echo -e "${RED}✗ Docker Compose syntax error detected${NC}" >&2
+        echo -e "${YELLOW}Validation output:${NC}" >&2
+        docker compose config 2>&1 | head -10 >&2
+        cd "$current_dir"
+        return 1
     fi
 }
 
@@ -571,13 +784,16 @@ process_template_with_release_channel() {
         return 1
     fi
     
-    local backup_file="$compose_file.backup.$(date +%Y%m%d_%H%M%S)"
-    if cp "$compose_file" "$backup_file"; then
-        echo -e "${GREEN}✓ Backup created: $backup_file${NC}"
-    else
-        echo -e "${RED}✗ Failed to create backup${NC}"
-        return 1
+    local backup_file=$(create_backup "$compose_file" "template-processing")
+    echo -e "${GREEN}✓ Backup created${NC}"
+    
+    # Check if template needs processing
+    if ! grep -q "REPLACEME_" "$compose_file"; then
+        echo -e "${BLUE}ℹ No placeholders found in template${NC}"
+        return 0
     fi
+    
+    local processing_errors=0
     
     echo -e "${BLUE}Processing template placeholders in correct order...${NC}"
     
@@ -587,7 +803,7 @@ process_template_with_release_channel() {
         echo -e "${GREEN}✓ Release channel: $release_channel${NC}"
     else
         echo -e "${RED}✗ Failed to update Docker image tags${NC}"
-        return 1
+        ((processing_errors++))
     fi
     
     echo -e "${BLUE}2. Processing basic credentials...${NC}"
@@ -672,57 +888,55 @@ process_template_with_release_channel() {
         echo -e "${GREEN}✓ Domain configured: $fqdn${NC}"
     fi
     
-    echo -e "${BLUE}6. Adding UI labels and syncing scheduler...${NC}"
-    add_bw_ui_labels "$compose_file" "$fqdn"
+    echo -e "${BLUE}10. Configuring UI path and labels...${NC}"
+    local creds_file="${compose_file%/*}/credentials.txt"
+    if manage_ui_path_configuration "$compose_file" "$fqdn" "$creds_file"; then
+        echo -e "${GREEN}✓ UI path and labels configured successfully${NC}"
+    else
+        echo -e "${RED}✗ Failed to configure UI path and labels${NC}"
+        ((processing_errors++))
+    fi
     
-    echo -e "${BLUE}7. Configuring setup mode and credentials...${NC}"
+    echo -e "${BLUE}11. Configuring setup mode and credentials...${NC}"
     configure_setup_mode "$compose_file" "$setup_mode" "$admin_username" "$admin_password" "$flask_secret"
     
-    echo -e "${BLUE}8. Validating placeholder replacement...${NC}"
-    local remaining_critical=$(grep -o "REPLACEME_MYSQL\|REPLACEME_DEFAULT\|REPLACEME_AUTO_LETS_ENCRYPT\|REPLACEME_EMAIL_LETS_ENCRYPT\|REPLACEME_TAG\|REPLACEME_DNS_RESOLVERS" "$compose_file" || true)
-    if [[ -n "$remaining_critical" ]]; then
-        echo -e "${RED}✗ Critical placeholders not replaced: $remaining_critical${NC}"
-        return 1
-    fi
-    
-    local scheduler_path=$(grep -o "${fqdn}_REVERSE_PROXY_URL.*" "$compose_file" | head -1 || echo "")
-    local ui_path=$(grep -o "bunkerweb.REVERSE_PROXY_URL.*" "$compose_file" | head -1 || echo "")
-    
-    if [[ -n "$scheduler_path" && -n "$ui_path" ]]; then
-        echo -e "${GREEN}✓ UI path synchronization verified${NC}"
-        echo -e "${GREEN}  Scheduler: $scheduler_path${NC}"
-        echo -e "${GREEN}  UI Labels: $ui_path${NC}"
-    fi
-    
-    echo -e "${BLUE}9. Validating Docker Compose syntax...${NC}"
-    local current_dir=$(pwd)
-    cd "$(dirname "$compose_file")"
-    if docker compose config >/dev/null 2>&1; then
-        echo -e "${GREEN}✓ Docker Compose syntax is valid${NC}"
-        cd "$current_dir"
+    echo -e "${BLUE}12. Validating placeholder replacement...${NC}"
+    if verify_placeholder_replacement "$compose_file"; then
+        echo -e "${GREEN}✓ All placeholders replaced successfully${NC}"
     else
-        echo -e "${RED}✗ Docker Compose syntax error detected${NC}"
-        echo -e "${YELLOW}Validation output:${NC}"
-        docker compose config 2>&1 | head -10
-        cd "$current_dir"
-        return 1
+        echo -e "${YELLOW}⚠ Restoring backup due to placeholder issues...${NC}"
+        cp "$backup_file" "$compose_file"
+        ((processing_errors++))
+    fi
+    
+    echo -e "${BLUE}13. Validating Docker Compose syntax...${NC}"
+    if validate_compose_syntax "$compose_file"; then
+        echo -e "${GREEN}✓ Docker Compose syntax validation passed${NC}"
+    else
+        echo -e "${RED}✗ Docker Compose syntax validation failed${NC}"
+        ((processing_errors++))
     fi
     
     echo ""
-    echo -e "${GREEN}✓ Template processing with release channel completed successfully${NC}"
-    echo -e "${GREEN}✓ Release channel: $release_channel${NC}"
-    echo -e "${GREEN}✓ Docker image tag: $image_tag${NC}"
-    echo -e "${GREEN}✓ DNS resolvers: $DNS_RESOLVERS${NC}"
-    echo -e "${GREEN}✓ HTTP/3 enabled: $HTTP3${NC}"
-    echo -e "${GREEN}✓ Multisite mode: $MULTISITE${NC}"
-    echo -e "${GREEN}✓ All placeholders properly replaced${NC}"
-    echo -e "${GREEN}✓ Admin credentials correctly configured${NC}"
-    echo -e "${GREEN}✓ UI path synchronized between scheduler and UI service${NC}"
-    echo -e "${GREEN}✓ Setup mode properly configured: $setup_mode${NC}"
+    if [[ $processing_errors -eq 0 ]]; then
+        echo -e "${GREEN}✓ Template processing completed successfully${NC}"
+        echo -e "${GREEN}✓ Release channel: $release_channel${NC}"
+        echo -e "${GREEN}✓ Docker image tag: $image_tag${NC}"
+        echo -e "${GREEN}✓ DNS resolvers: $DNS_RESOLVERS${NC}"
+        echo -e "${GREEN}✓ HTTP/3 enabled: $HTTP3${NC}"
+        echo -e "${GREEN}✓ Multisite mode: $MULTISITE${NC}"
+        echo -e "${GREEN}✓ All placeholders properly replaced${NC}"
+        echo -e "${GREEN}✓ Admin credentials correctly configured${NC}"
+        echo -e "${GREEN}✓ UI path synchronized between scheduler and UI service${NC}"
+        echo -e "${GREEN}✓ Setup mode properly configured: $setup_mode${NC}"
+    else
+        echo -e "${RED}✗ Template processing completed with $processing_errors errors${NC}"
+        echo -e "${BLUE}✓ Backup available at: $backup_file${NC}"
+        return 1
+    fi
     
     return 0
 }
-
 
 # Loads configuration from BunkerWeb.conf file with validation
 load_configuration() {
