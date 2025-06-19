@@ -21,9 +21,9 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Default values for data preservation
-KEEP_REDIS="no"
-KEEP_DATA="no"
-KEEP_SYSLOG="no"
+KEEP_REDIS="yes"
+KEEP_DATA="yes"
+KEEP_SYSLOG="yes"
 FORCE_REMOVAL="no"
 
 # Function to display usage
