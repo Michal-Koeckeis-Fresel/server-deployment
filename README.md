@@ -79,4 +79,4 @@ All contributors must sign a [Contributor License Agreement](https://gist.github
 
 **Made with ❤️ by [Michal Koeckeis-Fresel](https://github.com/Michal-Koeckeis-Fresel)**
 
-For questions about licensing or contributions, please see our [Contributing Guide](CONTRIBUTING.md) or contact github-securit [.@.] koeckeis-fresel.net.
+For questions about licensing or contributions, please see our [Contributing Guide](CONTRIBUTING.md) or contact github-security [.@.] koeckeis-fresel.net.
