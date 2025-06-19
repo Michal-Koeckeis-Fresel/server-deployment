@@ -186,13 +186,16 @@ main() {
     # Create the BunkerWeb directory
     log_step "Creating BunkerWeb directory..."
     mkdir -p "/data/BunkerWeb"
-    cd "/data/BunkerWeb"
     
     # Install required packages if missing
     if ! install_required_packages; then
         log_error "Failed to install required packages"
         exit 1
     fi
+    
+    # Change to BunkerWeb directory
+    cd "/data/BunkerWeb"
+    log_info "Working in directory: /data/BunkerWeb"
     
     # Base URL for the repository
     BASE_URL="https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/refs/heads/main/linux/waf/BunkerWeb"
