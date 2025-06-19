@@ -22,20 +22,20 @@ SCRIPT_VERSION="2.0.0"
 SCRIPT_PURPOSE="Generic FQDN detection and validation for system administration"
 
 # Default configuration values (can be overridden)
-DEFAULT_REQUIRE_SSL="no"
+DEFAULT_REQUIRE_SSL="yes"
 DEFAULT_CHECK_DNS="yes"
 DEFAULT_ALLOW_LOCALHOST="yes"
 DEFAULT_ALLOW_IP_AS_FQDN="no"
 DEFAULT_MIN_DOMAIN_PARTS="2"
 DEFAULT_CONFIG_FILE=""
-DEFAULT_LOG_LEVEL="INFO"
+DEFAULT_LOG_LEVEL="DEBUG"
 DEFAULT_OUTPUT_FORMAT="text"
 
 # Color configuration (set to "no" to disable colors)
 USE_COLORS="yes"
 
 # Timeout settings
-DNS_TIMEOUT="5"
+DNS_TIMEOUT="2"
 PING_TIMEOUT="3"
 
 # ===============================================================================
