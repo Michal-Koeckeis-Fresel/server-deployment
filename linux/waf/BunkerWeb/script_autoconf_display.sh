@@ -722,7 +722,7 @@ process_template_with_release_channel() {
     
     return 0
 }
-}
+
 
 # Loads configuration from BunkerWeb.conf file with validation
 load_configuration() {
