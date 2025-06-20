@@ -113,7 +113,7 @@ services:
   bw-db:
     image: mariadb:11
     environment:
-      MYSQL_RANDOM_ROOT_PASSWORD: "yes"
+      #MYSQL_RANDOM_ROOT_PASSWORD: "yes"
       MYSQL_DATABASE: "db"
       MYSQL_USER: "bunkerweb"
       MYSQL_PASSWORD: "REPLACEME_MYSQL"
