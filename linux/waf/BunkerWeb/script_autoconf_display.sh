@@ -65,6 +65,8 @@ HTTP3_ALT_SVC_PORT="443"
 LETS_ENCRYPT_CHALLENGE="http"
 LETS_ENCRYPT_STAGING="yes"
 LETS_ENCRYPT_WILDCARD="no"
+LETS_ENCRYPT_PROFILE="shortlived"
+LETS_ENCRYPT_MAX_RETRIES="0"
 
 # DNSBL Configuration
 DNSBL_LIST="bl.blocklist.de zen.spamhaus.org"
@@ -680,6 +682,26 @@ process_template_with_release_channel() {
         echo -e "${GREEN}✓ Let's Encrypt staging: $LETS_ENCRYPT_STAGING${NC}"
     fi
     
+    if [[ -n "$LETS_ENCRYPT_PROFILE" ]]; then
+        # Add LETS_ENCRYPT_PROFILE to scheduler environment if not present
+        if ! grep -q "LETS_ENCRYPT_PROFILE:" "$compose_file"; then
+            sed -i "/USE_LETS_ENCRYPT_STAGING:/a\\      LETS_ENCRYPT_PROFILE: \"$LETS_ENCRYPT_PROFILE\"" "$compose_file"
+        else
+            sed -i "s|LETS_ENCRYPT_PROFILE: \".*\"|LETS_ENCRYPT_PROFILE: \"$LETS_ENCRYPT_PROFILE\"|g" "$compose_file"
+        fi
+        echo -e "${GREEN}✓ Let's Encrypt profile: $LETS_ENCRYPT_PROFILE${NC}"
+    fi
+    
+    if [[ -n "$LETS_ENCRYPT_MAX_RETRIES" ]]; then
+        # Add LETS_ENCRYPT_MAX_RETRIES to scheduler environment if not present
+        if ! grep -q "LETS_ENCRYPT_MAX_RETRIES:" "$compose_file"; then
+            sed -i "/LETS_ENCRYPT_PROFILE:/a\\      LETS_ENCRYPT_MAX_RETRIES: \"$LETS_ENCRYPT_MAX_RETRIES\"" "$compose_file"
+        else
+            sed -i "s|LETS_ENCRYPT_MAX_RETRIES: \".*\"|LETS_ENCRYPT_MAX_RETRIES: \"$LETS_ENCRYPT_MAX_RETRIES\"|g" "$compose_file"
+        fi
+        echo -e "${GREEN}✓ Let's Encrypt max retries: $LETS_ENCRYPT_MAX_RETRIES${NC}"
+    fi
+    
     echo -e "${BLUE}7. Processing multisite configuration...${NC}"
     if [[ -n "$MULTISITE" ]]; then
         sed -i "s|MULTISITE: \"yes\"|MULTISITE: \"$MULTISITE\"|g" "$compose_file"
@@ -908,6 +930,14 @@ load_configuration() {
         fi
         if [[ -n "${BLACKLIST_URI_URLS:-}" ]]; then
             BLACKLIST_URI_URLS="$BLACKLIST_URI_URLS"
+        fi
+        
+        # Load Let's Encrypt configurations
+        if [[ -n "${LETS_ENCRYPT_PROFILE:-}" ]]; then
+            LETS_ENCRYPT_PROFILE="$LETS_ENCRYPT_PROFILE"
+        fi
+        if [[ -n "${LETS_ENCRYPT_MAX_RETRIES:-}" ]]; then
+            LETS_ENCRYPT_MAX_RETRIES="$LETS_ENCRYPT_MAX_RETRIES"
         fi
         
         if [[ -n "$AUTO_CERT_TYPE" ]]; then
@@ -1238,6 +1268,8 @@ $(if [[ "$USE_BLACKLIST" == "yes" && -n "$BLACKLIST_USER_AGENT_URLS" ]]; then ec
 # Let's Encrypt Configuration
 LE Challenge Type: ${LETS_ENCRYPT_CHALLENGE:-"http"}
 LE Staging Mode: ${LETS_ENCRYPT_STAGING:-"yes"}
+LE Certificate Profile: ${LETS_ENCRYPT_PROFILE:-"shortlived"}
+LE Max Retries: ${LETS_ENCRYPT_MAX_RETRIES:-"0"}
 
 # Network Configuration
 $(if [[ -n "$docker_subnet" ]]; then echo "Docker Subnet: $docker_subnet"; fi)
@@ -1353,6 +1385,8 @@ show_setup_summary() {
         echo -e "${YELLOW}SSL Certificates:${NC} $AUTO_CERT_TYPE ($AUTO_CERT_CONTACT)"
         echo -e "${YELLOW}LE Challenge Type:${NC} ${LETS_ENCRYPT_CHALLENGE:-"http"}"
         echo -e "${YELLOW}LE Staging Mode:${NC} ${LETS_ENCRYPT_STAGING:-"yes"}"
+        echo -e "${YELLOW}LE Certificate Profile:${NC} ${LETS_ENCRYPT_PROFILE:-"shortlived"}"
+        echo -e "${YELLOW}LE Max Retries:${NC} ${LETS_ENCRYPT_MAX_RETRIES:-"0"}"
     else
         echo -e "${YELLOW}SSL Certificates:${NC} Manual configuration"
     fi
@@ -1408,8 +1442,13 @@ show_setup_summary() {
         echo -e "${GREEN}• Let's Encrypt will automatically generate certificates for: $FQDN${NC}"
         echo -e "${GREEN}• Challenge type: ${LETS_ENCRYPT_CHALLENGE:-"http"}${NC}"
         echo -e "${GREEN}• Staging mode: ${LETS_ENCRYPT_STAGING:-"yes"}${NC}"
+        echo -e "${GREEN}• Certificate profile: ${LETS_ENCRYPT_PROFILE:-"shortlived"} (7-day validity for enhanced security)${NC}"
+        echo -e "${GREEN}• Max retries: ${LETS_ENCRYPT_MAX_RETRIES:-"0"} (retries disabled)${NC}"
         echo -e "${GREEN}• Monitor certificate generation: docker compose logs -f bw-scheduler | grep -i cert${NC}"
         echo -e "${GREEN}• Check certificate status after a few minutes${NC}"
+        if [[ "$LETS_ENCRYPT_PROFILE" == "shortlived" ]]; then
+            echo -e "${YELLOW}• Note: Shortlived certificates expire every 7 days but provide enhanced security${NC}"
+        fi
     fi
     
     if [[ "$DEMOSITE" == "yes" ]]; then
