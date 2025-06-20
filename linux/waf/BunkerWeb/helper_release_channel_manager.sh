@@ -1,9 +1,13 @@
 #!/bin/bash
+#
 # Copyright (c) 2025 Michal Koeckeis-Fresel
+# 
 # This software is dual-licensed under your choice of:
 # - MIT License (see LICENSE-MIT)
 # - GNU Affero General Public License v3.0 (see LICENSE-AGPL)
+# 
 # SPDX-License-Identifier: MIT OR AGPL-3.0-or-later
+#
 
 # BunkerWeb Release Channel Manager
 # Handles release channel detection, validation, and Docker image tag management
@@ -21,7 +25,7 @@ validate_release_channel() {
     local channel="$1"
     
     case "$channel" in
-        "latest"|"RC"|"nightly")
+        "latest"|"RC"|"testing"|"nightly")
             return 0
             ;;
         *)
@@ -40,7 +44,7 @@ is_custom_version() {
     local channel="$1"
     
     case "$channel" in
-        "latest"|"RC"|"nightly")
+        "latest"|"RC"|"testing"|"nightly")
             return 1  # Not a custom version
             ;;
         *)
@@ -63,6 +67,9 @@ get_image_tag_for_channel() {
             ;;
         "RC")
             echo "dev"
+            ;;
+        "testing")
+            echo "testing"
             ;;
         "nightly")
             echo "dev"
@@ -89,6 +96,9 @@ get_channel_description() {
         "RC")
             echo "Release Candidates (Beta Testing)"
             ;;
+        "testing")
+            echo "Testing Builds (QA and Integration Testing)"
+            ;;
         "nightly")
             echo "Development Builds (Hardcore Testers Only)"
             ;;
@@ -113,6 +123,9 @@ get_stability_level() {
         "RC")
             echo -e "${YELLOW}Beta/Testing${NC}"
             ;;
+        "testing")
+            echo -e "${YELLOW}Testing/QA${NC}"
+            ;;
         "nightly")
             echo -e "${RED}Unstable/Development${NC}"
             ;;
@@ -136,6 +149,9 @@ get_recommendation() {
             ;;
         "RC")
             echo -e "${YELLOW}⚠ Use for testing/staging environments only${NC}"
+            ;;
+        "testing")
+            echo -e "${YELLOW}⚠ Use for QA and integration testing environments${NC}"
             ;;
         "nightly")
             echo -e "${RED}⚠ Development use only - NOT for production!${NC}"
@@ -229,6 +245,7 @@ get_available_channels() {
     echo "Available release channels:"
     echo "• latest     - Stable production releases"
     echo "• RC         - Release candidates (beta)"
+    echo "• testing    - Testing builds (QA)"
     echo "• nightly    - Development builds"
     echo "• X.Y.Z      - Specific version (e.g., 1.6.1)"
 }
@@ -250,13 +267,19 @@ list_available_channels() {
     echo -e "   • $(get_recommendation "RC")"
     echo ""
     
-    echo -e "${RED}3. nightly (Development)${NC}"
+    echo -e "${YELLOW}3. testing (Testing)${NC}"
+    echo -e "   • Description: $(get_channel_description "testing")"
+    echo -e "   • Docker Tag: $(get_image_tag_for_channel "testing")"
+    echo -e "   • $(get_recommendation "testing")"
+    echo ""
+    
+    echo -e "${RED}4. nightly (Development)${NC}"
     echo -e "   • Description: $(get_channel_description "nightly")"
     echo -e "   • Docker Tag: $(get_image_tag_for_channel "nightly")"
     echo -e "   • $(get_recommendation "nightly")"
     echo ""
     
-    echo -e "${CYAN}4. Custom Version (Version Pinning)${NC}"
+    echo -e "${CYAN}5. Custom Version (Version Pinning)${NC}"
     echo -e "   • Description: Pin to specific BunkerWeb version"
     echo -e "   • Docker Tag: Uses exact version number (e.g., 1.6.1)"
     echo -e "   • Examples: 1.6.1, 1.5.4, 1.6.0-beta1"
