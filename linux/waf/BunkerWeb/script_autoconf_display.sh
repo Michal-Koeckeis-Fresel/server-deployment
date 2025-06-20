@@ -221,7 +221,7 @@ source_modules() {
 }
 
 # Validates release channel and displays channel information
-validate_release_channel() {
+validate_and_show_release_channel() {
     local channel="$1"
     
     echo -e "${BLUE}=================================================================================${NC}"
@@ -231,6 +231,7 @@ validate_release_channel() {
     
     echo -e "${BLUE}Validating release channel: $channel${NC}"
     
+    # Use the helper function to validate the channel
     if validate_release_channel "$channel"; then
         echo -e "${GREEN}✓ Release channel is valid: $channel${NC}"
         
@@ -952,6 +953,7 @@ show_usage() {
     echo -e "${YELLOW}Release Channel Options:${NC}"
     echo -e "  --release latest       Use stable releases (production)"
     echo -e "  --release RC           Use release candidates (testing)"
+    echo -e "  --release dev          Use development builds (latest features)"
     echo -e "  --release testing      Use testing builds (QA)"
     echo -e "  --release nightly      Use development builds (testing only)"
     echo -e "  --release X.Y.Z        Use specific version (e.g., 1.6.1)"
@@ -963,6 +965,7 @@ show_usage() {
     echo -e "  sudo $0 --type autoconf"
     echo -e "  sudo $0 --type autoconf --automated --release latest"
     echo -e "  sudo $0 --type autoconf --release RC"
+    echo -e "  sudo $0 --type autoconf --release dev"
     echo -e "  sudo $0 --type autoconf --release testing"
     echo -e "  sudo $0 --type autoconf --release 1.6.1"
     echo ""
@@ -1463,7 +1466,7 @@ main() {
     load_configuration
     
     echo -e "${BLUE}Step 0: Release Channel Validation${NC}"
-    if ! validate_release_channel "$RELEASE_CHANNEL"; then
+    if ! validate_and_show_release_channel "$RELEASE_CHANNEL"; then
         echo -e "${RED}✗ Release channel validation failed${NC}"
         exit 1
     fi
