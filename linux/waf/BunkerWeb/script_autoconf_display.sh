@@ -727,26 +727,201 @@ process_template_with_release_channel() {
     
     echo -e "${BLUE}10. Processing Blacklist configuration...${NC}"
     if [[ "$USE_BLACKLIST" == "yes" ]]; then
+        # Enable blacklist feature
+        sed -i "s|USE_BLACKLIST: \"yes\"|USE_BLACKLIST: \"$USE_BLACKLIST\"|g" "$compose_file"
         echo -e "${GREEN}✓ Blacklist feature enabled${NC}"
         
-        # Process blacklist IP URLs if configured
-        if [[ -n "$BLACKLIST_IP_URLS" ]]; then
-            echo -e "${GREEN}✓ Blacklist IP URLs configured: $BLACKLIST_IP_URLS${NC}"
+        # Process all blacklist settings
+        if [[ -n "$BLACKLIST_IP" ]]; then
+            sed -i "s|BLACKLIST_IP: \".*\"|BLACKLIST_IP: \"$BLACKLIST_IP\"|g" "$compose_file"
+            echo -e "${GREEN}✓ Blacklist IP addresses: $BLACKLIST_IP${NC}"
         fi
         
-        # Process blacklist rDNS if configured
         if [[ -n "$BLACKLIST_RDNS" ]]; then
+            sed -i "s|BLACKLIST_RDNS: \"\.shodan\.io \.censys\.io\"|BLACKLIST_RDNS: \"$BLACKLIST_RDNS\"|g" "$compose_file"
             echo -e "${GREEN}✓ Blacklist rDNS configured: $BLACKLIST_RDNS${NC}"
         fi
         
-        # Process blacklist User-Agent URLs if configured
+        if [[ -n "$BLACKLIST_RDNS_GLOBAL" ]]; then
+            sed -i "s|BLACKLIST_RDNS_GLOBAL: \"yes\"|BLACKLIST_RDNS_GLOBAL: \"$BLACKLIST_RDNS_GLOBAL\"|g" "$compose_file"
+            echo -e "${GREEN}✓ Blacklist rDNS global mode: $BLACKLIST_RDNS_GLOBAL${NC}"
+        fi
+        
+        if [[ -n "$BLACKLIST_ASN" ]]; then
+            sed -i "s|BLACKLIST_ASN: \".*\"|BLACKLIST_ASN: \"$BLACKLIST_ASN\"|g" "$compose_file"
+            echo -e "${GREEN}✓ Blacklist ASN numbers: $BLACKLIST_ASN${NC}"
+        fi
+        
+        if [[ -n "$BLACKLIST_USER_AGENT" ]]; then
+            sed -i "s|BLACKLIST_USER_AGENT: \".*\"|BLACKLIST_USER_AGENT: \"$BLACKLIST_USER_AGENT\"|g" "$compose_file"
+            echo -e "${GREEN}✓ Blacklist User-Agent patterns: $BLACKLIST_USER_AGENT${NC}"
+        fi
+        
+        if [[ -n "$BLACKLIST_URI" ]]; then
+            sed -i "s|BLACKLIST_URI: \".*\"|BLACKLIST_URI: \"$BLACKLIST_URI\"|g" "$compose_file"
+            echo -e "${GREEN}✓ Blacklist URI patterns: $BLACKLIST_URI${NC}"
+        fi
+        
+        if [[ -n "$BLACKLIST_COUNTRY" ]]; then
+            sed -i "s|BLACKLIST_COUNTRY: \".*\"|BLACKLIST_COUNTRY: \"$BLACKLIST_COUNTRY\"|g" "$compose_file"
+            echo -e "${GREEN}✓ Blacklist countries: $BLACKLIST_COUNTRY${NC}"
+        fi
+        
+        # Process blacklist ignore settings
+        if [[ -n "$BLACKLIST_IGNORE_IP" ]]; then
+            sed -i "s|BLACKLIST_IGNORE_IP: \".*\"|BLACKLIST_IGNORE_IP: \"$BLACKLIST_IGNORE_IP\"|g" "$compose_file"
+            echo -e "${GREEN}✓ Blacklist ignore IP addresses: $BLACKLIST_IGNORE_IP${NC}"
+        fi
+        
+        if [[ -n "$BLACKLIST_IGNORE_RDNS" ]]; then
+            sed -i "s|BLACKLIST_IGNORE_RDNS: \".*\"|BLACKLIST_IGNORE_RDNS: \"$BLACKLIST_IGNORE_RDNS\"|g" "$compose_file"
+            echo -e "${GREEN}✓ Blacklist ignore rDNS: $BLACKLIST_IGNORE_RDNS${NC}"
+        fi
+        
+        if [[ -n "$BLACKLIST_IGNORE_ASN" ]]; then
+            sed -i "s|BLACKLIST_IGNORE_ASN: \".*\"|BLACKLIST_IGNORE_ASN: \"$BLACKLIST_IGNORE_ASN\"|g" "$compose_file"
+            echo -e "${GREEN}✓ Blacklist ignore ASN: $BLACKLIST_IGNORE_ASN${NC}"
+        fi
+        
+        if [[ -n "$BLACKLIST_IGNORE_USER_AGENT" ]]; then
+            sed -i "s|BLACKLIST_IGNORE_USER_AGENT: \".*\"|BLACKLIST_IGNORE_USER_AGENT: \"$BLACKLIST_IGNORE_USER_AGENT\"|g" "$compose_file"
+            echo -e "${GREEN}✓ Blacklist ignore User-Agent: $BLACKLIST_IGNORE_USER_AGENT${NC}"
+        fi
+        
+        if [[ -n "$BLACKLIST_IGNORE_URI" ]]; then
+            sed -i "s|BLACKLIST_IGNORE_URI: \".*\"|BLACKLIST_IGNORE_URI: \"$BLACKLIST_IGNORE_URI\"|g" "$compose_file"
+            echo -e "${GREEN}✓ Blacklist ignore URI: $BLACKLIST_IGNORE_URI${NC}"
+        fi
+        
+        # Process blacklist URL sources
+        if [[ -n "$BLACKLIST_IP_URLS" ]]; then
+            local escaped_ip_urls=$(printf '%s\n' "$BLACKLIST_IP_URLS" | sed 's/[[\.*^$()+?{|]/\\&/g')
+            sed -i "s|BLACKLIST_IP_URLS: \".*\"|BLACKLIST_IP_URLS: \"$escaped_ip_urls\"|g" "$compose_file"
+            echo -e "${GREEN}✓ Blacklist IP URLs: TOR exit nodes + FireHOL Level 3${NC}"
+        fi
+        
+        if [[ -n "$BLACKLIST_RDNS_URLS" ]]; then
+            local escaped_rdns_urls=$(printf '%s\n' "$BLACKLIST_RDNS_URLS" | sed 's/[[\.*^$()+?{|]/\\&/g')
+            sed -i "s|BLACKLIST_RDNS_URLS: \".*\"|BLACKLIST_RDNS_URLS: \"$escaped_rdns_urls\"|g" "$compose_file"
+            echo -e "${GREEN}✓ Blacklist rDNS URLs: $BLACKLIST_RDNS_URLS${NC}"
+        fi
+        
+        if [[ -n "$BLACKLIST_ASN_URLS" ]]; then
+            local escaped_asn_urls=$(printf '%s\n' "$BLACKLIST_ASN_URLS" | sed 's/[[\.*^$()+?{|]/\\&/g')
+            sed -i "s|BLACKLIST_ASN_URLS: \".*\"|BLACKLIST_ASN_URLS: \"$escaped_asn_urls\"|g" "$compose_file"
+            echo -e "${GREEN}✓ Blacklist ASN URLs: $BLACKLIST_ASN_URLS${NC}"
+        fi
+        
         if [[ -n "$BLACKLIST_USER_AGENT_URLS" ]]; then
-            echo -e "${GREEN}✓ Blacklist User-Agent URLs configured${NC}"
+            local escaped_ua_urls=$(printf '%s\n' "$BLACKLIST_USER_AGENT_URLS" | sed 's/[[\.*^$()+?{|]/\\&/g')
+            sed -i "s|BLACKLIST_USER_AGENT_URLS: \".*\"|BLACKLIST_USER_AGENT_URLS: \"$escaped_ua_urls\"|g" "$compose_file"
+            echo -e "${GREEN}✓ Blacklist User-Agent URLs: Bad bot blocker list${NC}"
+        fi
+        
+        if [[ -n "$BLACKLIST_URI_URLS" ]]; then
+            local escaped_uri_urls=$(printf '%s\n' "$BLACKLIST_URI_URLS" | sed 's/[[\.*^$()+?{|]/\\&/g')
+            sed -i "s|BLACKLIST_URI_URLS: \".*\"|BLACKLIST_URI_URLS: \"$escaped_uri_urls\"|g" "$compose_file"
+            echo -e "${GREEN}✓ Blacklist URI URLs: $BLACKLIST_URI_URLS${NC}"
+        fi
+        
+        # Process blacklist ignore URL sources
+        if [[ -n "$BLACKLIST_IGNORE_IP_URLS" ]]; then
+            local escaped_ignore_ip_urls=$(printf '%s\n' "$BLACKLIST_IGNORE_IP_URLS" | sed 's/[[\.*^$()+?{|]/\\&/g')
+            sed -i "s|BLACKLIST_IGNORE_IP_URLS: \".*\"|BLACKLIST_IGNORE_IP_URLS: \"$escaped_ignore_ip_urls\"|g" "$compose_file"
+            echo -e "${GREEN}✓ Blacklist ignore IP URLs: $BLACKLIST_IGNORE_IP_URLS${NC}"
+        fi
+        
+        if [[ -n "$BLACKLIST_IGNORE_RDNS_URLS" ]]; then
+            local escaped_ignore_rdns_urls=$(printf '%s\n' "$BLACKLIST_IGNORE_RDNS_URLS" | sed 's/[[\.*^$()+?{|]/\\&/g')
+            sed -i "s|BLACKLIST_IGNORE_RDNS_URLS: \".*\"|BLACKLIST_IGNORE_RDNS_URLS: \"$escaped_ignore_rdns_urls\"|g" "$compose_file"
+            echo -e "${GREEN}✓ Blacklist ignore rDNS URLs: $BLACKLIST_IGNORE_RDNS_URLS${NC}"
+        fi
+        
+        if [[ -n "$BLACKLIST_IGNORE_ASN_URLS" ]]; then
+            local escaped_ignore_asn_urls=$(printf '%s\n' "$BLACKLIST_IGNORE_ASN_URLS" | sed 's/[[\.*^$()+?{|]/\\&/g')
+            sed -i "s|BLACKLIST_IGNORE_ASN_URLS: \".*\"|BLACKLIST_IGNORE_ASN_URLS: \"$escaped_ignore_asn_urls\"|g" "$compose_file"
+            echo -e "${GREEN}✓ Blacklist ignore ASN URLs: $BLACKLIST_IGNORE_ASN_URLS${NC}"
+        fi
+        
+        if [[ -n "$BLACKLIST_IGNORE_USER_AGENT_URLS" ]]; then
+            local escaped_ignore_ua_urls=$(printf '%s\n' "$BLACKLIST_IGNORE_USER_AGENT_URLS" | sed 's/[[\.*^$()+?{|]/\\&/g')
+            sed -i "s|BLACKLIST_IGNORE_USER_AGENT_URLS: \".*\"|BLACKLIST_IGNORE_USER_AGENT_URLS: \"$escaped_ignore_ua_urls\"|g" "$compose_file"
+            echo -e "${GREEN}✓ Blacklist ignore User-Agent URLs: $BLACKLIST_IGNORE_USER_AGENT_URLS${NC}"
+        fi
+        
+        if [[ -n "$BLACKLIST_IGNORE_URI_URLS" ]]; then
+            local escaped_ignore_uri_urls=$(printf '%s\n' "$BLACKLIST_IGNORE_URI_URLS" | sed 's/[[\.*^$()+?{|]/\\&/g')
+            sed -i "s|BLACKLIST_IGNORE_URI_URLS: \".*\"|BLACKLIST_IGNORE_URI_URLS: \"$escaped_ignore_uri_urls\"|g" "$compose_file"
+            echo -e "${GREEN}✓ Blacklist ignore URI URLs: $BLACKLIST_IGNORE_URI_URLS${NC}"
+        fi
+        
+        # Process DNSBL configuration
+        if [[ -n "$DNSBL_LIST" ]]; then
+            sed -i "s|USE_DNSBL: \"yes\"|USE_DNSBL: \"yes\"|g" "$compose_file"
+            sed -i "s|DNSBL_LIST: \".*\"|DNSBL_LIST: \"$DNSBL_LIST\"|g" "$compose_file"
+            echo -e "${GREEN}✓ DNSBL enabled with lists: $DNSBL_LIST${NC}"
         fi
         
         echo -e "${GREEN}✓ External blocklists will be automatically downloaded and updated${NC}"
+        echo -e "${GREEN}✓ Blocking TOR exit nodes, FireHOL Level 3 threats, and malicious bots${NC}"
+        echo -e "${GREEN}✓ Scanning services (Shodan, Censys) blocked by rDNS${NC}"
     else
+        # Disable blacklist feature
+        sed -i "s|USE_BLACKLIST: \"yes\"|USE_BLACKLIST: \"no\"|g" "$compose_file"
         echo -e "${BLUE}ℹ Blacklist feature disabled${NC}"
+    fi
+    
+    echo -e "${BLUE}10a. Processing Allowlist configuration...${NC}"
+    if [[ "$USE_ALLOWLIST" == "yes" ]]; then
+        sed -i "s|USE_ALLOWLIST: \"yes\"|USE_ALLOWLIST: \"$USE_ALLOWLIST\"|g" "$compose_file"
+        echo -e "${GREEN}✓ Allowlist feature enabled${NC}"
+        
+        if [[ -n "$ALLOWLIST_IP" ]]; then
+            sed -i "s|ALLOWLIST_IP: \".*\"|ALLOWLIST_IP: \"$ALLOWLIST_IP\"|g" "$compose_file"
+            echo -e "${GREEN}✓ Allowlist IP addresses: $ALLOWLIST_IP${NC}"
+        fi
+        
+        if [[ -n "$ALLOWLIST_COUNTRY" ]]; then
+            sed -i "s|ALLOWLIST_COUNTRY: \".*\"|ALLOWLIST_COUNTRY: \"$ALLOWLIST_COUNTRY\"|g" "$compose_file"
+            echo -e "${GREEN}✓ Allowlist countries: $ALLOWLIST_COUNTRY${NC}"
+        fi
+        
+        if [[ -n "$ALLOWLIST_RDNS" ]]; then
+            sed -i "s|ALLOWLIST_RDNS: \".*\"|ALLOWLIST_RDNS: \"$ALLOWLIST_RDNS\"|g" "$compose_file"
+            echo -e "${GREEN}✓ Allowlist rDNS: $ALLOWLIST_RDNS${NC}"
+        fi
+        
+        if [[ -n "$ALLOWLIST_MODE" ]]; then
+            sed -i "s|ALLOWLIST_MODE: \"block\"|ALLOWLIST_MODE: \"$ALLOWLIST_MODE\"|g" "$compose_file"
+            echo -e "${GREEN}✓ Allowlist mode: $ALLOWLIST_MODE${NC}"
+        fi
+        
+        if [[ -n "$ALLOWLIST_STATUS_CODE" ]]; then
+            sed -i "s|ALLOWLIST_STATUS_CODE: \"403\"|ALLOWLIST_STATUS_CODE: \"$ALLOWLIST_STATUS_CODE\"|g" "$compose_file"
+            echo -e "${GREEN}✓ Allowlist status code: $ALLOWLIST_STATUS_CODE${NC}"
+        fi
+    else
+        sed -i "s|USE_ALLOWLIST: \"yes\"|USE_ALLOWLIST: \"no\"|g" "$compose_file"
+        echo -e "${BLUE}ℹ Allowlist feature disabled${NC}"
+    fi
+    
+    echo -e "${BLUE}10b. Processing Greylist configuration...${NC}"
+    if [[ "$USE_GREYLIST" == "yes" ]]; then
+        sed -i "s|USE_GREYLIST: \"yes\"|USE_GREYLIST: \"$USE_GREYLIST\"|g" "$compose_file"
+        echo -e "${GREEN}✓ Greylist feature enabled${NC}"
+        
+        if [[ -n "$GREYLIST_IP" ]]; then
+            sed -i "s|GREYLIST_IP: \".*\"|GREYLIST_IP: \"$GREYLIST_IP\"|g" "$compose_file"
+            echo -e "${GREEN}✓ Greylist IP addresses: $GREYLIST_IP${NC}"
+        fi
+        
+        if [[ -n "$GREYLIST_RDNS" ]]; then
+            sed -i "s|GREYLIST_RDNS: \".*\"|GREYLIST_RDNS: \"$GREYLIST_RDNS\"|g" "$compose_file"
+            echo -e "${GREEN}✓ Greylist rDNS: $GREYLIST_RDNS${NC}"
+        fi
+    else
+        sed -i "s|USE_GREYLIST: \"yes\"|USE_GREYLIST: \"no\"|g" "$compose_file"
+        echo -e "${BLUE}ℹ Greylist feature disabled${NC}"
     fi
     
     echo -e "${BLUE}11. Processing SSL configuration...${NC}"
@@ -920,6 +1095,42 @@ load_configuration() {
         fi
         if [[ -n "${LETS_ENCRYPT_MAX_RETRIES:-}" ]]; then
             LETS_ENCRYPT_MAX_RETRIES="$LETS_ENCRYPT_MAX_RETRIES"
+        fi
+        
+        # Load DNSBL configuration
+        if [[ -n "${DNSBL_LIST:-}" ]]; then
+            DNSBL_LIST="$DNSBL_LIST"
+        fi
+        
+        # Load all Allowlist configurations
+        if [[ -n "${USE_ALLOWLIST:-}" ]]; then
+            USE_ALLOWLIST="$USE_ALLOWLIST"
+        fi
+        if [[ -n "${ALLOWLIST_IP:-}" ]]; then
+            ALLOWLIST_IP="$ALLOWLIST_IP"
+        fi
+        if [[ -n "${ALLOWLIST_COUNTRY:-}" ]]; then
+            ALLOWLIST_COUNTRY="$ALLOWLIST_COUNTRY"
+        fi
+        if [[ -n "${ALLOWLIST_RDNS:-}" ]]; then
+            ALLOWLIST_RDNS="$ALLOWLIST_RDNS"
+        fi
+        if [[ -n "${ALLOWLIST_MODE:-}" ]]; then
+            ALLOWLIST_MODE="$ALLOWLIST_MODE"
+        fi
+        if [[ -n "${ALLOWLIST_STATUS_CODE:-}" ]]; then
+            ALLOWLIST_STATUS_CODE="$ALLOWLIST_STATUS_CODE"
+        fi
+        
+        # Load all Greylist configurations
+        if [[ -n "${USE_GREYLIST:-}" ]]; then
+            USE_GREYLIST="$USE_GREYLIST"
+        fi
+        if [[ -n "${GREYLIST_IP:-}" ]]; then
+            GREYLIST_IP="$GREYLIST_IP"
+        fi
+        if [[ -n "${GREYLIST_RDNS:-}" ]]; then
+            GREYLIST_RDNS="$GREYLIST_RDNS"
         fi
         
         if [[ -n "$AUTO_CERT_TYPE" ]]; then
