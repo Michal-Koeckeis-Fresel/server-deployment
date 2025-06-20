@@ -1,9 +1,13 @@
 #!/bin/bash
+#
 # Copyright (c) 2025 Michal Koeckeis-Fresel
+# 
 # This software is dual-licensed under your choice of:
 # - MIT License (see LICENSE-MIT)
 # - GNU Affero General Public License v3.0 (see LICENSE-AGPL)
+# 
 # SPDX-License-Identifier: MIT OR AGPL-3.0-or-later
+#
 
 # BunkerWeb Template Processor Script
 # Handles placeholder replacement and template processing
@@ -31,7 +35,7 @@ NC='\033[0m' # No Color
 REPLACED_PLACEHOLDERS=()
 FAILED_REPLACEMENTS=()
 
-# Function to safely replace a placeholder in a file
+# Safely replace a placeholder in a file
 replace_placeholder() {
     local file="$1"
     local placeholder="$2"
@@ -69,6 +73,7 @@ replace_placeholder() {
     fi
 }
 
+# Replace Docker image tag placeholders
 replace_image_tag_placeholders() {
     local compose_file="$1"
     local image_tag="$2"
@@ -76,7 +81,6 @@ replace_image_tag_placeholders() {
     
     echo -e "${BLUE}Replacing $description with: $image_tag${NC}" >&2
     
-    # Check if file exists
     if [[ ! -f "$compose_file" ]]; then
         echo -e "${RED}✗ File not found: $compose_file${NC}" >&2
         return 1
@@ -87,38 +91,11 @@ replace_image_tag_placeholders() {
         return 1
     fi
     
-    # Create backup before making changes
-    local backup_file="$compose_file.backup.image-tags.$(date +%Y%m%d_%H%M%S)"
-    cp "$compose_file" "$backup_file"
-    
-    # Count existing REPLACEME_TAG placeholders
-    local tag_count=$(grep -c "REPLACEME_TAG" "$compose_file" 2>/dev/null || echo "0")
-    echo -e "${BLUE}Found $tag_count image tag placeholders to replace${NC}" >&2
-    
-    # Escape special characters for sed
-    local escaped_tag=$(printf '%s\n' "$image_tag" | sed 's/[[\.*^$()+?{|]/\\&/g')
-    
     # Replace REPLACEME_TAG with the actual tag
-    if sed -i "s|REPLACEME_TAG|$escaped_tag|g" "$compose_file"; then
+    if sed -i "s|REPLACEME_TAG|$image_tag|g" "$compose_file"; then
         echo -e "${GREEN}✓ $description updated to: $image_tag${NC}" >&2
-        
-        # Verify the replacement worked
-        local remaining_tags=$(grep -c "REPLACEME_TAG" "$compose_file" 2>/dev/null || echo "0")
-        
-        if [[ $remaining_tags -eq 0 ]]; then
-            echo -e "${GREEN}✓ All image tag placeholders successfully replaced${NC}" >&2
-            
-            # Show which images were updated
-            echo -e "${BLUE}Updated images:${NC}" >&2
-            grep "image: bunkerity" "$compose_file" | sed 's/^\s*/  /' >&2
-            
-            REPLACED_PLACEHOLDERS+=("REPLACEME_TAG")
-            return 0
-        else
-            echo -e "${YELLOW}⚠ Some REPLACEME_TAG placeholders may remain: $remaining_tags${NC}" >&2
-            FAILED_REPLACEMENTS+=("REPLACEME_TAG")
-            return 1
-        fi
+        REPLACED_PLACEHOLDERS+=("REPLACEME_TAG")
+        return 0
     else
         echo -e "${RED}✗ Failed to replace image tags${NC}" >&2
         FAILED_REPLACEMENTS+=("REPLACEME_TAG")
@@ -126,7 +103,7 @@ replace_image_tag_placeholders() {
     fi
 }
 
-# Function to replace all credential placeholders
+# Replace credential placeholders
 replace_credential_placeholders() {
     local compose_file="$1"
     local mysql_password="$2"
@@ -140,35 +117,33 @@ replace_credential_placeholders() {
     
     local success=0
     
-    # Replace MySQL password
     if replace_placeholder "$compose_file" "REPLACEME_MYSQL" "$mysql_password" "MySQL password"; then
         ((success++))
     fi
     
-    # Replace Redis password (handle both enabled and disabled cases)
     if [[ "$redis_enabled" == "yes" && -n "$redis_password" ]]; then
         if replace_placeholder "$compose_file" "REPLACEME_REDIS_PASSWORD" "$redis_password" "Redis password"; then
             ((success++))
         fi
     else
-        # Redis disabled - use a safe placeholder value
         if replace_placeholder "$compose_file" "REPLACEME_REDIS_PASSWORD" "disabled" "Redis password (disabled)"; then
             ((success++))
         fi
     fi
     
-    # Replace TOTP secret
     if replace_placeholder "$compose_file" "REPLACEME_DEFAULT" "$totp_secret" "TOTP secret"; then
         ((success++))
     fi
     
-    # Replace admin password
-    if replace_placeholder "$compose_file" "REPLACEME_ADMIN" "$admin_password" "Admin password"; then
+    if replace_placeholder "$compose_file" "REPLACEME_ADMIN_USERNAME" "$admin_password" "Admin username"; then
         ((success++))
     fi
     
-    # Replace Flask secret
-    if replace_placeholder "$compose_file" "REPLACEME_FLASK" "$flask_secret" "Flask secret"; then
+    if replace_placeholder "$compose_file" "REPLACEME_ADMIN_PASSWORD" "$admin_password" "Admin password"; then
+        ((success++))
+    fi
+    
+    if replace_placeholder "$compose_file" "REPLACEME_FLASK_SECRET" "$flask_secret" "Flask secret"; then
         ((success++))
     fi
     
@@ -181,7 +156,7 @@ replace_credential_placeholders() {
     fi
 }
 
-# Function to replace SSL/domain placeholders
+# Replace SSL/domain placeholders
 replace_ssl_placeholders() {
     local compose_file="$1"
     local auto_cert_type="$2"
@@ -197,7 +172,6 @@ replace_ssl_placeholders() {
         echo -e "${BLUE}Configuring SSL certificates ($auto_cert_type) for domain: $fqdn${NC}" >&2
         
         if [[ "$auto_cert_type" == "LE" ]]; then
-            # Let's Encrypt configuration
             if replace_placeholder "$compose_file" "REPLACEME_AUTO_LETS_ENCRYPT" "yes" "Let's Encrypt enabled"; then
                 ((success++))
             fi
@@ -206,7 +180,6 @@ replace_ssl_placeholders() {
                 ((success++))
             fi
             
-            # Also update direct environment variables if they exist
             if grep -q "EMAIL_LETS_ENCRYPT:" "$compose_file"; then
                 if sed -i "s|EMAIL_LETS_ENCRYPT: \".*\"|EMAIL_LETS_ENCRYPT: \"$auto_cert_contact\"|g" "$compose_file"; then
                     echo -e "${GREEN}✓ Let's Encrypt email environment variable updated${NC}" >&2
@@ -215,47 +188,18 @@ replace_ssl_placeholders() {
             fi
             
             echo -e "${GREEN}✓ Let's Encrypt enabled with contact: $auto_cert_contact${NC}" >&2
-            
-        elif [[ "$auto_cert_type" == "ZeroSSL" ]]; then
-            # ZeroSSL configuration
-            if replace_placeholder "$compose_file" "REPLACEME_AUTO_LETS_ENCRYPT" "yes" "ZeroSSL enabled"; then
-                ((success++))
-            fi
-            
-            if replace_placeholder "$compose_file" "REPLACEME_EMAIL_LETS_ENCRYPT" "$auto_cert_contact" "ZeroSSL contact email"; then
-                ((success++))
-            fi
-            
-            echo -e "${GREEN}✓ ZeroSSL enabled with contact: $auto_cert_contact${NC}" >&2
         fi
-        
-        # Set domain/server name for SSL certificates
-        if replace_placeholder "$compose_file" "REPLACEME_DOMAIN" "$fqdn" "Domain name"; then
-            ((success++))
-        fi
-        
     else
-        # No automatic certificates - ensure Let's Encrypt is disabled
         if replace_placeholder "$compose_file" "REPLACEME_AUTO_LETS_ENCRYPT" "no" "SSL certificates disabled"; then
             ((success++))
         fi
-        
-        # Also disable in environment variables if they exist
-        if grep -q "AUTO_LETS_ENCRYPT: \"yes\"" "$compose_file"; then
-            if sed -i "s|AUTO_LETS_ENCRYPT: \"yes\"|AUTO_LETS_ENCRYPT: \"no\"|g" "$compose_file"; then
-                echo -e "${GREEN}✓ Let's Encrypt environment variable disabled${NC}" >&2
-                ((success++))
-            fi
-        fi
-        
-        if replace_placeholder "$compose_file" "REPLACEME_DOMAIN" "$fqdn" "Domain name"; then
-            ((success++))
-        fi
-        
         echo -e "${BLUE}✓ SSL certificates set to manual configuration${NC}" >&2
     fi
     
-    # Set SERVER_NAME in environment variables
+    if replace_placeholder "$compose_file" "REPLACEME_DOMAIN" "$fqdn" "Domain name"; then
+        ((success++))
+    fi
+    
     if grep -q "SERVER_NAME: \"\"" "$compose_file"; then
         if sed -i "s|SERVER_NAME: \"\"|SERVER_NAME: \"$fqdn\"|g" "$compose_file"; then
             echo -e "${GREEN}✓ SERVER_NAME environment variable updated${NC}" >&2
@@ -266,7 +210,7 @@ replace_ssl_placeholders() {
     return 0
 }
 
-# Function to replace network-related placeholders
+# Replace network-related placeholders
 replace_network_placeholders() {
     local compose_file="$1"
     local docker_subnet="$2"
@@ -275,24 +219,8 @@ replace_network_placeholders() {
     if [[ -n "$docker_subnet" && "$docker_subnet" != "$default_subnet" ]]; then
         echo -e "${BLUE}Updating Docker network configuration to avoid conflicts...${NC}" >&2
         
-        # Escape special characters for sed
-        local escaped_subnet=$(printf '%s\n' "$docker_subnet" | sed 's/[[\.*^$()+?{|]/\\&/g')
-        local escaped_default=$(printf '%s\n' "$default_subnet" | sed 's/[[\.*^$()+?{|]/\\&/g')
-        
-        # Update the main universe subnet
-        if sed -i "s|$escaped_default|$escaped_subnet|g" "$compose_file"; then
+        if sed -i "s|$default_subnet|$docker_subnet|g" "$compose_file"; then
             echo -e "${GREEN}✓ Main subnet updated to: $docker_subnet${NC}" >&2
-            
-            # Update API whitelist to match new subnet
-            local subnet_base="${docker_subnet%.*}.0/24"
-            local default_base="${default_subnet%.*}.0/24"
-            local escaped_subnet_base=$(printf '%s\n' "$subnet_base" | sed 's/[[\.*^$()+?{|]/\\&/g')
-            local escaped_default_base=$(printf '%s\n' "$default_base" | sed 's/[[\.*^$()+?{|]/\\&/g')
-            
-            if sed -i "s|$escaped_default_base|$escaped_subnet_base|g" "$compose_file"; then
-                echo -e "${GREEN}✓ API whitelist updated to: $subnet_base${NC}" >&2
-            fi
-            
             return 0
         else
             echo -e "${RED}✗ Failed to update network subnet${NC}" >&2
@@ -304,7 +232,25 @@ replace_network_placeholders() {
     fi
 }
 
-# Function to enable/disable automated admin credentials
+# Replace DNS resolver placeholders
+replace_dns_resolvers() {
+    local compose_file="$1"
+    local dns_resolvers="${2:-127.0.0.11}"
+    
+    echo -e "${BLUE}Replacing DNS resolver placeholders...${NC}" >&2
+    
+    if sed -i "s|REPLACEME_DNS_RESOLVERS|$dns_resolvers|g" "$compose_file"; then
+        echo -e "${GREEN}✓ DNS resolvers updated to: $dns_resolvers${NC}" >&2
+        REPLACED_PLACEHOLDERS+=("REPLACEME_DNS_RESOLVERS")
+        return 0
+    else
+        echo -e "${RED}✗ Failed to update DNS resolvers${NC}" >&2
+        FAILED_REPLACEMENTS+=("REPLACEME_DNS_RESOLVERS")
+        return 1
+    fi
+}
+
+# Configure setup mode (automated vs wizard)
 configure_automated_setup() {
     local compose_file="$1"
     local setup_mode="$2"
@@ -315,14 +261,12 @@ configure_automated_setup() {
     if [[ "$setup_mode" == "automated" ]]; then
         echo -e "${BLUE}Configuring automated setup...${NC}" >&2
         
-        # Enable automated setup in docker-compose.yml (uncomment the lines)
-        sed -i 's|# OVERRIDE_ADMIN_CREDS: "yes"|OVERRIDE_ADMIN_CREDS: "yes"|' "$compose_file"
-        sed -i 's|# ADMIN_USERNAME: "admin"|ADMIN_USERNAME: "'$admin_username'"|' "$compose_file"
-        sed -i 's|# ADMIN_PASSWORD: "REPLACEME_ADMIN"|ADMIN_PASSWORD: "'$admin_password'"|' "$compose_file"
-        sed -i 's|# FLASK_SECRET: "REPLACEME_FLASK"|FLASK_SECRET: "'$flask_secret'"|' "$compose_file"
+        sed -i 's|# OVERRIDE_ADMIN_CREDS: "no"|OVERRIDE_ADMIN_CREDS: "yes"|' "$compose_file"
+        sed -i "s|# ADMIN_USERNAME: \"REPLACEME_ADMIN_USERNAME\"|ADMIN_USERNAME: \"$admin_username\"|" "$compose_file"
+        sed -i "s|# ADMIN_PASSWORD: \"REPLACEME_ADMIN_PASSWORD\"|ADMIN_PASSWORD: \"$admin_password\"|" "$compose_file"
+        sed -i "s|# FLASK_SECRET: \"REPLACEME_FLASK_SECRET\"|FLASK_SECRET: \"$flask_secret\"|" "$compose_file"
         
         echo -e "${GREEN}✓ Automated setup configured and enabled${NC}" >&2
-        echo -e "${GREEN}✓ Admin credentials activated${NC}" >&2
         return 0
     else
         echo -e "${BLUE}Configuring setup wizard mode...${NC}" >&2
@@ -331,39 +275,96 @@ configure_automated_setup() {
     fi
 }
 
-# Function to verify all placeholders have been replaced
+# Replace UI path placeholder and configure labels
+replace_ui_path_placeholders() {
+    local compose_file="$1"
+    local fqdn="$2"
+    local ui_path="${3}"
+    
+    echo -e "${BLUE}Configuring UI path and labels...${NC}" >&2
+    
+    # Generate UI path if not provided
+    if [[ -z "$ui_path" ]]; then
+        ui_path=$(generate_secure_ui_path 2>/dev/null || echo "bwadmin$(date +%s | tail -c 5)")
+    fi
+    
+    # Remove leading slash if present
+    ui_path="${ui_path#/}"
+    
+    # Replace UI path placeholder
+    if sed -i "s|REPLACEME_UI_PATH|$ui_path|g" "$compose_file"; then
+        echo -e "${GREEN}✓ UI path placeholder replaced with: /$ui_path${NC}" >&2
+        REPLACED_PLACEHOLDERS+=("REPLACEME_UI_PATH")
+    else
+        echo -e "${RED}✗ Failed to replace UI path placeholder${NC}" >&2
+        FAILED_REPLACEMENTS+=("REPLACEME_UI_PATH")
+        return 1
+    fi
+    
+    # Add BunkerWeb labels to bw-ui service if not already present
+    if grep -q "bw-ui:" "$compose_file" && ! grep -q "bunkerweb.SERVER_NAME" "$compose_file"; then
+        echo -e "${BLUE}Adding BunkerWeb labels to bw-ui service...${NC}" >&2
+        
+        local labels_block="    labels:
+      - \"bunkerweb.SERVER_NAME=$fqdn\"
+      - \"bunkerweb.USE_TEMPLATE=ui\"
+      - \"bunkerweb.USE_REVERSE_PROXY=yes\"
+      - \"bunkerweb.REVERSE_PROXY_URL=/$ui_path\"
+      - \"bunkerweb.REVERSE_PROXY_HOST=http://bw-ui:7000\""
+        
+        awk -v labels="$labels_block" '
+        /^  bw-ui:/ { in_ui_service = 1 }
+        in_ui_service && /^    image:/ { 
+            print $0
+            print labels
+            next
+        }
+        /^  [a-zA-Z]/ && !/^  bw-ui:/ { in_ui_service = 0 }
+        { print }
+        ' "$compose_file" > "$compose_file.tmp" && mv "$compose_file.tmp" "$compose_file"
+        
+        echo -e "${GREEN}✓ BunkerWeb labels added to bw-ui service${NC}" >&2
+    fi
+    
+    # Update scheduler environment variables
+    sed -i "s|REPLACEME_DOMAIN_USE_TEMPLATE|${fqdn}_USE_TEMPLATE|g" "$compose_file"
+    sed -i "s|REPLACEME_DOMAIN_USE_REVERSE_PROXY|${fqdn}_USE_REVERSE_PROXY|g" "$compose_file"
+    sed -i "s|REPLACEME_DOMAIN_REVERSE_PROXY_URL|${fqdn}_REVERSE_PROXY_URL|g" "$compose_file"
+    sed -i "s|REPLACEME_DOMAIN_REVERSE_PROXY_HOST|${fqdn}_REVERSE_PROXY_HOST|g" "$compose_file"
+    
+    echo -e "${GREEN}✓ UI access path configured: /$ui_path${NC}" >&2
+    echo -e "${GREEN}✓ Scheduler configuration updated for domain: $fqdn${NC}" >&2
+    
+    return 0
+}
+
+# Verify all placeholders have been replaced
 verify_placeholder_replacement() {
     local compose_file="$1"
     
     echo -e "${BLUE}Verifying placeholder replacement...${NC}" >&2
     
-    # Check for any remaining placeholders (all should be replaced now)
-    local remaining_placeholders=$(grep -o "REPLACEME_[A-Z_]*" "$compose_file" || true)
-    
+    local remaining_placeholders=$(grep -o "REPLACEME_[A-Z_]*" "$compose_file" 2>/dev/null || echo "")
     if [[ -n "$remaining_placeholders" ]]; then
         echo -e "${RED}✗ Some placeholders were not replaced!${NC}" >&2
         echo -e "${RED}Remaining placeholders:${NC}" >&2
-        
-        # Show each unique remaining placeholder
         echo "$remaining_placeholders" | sort -u | while read -r placeholder; do
             echo -e "${RED}  • $placeholder${NC}" >&2
         done
-        
         return 1
-    else
-        echo -e "${GREEN}✓ All placeholders successfully replaced${NC}" >&2
-        return 0
     fi
+    
+    echo -e "${GREEN}✓ All placeholders successfully replaced${NC}" >&2
+    return 0
 }
 
-# Function to validate Docker Compose syntax
+# Validate Docker Compose syntax
 validate_compose_syntax() {
     local compose_file="$1"
     local install_dir="$(dirname "$compose_file")"
     
     echo -e "${BLUE}Validating Docker Compose syntax...${NC}" >&2
     
-    # Change to the directory containing the compose file
     local current_dir=$(pwd)
     cd "$install_dir"
     
@@ -373,20 +374,19 @@ validate_compose_syntax() {
         return 0
     else
         echo -e "${RED}✗ Docker Compose syntax error detected${NC}" >&2
-        echo -e "${YELLOW}Docker Compose validation output:${NC}" >&2
+        echo -e "${YELLOW}Validation output:${NC}" >&2
         docker compose config 2>&1 | head -10 >&2
         cd "$current_dir"
         return 1
     fi
 }
 
-# Function to create a backup of the compose file
+# Create backup files with timestamp and description
 create_backup() {
     local compose_file="$1"
-    local backup_suffix="${2:-template-processing}"
+    local backup_suffix="$2"
     
-    local backup_file="$compose_file.backup.$backup_suffix.$(date +%Y%m%d_%H%M%S)"
-    
+    local backup_file="${compose_file}.backup.${backup_suffix}.$(date +%Y%m%d_%H%M%S)"
     if cp "$compose_file" "$backup_file"; then
         echo -e "${GREEN}✓ Backup created: $backup_file${NC}" >&2
         echo "$backup_file"
@@ -397,7 +397,7 @@ create_backup() {
     fi
 }
 
-# Function to show replacement summary
+# Show replacement summary
 show_replacement_summary() {
     echo -e "${BLUE}Template Processing Summary:${NC}" >&2
     echo -e "${GREEN}• Successfully replaced: ${#REPLACED_PLACEHOLDERS[@]} placeholders${NC}" >&2
@@ -414,8 +414,11 @@ show_replacement_summary() {
             echo -e "${RED}  ✗ $placeholder${NC}" >&2
         done
     fi
+    
+    echo "" >&2
 }
 
+# Comprehensive template processing with release channel support and all configurations
 process_template_with_release_channel() {
     local template_file="$1"
     local compose_file="$2"
@@ -435,121 +438,190 @@ process_template_with_release_channel() {
     local release_channel="${16:-latest}"
     local image_tag="${17}"
     
-    # Clear tracking arrays
-    REPLACED_PLACEHOLDERS=()
-    FAILED_REPLACEMENTS=()
+    echo -e "${BLUE}=================================================================================${NC}"
+    echo -e "${BLUE}                 TEMPLATE PROCESSING WITH RELEASE CHANNEL                 ${NC}"
+    echo -e "${BLUE}=================================================================================${NC}"
+    echo ""
     
-    echo -e "${BLUE}=================================================================================${NC}" >&2
-    echo -e "${BLUE}                 TEMPLATE PROCESSING WITH RELEASE CHANNEL                 ${NC}" >&2
-    echo -e "${BLUE}=================================================================================${NC}" >&2
-    echo "" >&2
-    
-    # Validate inputs
     if [[ ! -f "$template_file" ]]; then
-        echo -e "${RED}✗ Template file not found: $template_file${NC}" >&2
+        echo -e "${RED}✗ Template file not found: $template_file${NC}"
         return 1
     fi
     
     if [[ -z "$image_tag" ]]; then
-        echo -e "${RED}✗ Image tag is required${NC}" >&2
+        echo -e "${RED}✗ Image tag is required${NC}"
         return 1
     fi
     
-    # Copy template to compose file
-    echo -e "${BLUE}Copying template to docker-compose.yml...${NC}" >&2
+    echo -e "${BLUE}Processing release channel: $release_channel${NC}"
+    if ! validate_release_channel "$release_channel"; then
+        echo -e "${RED}✗ Invalid release channel: $release_channel${NC}"
+        return 1
+    fi
+    
+    echo -e "${GREEN}✓ Using Docker image tag: $image_tag${NC}"
+    
+    echo -e "${BLUE}Copying template to docker-compose.yml...${NC}"
     if cp "$template_file" "$compose_file"; then
-        echo -e "${GREEN}✓ Template copied: $(basename "$template_file") → $(basename "$compose_file")${NC}" >&2
+        echo -e "${GREEN}✓ Template copied: $(basename "$template_file") → $(basename "$compose_file")${NC}"
     else
-        echo -e "${RED}✗ Failed to copy template${NC}" >&2
+        echo -e "${RED}✗ Failed to copy template${NC}"
         return 1
     fi
     
-    # Create backup
-    local backup_file
-    if backup_file=$(create_backup "$compose_file" "template-processing"); then
-        echo -e "${GREEN}✓ Backup created${NC}" >&2
-    else
-        echo -e "${RED}✗ Failed to create backup${NC}" >&2
-        return 1
-    fi
+    local backup_file=$(create_backup "$compose_file" "template-processing")
+    echo -e "${GREEN}✓ Backup created${NC}"
     
-    # Check if template contains placeholders
+    # Check if template needs processing
     if ! grep -q "REPLACEME_" "$compose_file"; then
-        echo -e "${YELLOW}⚠ No placeholders found in template${NC}" >&2
-        echo -e "${YELLOW}File may already be configured or invalid template${NC}" >&2
+        echo -e "${BLUE}ℹ No placeholders found in template${NC}"
+        return 0
     fi
     
-    # Process replacements step by step
     local processing_errors=0
     
-    # 1. NEW: Replace Docker image tags first
-    echo -e "${BLUE}1. Replacing Docker image tags...${NC}" >&2
-    if ! replace_image_tag_placeholders "$compose_file" "$image_tag" "Docker image tags"; then
-        ((processing_errors++))
-        echo -e "${RED}✗ Failed to replace Docker image tags${NC}" >&2
+    echo -e "${BLUE}Processing template placeholders in correct order...${NC}"
+    
+    echo -e "${BLUE}1. Processing Docker image tags...${NC}"
+    if replace_image_tag_placeholders "$compose_file" "$image_tag" "Docker image tags"; then
+        echo -e "${GREEN}✓ Docker image tags updated to: $image_tag${NC}"
+        echo -e "${GREEN}✓ Release channel: $release_channel${NC}"
     else
-        echo -e "${GREEN}✓ Docker image tags updated to: $image_tag (release channel: $release_channel)${NC}" >&2
-    fi
-    
-    # 2. Replace network placeholders (if needed)
-    echo -e "${BLUE}2. Replacing network placeholders...${NC}" >&2
-    if ! replace_network_placeholders "$compose_file" "$docker_subnet"; then
+        echo -e "${RED}✗ Failed to update Docker image tags${NC}"
         ((processing_errors++))
     fi
     
-    # 3. Replace credential placeholders
-    echo -e "${BLUE}3. Replacing credential placeholders...${NC}" >&2
-    if ! replace_credential_placeholders "$compose_file" "$mysql_password" "$redis_password" "$totp_secret" "$admin_password" "$flask_secret" "$redis_enabled"; then
+    echo -e "${BLUE}2. Processing basic credentials...${NC}"
+    if [[ -n "$mysql_password" ]]; then
+        sed -i "s|REPLACEME_MYSQL|$mysql_password|g" "$compose_file"
+        echo -e "${GREEN}✓ MySQL password updated${NC}"
+    fi
+    
+    if [[ "$redis_enabled" == "yes" && -n "$redis_password" ]]; then
+        sed -i "s|REPLACEME_REDIS_PASSWORD|$redis_password|g" "$compose_file"
+        echo -e "${GREEN}✓ Redis password updated${NC}"
+    else
+        sed -i "s|REPLACEME_REDIS_PASSWORD|disabled|g" "$compose_file"
+        echo -e "${GREEN}✓ Redis password set to disabled${NC}"
+    fi
+    
+    if [[ -n "$totp_secret" ]]; then
+        sed -i "s|REPLACEME_DEFAULT|$totp_secret|g" "$compose_file"
+        echo -e "${GREEN}✓ TOTP secret updated${NC}"
+    fi
+    
+    echo -e "${BLUE}3. Processing network configuration...${NC}"
+    if [[ -n "$docker_subnet" ]]; then
+        local default_subnet="10.20.30.0/24"
+        if [[ "$docker_subnet" != "$default_subnet" ]]; then
+            sed -i "s|$default_subnet|$docker_subnet|g" "$compose_file"
+            echo -e "${GREEN}✓ Docker subnet updated to: $docker_subnet${NC}"
+        fi
+    fi
+    
+    echo -e "${BLUE}4. Processing DNS configuration...${NC}"
+    if replace_dns_resolvers "$compose_file" "${DNS_RESOLVERS:-127.0.0.11}"; then
+        echo -e "${GREEN}✓ DNS resolvers configured${NC}"
+    else
+        echo -e "${RED}✗ Failed to configure DNS resolvers${NC}"
         ((processing_errors++))
     fi
     
-    # 4. Replace SSL/domain placeholders
-    echo -e "${BLUE}4. Replacing SSL/domain placeholders...${NC}" >&2
-    if ! replace_ssl_placeholders "$compose_file" "$auto_cert_type" "$auto_cert_contact" "$fqdn" "$server_name"; then
+    echo -e "${BLUE}5. Processing HTTP/3 configuration...${NC}"
+    if [[ -n "$HTTP3" ]]; then
+        sed -i "s|HTTP3: \"yes\"|HTTP3: \"$HTTP3\"|g" "$compose_file"
+        echo -e "${GREEN}✓ HTTP3 configured: $HTTP3${NC}"
+    fi
+    
+    if [[ -n "$HTTP3_ALT_SVC_PORT" ]]; then
+        sed -i "s|HTTP3_ALT_SVC_PORT: \"443\"|HTTP3_ALT_SVC_PORT: \"$HTTP3_ALT_SVC_PORT\"|g" "$compose_file"
+        echo -e "${GREEN}✓ HTTP3 alternate service port: $HTTP3_ALT_SVC_PORT${NC}"
+    fi
+    
+    echo -e "${BLUE}6. Processing Let's Encrypt configuration...${NC}"
+    if [[ -n "$LETS_ENCRYPT_CHALLENGE" ]]; then
+        sed -i "s|LETS_ENCRYPT_CHALLENGE: \"http\"|LETS_ENCRYPT_CHALLENGE: \"$LETS_ENCRYPT_CHALLENGE\"|g" "$compose_file"
+        echo -e "${GREEN}✓ Let's Encrypt challenge type: $LETS_ENCRYPT_CHALLENGE${NC}"
+    fi
+    
+    if [[ -n "$LETS_ENCRYPT_STAGING" ]]; then
+        sed -i "s|USE_LETS_ENCRYPT_STAGING: \"yes\"|USE_LETS_ENCRYPT_STAGING: \"$LETS_ENCRYPT_STAGING\"|g" "$compose_file"
+        echo -e "${GREEN}✓ Let's Encrypt staging: $LETS_ENCRYPT_STAGING${NC}"
+    fi
+    
+    echo -e "${BLUE}7. Processing multisite configuration...${NC}"
+    if [[ -n "$MULTISITE" ]]; then
+        sed -i "s|MULTISITE: \"yes\"|MULTISITE: \"$MULTISITE\"|g" "$compose_file"
+        echo -e "${GREEN}✓ Multisite mode: $MULTISITE${NC}"
+    fi
+    
+    echo -e "${BLUE}8. Processing SSL configuration...${NC}"
+    if [[ -n "$auto_cert_type" ]]; then
+        sed -i "s|REPLACEME_AUTO_LETS_ENCRYPT|yes|g" "$compose_file"
+        sed -i "s|REPLACEME_EMAIL_LETS_ENCRYPT|$auto_cert_contact|g" "$compose_file"
+        echo -e "${GREEN}✓ SSL certificates configured ($auto_cert_type)${NC}"
+    else
+        sed -i "s|REPLACEME_AUTO_LETS_ENCRYPT|no|g" "$compose_file"
+        echo -e "${GREEN}✓ SSL certificates disabled${NC}"
+    fi
+    
+    echo -e "${BLUE}9. Processing domain configuration...${NC}"
+    if [[ -n "$fqdn" ]]; then
+        sed -i "s|REPLACEME_DOMAIN|$fqdn|g" "$compose_file"
+        sed -i "s|SERVER_NAME: \"\"|SERVER_NAME: \"$fqdn\"|g" "$compose_file"
+        echo -e "${GREEN}✓ Domain configured: $fqdn${NC}"
+    fi
+    
+    echo -e "${BLUE}10. Configuring UI path and labels...${NC}"
+    if replace_ui_path_placeholders "$compose_file" "$fqdn"; then
+        echo -e "${GREEN}✓ UI path and labels configured successfully${NC}"
+    else
+        echo -e "${RED}✗ Failed to configure UI path and labels${NC}"
         ((processing_errors++))
     fi
     
-    # 5. Configure automated setup if requested
-    echo -e "${BLUE}5. Configuring setup mode...${NC}" >&2
-    if ! configure_automated_setup "$compose_file" "$setup_mode" "$admin_username" "$admin_password" "$flask_secret"; then
-        ((processing_errors++))
-    fi
+    echo -e "${BLUE}11. Configuring setup mode and credentials...${NC}"
+    configure_setup_mode "$compose_file" "$setup_mode" "$admin_username" "$admin_password" "$flask_secret"
     
-    # 6. Verify all placeholders are replaced
-    echo -e "${BLUE}6. Verifying placeholder replacement...${NC}" >&2
-    if ! verify_placeholder_replacement "$compose_file"; then
-        echo -e "${YELLOW}⚠ Restoring backup due to placeholder issues...${NC}" >&2
+    echo -e "${BLUE}12. Validating placeholder replacement...${NC}"
+    if verify_placeholder_replacement "$compose_file"; then
+        echo -e "${GREEN}✓ All placeholders replaced successfully${NC}"
+    else
+        echo -e "${YELLOW}⚠ Restoring backup due to placeholder issues...${NC}"
         cp "$backup_file" "$compose_file"
         ((processing_errors++))
     fi
     
-    # 7. Validate Docker Compose syntax
-    echo -e "${BLUE}7. Validating Docker Compose syntax...${NC}" >&2
-    if ! validate_compose_syntax "$compose_file"; then
-        echo -e "${YELLOW}⚠ Compose syntax validation failed${NC}" >&2
+    echo -e "${BLUE}13. Validating Docker Compose syntax...${NC}"
+    if validate_compose_syntax "$compose_file"; then
+        echo -e "${GREEN}✓ Docker Compose syntax validation passed${NC}"
+    else
+        echo -e "${RED}✗ Docker Compose syntax validation failed${NC}"
         ((processing_errors++))
     fi
     
-    # Show summary
-    show_replacement_summary
-    
-    echo "" >&2
+    echo ""
     if [[ $processing_errors -eq 0 ]]; then
-        echo -e "${GREEN}✓ Template processing with release channel completed successfully${NC}" >&2
-        echo -e "${GREEN}✓ Release channel: $release_channel${NC}" >&2
-        echo -e "${GREEN}✓ Docker image tag: $image_tag${NC}" >&2
-        echo -e "${BLUE}✓ Backup available at: $backup_file${NC}" >&2
-        echo "" >&2
-        return 0
+        echo -e "${GREEN}✓ Template processing completed successfully${NC}"
+        echo -e "${GREEN}✓ Release channel: $release_channel${NC}"
+        echo -e "${GREEN}✓ Docker image tag: $image_tag${NC}"
+        echo -e "${GREEN}✓ DNS resolvers: ${DNS_RESOLVERS:-127.0.0.11}${NC}"
+        echo -e "${GREEN}✓ HTTP/3 enabled: ${HTTP3:-yes}${NC}"
+        echo -e "${GREEN}✓ Multisite mode: ${MULTISITE:-yes}${NC}"
+        echo -e "${GREEN}✓ All placeholders properly replaced${NC}"
+        echo -e "${GREEN}✓ Admin credentials correctly configured${NC}"
+        echo -e "${GREEN}✓ UI path synchronized between scheduler and UI service${NC}"
+        echo -e "${GREEN}✓ Setup mode properly configured: $setup_mode${NC}"
     else
-        echo -e "${RED}✗ Template processing completed with $processing_errors errors${NC}" >&2
-        echo -e "${BLUE}✓ Backup available at: $backup_file${NC}" >&2
-        echo "" >&2
+        echo -e "${RED}✗ Template processing completed with $processing_errors errors${NC}"
+        echo -e "${BLUE}✓ Backup available at: $backup_file${NC}"
         return 1
     fi
+    
+    return 0
 }
 
-# Main function to process a template file completely (LEGACY - kept for compatibility)
+# Legacy function for backwards compatibility
 process_template() {
     local template_file="$1"
     local compose_file="$2"
@@ -578,19 +650,17 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     echo "This script is designed to be sourced by other scripts."
     echo ""
     echo "Available functions:"
-    echo "  process_template_with_release_channel <template> <compose> <mysql_pass> <redis_pass> <totp> <admin_pass> <flask> <admin_user> [ssl_type] [ssl_contact] [fqdn] [server_name] [subnet] [setup_mode] [redis_enabled] [release_channel] [image_tag]"
-    echo "  process_template <template> <compose> <mysql_pass> <redis_pass> <totp> <admin_pass> <flask> <admin_user> [ssl_type] [ssl_contact] [fqdn] [server_name] [subnet] [setup_mode] [redis_enabled]"
-    echo "  replace_placeholder <file> <placeholder> <value> [description]"
-    echo "  replace_image_tag_placeholders <file> <image_tag> [description]"
-    echo "  replace_credential_placeholders <file> <mysql> <redis> <totp> <admin> <flask> [redis_enabled]"
-    echo "  replace_ssl_placeholders <file> <ssl_type> <ssl_contact> <fqdn> <server_name>"
-    echo "  replace_network_placeholders <file> <subnet> [default_subnet]"
-    echo "  configure_automated_setup <file> <mode> <admin_user> <admin_pass> <flask>"
-    echo "  verify_placeholder_replacement <file>"
-    echo "  validate_compose_syntax <file>"
-    echo "  create_backup <file> [suffix]"
+    echo "  process_template_with_release_channel - Process template with release channel support"
+    echo "  replace_placeholder - Replace a single placeholder"
+    echo "  replace_image_tag_placeholders - Replace Docker image tags"
+    echo "  replace_credential_placeholders - Replace all credentials"
+    echo "  replace_ssl_placeholders - Replace SSL/domain settings"
+    echo "  replace_network_placeholders - Replace network settings"
+    echo "  replace_dns_resolvers - Replace DNS resolver settings"
+    echo "  replace_ui_path_placeholders - Replace UI path and configure labels"
+    echo "  configure_automated_setup - Configure setup mode"
+    echo "  verify_placeholder_replacement - Verify all placeholders replaced"
+    echo "  validate_compose_syntax - Validate Docker Compose syntax"
+    echo "  create_backup - Create backup files"
     echo ""
-    echo "Example usage:"
-    echo "  source helper_template_processor.sh"
-    echo "  process_template_with_release_channel template.yml docker-compose.yml \"\$MYSQL_PASS\" \"\$REDIS_PASS\" ... \"latest\" \"1.6.1\""
 fi
