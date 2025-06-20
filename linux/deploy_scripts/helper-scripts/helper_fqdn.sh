@@ -1,8 +1,5 @@
 #!/bin/bash
 #
-# Generic FQDN Detection and Validation Helper Script
-# Template for system administration and deployment scripts
-#
 # Copyright (c) 2025 Michal Koeckeis-Fresel
 # 
 # This software is dual-licensed under your choice of:
@@ -16,12 +13,12 @@
 # CONFIGURATION SECTION - Customize for your specific use case
 # ===============================================================================
 
-# Script identification (customize for your application)
+# Script identification
 SCRIPT_NAME="FQDN Detection Helper"
-SCRIPT_VERSION="2.0.0"
+SCRIPT_VERSION="2.1.0"
 SCRIPT_PURPOSE="Generic FQDN detection and validation for system administration"
 
-# Default configuration values (can be overridden)
+# Default configuration values
 DEFAULT_REQUIRE_SSL="yes"
 DEFAULT_CHECK_DNS="yes"
 DEFAULT_ALLOW_LOCALHOST="yes"
@@ -30,13 +27,15 @@ DEFAULT_MIN_DOMAIN_PARTS="2"
 DEFAULT_CONFIG_FILE=""
 DEFAULT_LOG_LEVEL="DEBUG"
 DEFAULT_OUTPUT_FORMAT="text"
+DEFAULT_CHECK_NAT="yes"
 
-# Color configuration (set to "no" to disable colors)
+# Color configuration
 USE_COLORS="yes"
 
 # Timeout settings
 DNS_TIMEOUT="2"
 PING_TIMEOUT="3"
+EXTERNAL_IP_TIMEOUT="5"
 
 # ===============================================================================
 # GLOBAL VARIABLES - Script state and results
@@ -47,8 +46,12 @@ DETECTED_FQDN=""
 DETECTION_METHOD=""
 DETECTION_RESULTS=()
 VALIDATION_RESULTS=()
+EXTERNAL_IP=""
+LOCAL_IP=""
+IS_BEHIND_NAT=""
+NAT_DETECTION_RESULTS=()
 
-# Configuration variables (loaded from config file or defaults)
+# Configuration variables
 REQUIRE_SSL="$DEFAULT_REQUIRE_SSL"
 CHECK_DNS="$DEFAULT_CHECK_DNS"
 ALLOW_LOCALHOST="$DEFAULT_ALLOW_LOCALHOST"
@@ -56,12 +59,13 @@ ALLOW_IP_AS_FQDN="$DEFAULT_ALLOW_IP_AS_FQDN"
 MIN_DOMAIN_PARTS="$DEFAULT_MIN_DOMAIN_PARTS"
 LOG_LEVEL="$DEFAULT_LOG_LEVEL"
 OUTPUT_FORMAT="$DEFAULT_OUTPUT_FORMAT"
+CHECK_NAT="$DEFAULT_CHECK_NAT"
 
 # ===============================================================================
 # UTILITY FUNCTIONS - General purpose functions
 # ===============================================================================
 
-# Color definitions (can be customized)
+# Color definitions
 if [[ "$USE_COLORS" == "yes" ]] && [[ -t 1 ]]; then
     RED='\033[0;31m'
     GREEN='\033[0;32m'
@@ -138,13 +142,10 @@ load_config() {
     
     log_info "Loading configuration from: $config_file"
     
-    # Source the config file safely
     while IFS='=' read -r key value; do
-        # Skip comments and empty lines
         [[ "$key" =~ ^[[:space:]]*# ]] && continue
         [[ -z "${key// }" ]] && continue
         
-        # Remove quotes from value
         value="${value%\"}"
         value="${value#\"}"
         value="${value%\'}"
@@ -161,6 +162,8 @@ load_config() {
             DNS_TIMEOUT) DNS_TIMEOUT="$value" ;;
             PING_TIMEOUT) PING_TIMEOUT="$value" ;;
             USE_COLORS) USE_COLORS="$value" ;;
+            CHECK_NAT) CHECK_NAT="$value" ;;
+            EXTERNAL_IP_TIMEOUT) EXTERNAL_IP_TIMEOUT="$value" ;;
         esac
     done < "$config_file"
     
@@ -195,6 +198,10 @@ ALLOW_LOCALHOST="$ALLOW_LOCALHOST"
 ALLOW_IP_AS_FQDN="$ALLOW_IP_AS_FQDN"
 MIN_DOMAIN_PARTS="$MIN_DOMAIN_PARTS"
 
+# NAT Detection
+CHECK_NAT="$CHECK_NAT"
+EXTERNAL_IP_TIMEOUT="$EXTERNAL_IP_TIMEOUT"
+
 # Logging and Output
 LOG_LEVEL="$LOG_LEVEL"
 OUTPUT_FORMAT="$OUTPUT_FORMAT"
@@ -221,10 +228,12 @@ show_config() {
     echo -e "${CYAN}• Allow Localhost: ${NC}$ALLOW_LOCALHOST"
     echo -e "${CYAN}• Allow IP as FQDN: ${NC}$ALLOW_IP_AS_FQDN"
     echo -e "${CYAN}• Min Domain Parts: ${NC}$MIN_DOMAIN_PARTS"
+    echo -e "${CYAN}• Check NAT: ${NC}$CHECK_NAT"
     echo -e "${CYAN}• Log Level: ${NC}$LOG_LEVEL"
     echo -e "${CYAN}• Output Format: ${NC}$OUTPUT_FORMAT"
     echo -e "${CYAN}• DNS Timeout: ${NC}${DNS_TIMEOUT}s"
     echo -e "${CYAN}• Ping Timeout: ${NC}${PING_TIMEOUT}s"
+    echo -e "${CYAN}• External IP Timeout: ${NC}${EXTERNAL_IP_TIMEOUT}s"
 }
 
 # ===============================================================================
@@ -346,6 +355,226 @@ is_valid_fqdn() {
 }
 
 # ===============================================================================
+# NETWORK FUNCTIONS - IP address and NAT detection
+# ===============================================================================
+
+# Get local/private IP address
+get_local_ip() {
+    local local_ip=""
+    
+    # Method 1: hostname command
+    if command_exists hostname; then
+        local_ip=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "")
+        if [[ -n "$local_ip" && "$local_ip" != "127.0.0.1" ]]; then
+            echo "$local_ip"
+            return 0
+        fi
+    fi
+    
+    # Method 2: ip route command
+    if command_exists ip; then
+        local_ip=$(ip route get 8.8.8.8 2>/dev/null | grep -oP 'src \K[^ ]+' || echo "")
+        if [[ -n "$local_ip" && "$local_ip" != "127.0.0.1" ]]; then
+            echo "$local_ip"
+            return 0
+        fi
+    fi
+    
+    # Method 3: ifconfig (legacy)
+    if command_exists ifconfig; then
+        local_ip=$(ifconfig 2>/dev/null | grep -oP 'inet \K[0-9.]+' | grep -v '127.0.0.1' | head -1 || echo "")
+        if [[ -n "$local_ip" ]]; then
+            echo "$local_ip"
+            return 0
+        fi
+    fi
+    
+    log_debug "Failed to detect local IP address"
+    return 1
+}
+
+# Get external/public IP address using multiple services
+get_external_ip() {
+    local external_ip=""
+    
+    # External IP detection services
+    local services=(
+        "https://icanhazip.com"
+        "https://ifconfig.me"
+        "https://ipecho.net/plain"
+        "https://checkip.amazonaws.com"
+        "https://ipinfo.io/ip"
+        "https://api.ipify.org"
+    )
+    
+    log_debug "Detecting external IP address..."
+    
+    for service in "${services[@]}"; do
+        log_debug "Trying service: $service"
+        
+        if command_exists curl; then
+            external_ip=$(timeout "$EXTERNAL_IP_TIMEOUT" curl -s -f "$service" 2>/dev/null | tr -d '\n\r' || echo "")
+        elif command_exists wget; then
+            external_ip=$(timeout "$EXTERNAL_IP_TIMEOUT" wget -qO- "$service" 2>/dev/null | tr -d '\n\r' || echo "")
+        fi
+        
+        # Validate IP address format
+        if is_ip_address "$external_ip"; then
+            log_debug "External IP detected via $service: $external_ip"
+            echo "$external_ip"
+            return 0
+        fi
+    done
+    
+    log_debug "Failed to detect external IP address"
+    return 1
+}
+
+# Check if IP address is in private range
+is_private_ip() {
+    local ip="$1"
+    
+    if [[ ! "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        return 1
+    fi
+    
+    local IFS='.'
+    local ip_parts=($ip)
+    local first=${ip_parts[0]}
+    local second=${ip_parts[1]}
+    
+    # Private IP ranges:
+    # 10.0.0.0/8 (10.0.0.0 - 10.255.255.255)
+    # 172.16.0.0/12 (172.16.0.0 - 172.31.255.255)
+    # 192.168.0.0/16 (192.168.0.0 - 192.168.255.255)
+    
+    if [[ $first -eq 10 ]]; then
+        return 0
+    elif [[ $first -eq 172 && $second -ge 16 && $second -le 31 ]]; then
+        return 0
+    elif [[ $first -eq 192 && $second -eq 168 ]]; then
+        return 0
+    elif [[ "$ip" == "127.0.0.1" ]]; then
+        return 0
+    fi
+    
+    return 1
+}
+
+# Detect NAT configuration
+detect_nat() {
+    log_info "Detecting NAT configuration..."
+    
+    # Clear previous results
+    IS_BEHIND_NAT=""
+    NAT_DETECTION_RESULTS=()
+    
+    # Get local IP
+    if LOCAL_IP=$(get_local_ip); then
+        log_debug "Local IP detected: $LOCAL_IP"
+        NAT_DETECTION_RESULTS+=("local_ip:success:$LOCAL_IP")
+    else
+        log_warning "Failed to detect local IP"
+        NAT_DETECTION_RESULTS+=("local_ip:failed")
+        return 1
+    fi
+    
+    # Get external IP
+    if EXTERNAL_IP=$(get_external_ip); then
+        log_debug "External IP detected: $EXTERNAL_IP"
+        NAT_DETECTION_RESULTS+=("external_ip:success:$EXTERNAL_IP")
+    else
+        log_warning "Failed to detect external IP"
+        NAT_DETECTION_RESULTS+=("external_ip:failed")
+        # Can still determine NAT if local IP is private
+        if is_private_ip "$LOCAL_IP"; then
+            IS_BEHIND_NAT="yes"
+            NAT_DETECTION_RESULTS+=("nat_status:behind_nat:private_ip_detected")
+            log_info "Behind NAT (private IP detected, external IP unknown)"
+            return 0
+        else
+            return 1
+        fi
+    fi
+    
+    # Compare local and external IPs
+    if [[ "$LOCAL_IP" == "$EXTERNAL_IP" ]]; then
+        IS_BEHIND_NAT="no"
+        NAT_DETECTION_RESULTS+=("nat_status:direct:ip_match")
+        log_info "Direct internet connection (local IP matches external IP)"
+    else
+        IS_BEHIND_NAT="yes"
+        NAT_DETECTION_RESULTS+=("nat_status:behind_nat:ip_mismatch")
+        log_info "Behind NAT (local IP: $LOCAL_IP, external IP: $EXTERNAL_IP)"
+    fi
+    
+    return 0
+}
+
+# Resolve FQDN to IP address
+resolve_fqdn_to_ip() {
+    local fqdn="$1"
+    local resolved_ip=""
+    
+    log_debug "Resolving FQDN to IP: $fqdn"
+    
+    # Try different DNS resolution tools
+    if command_exists dig; then
+        resolved_ip=$(timeout "$DNS_TIMEOUT" dig +short "$fqdn" A 2>/dev/null | head -1 || echo "")
+    elif command_exists nslookup; then
+        resolved_ip=$(timeout "$DNS_TIMEOUT" nslookup "$fqdn" 2>/dev/null | grep "Address:" | tail -1 | awk '{print $2}' || echo "")
+    elif command_exists host; then
+        resolved_ip=$(timeout "$DNS_TIMEOUT" host "$fqdn" 2>/dev/null | grep "has address" | awk '{print $4}' | head -1 || echo "")
+    elif command_exists getent; then
+        resolved_ip=$(timeout "$DNS_TIMEOUT" getent hosts "$fqdn" 2>/dev/null | awk '{print $1}' | head -1 || echo "")
+    fi
+    
+    if is_ip_address "$resolved_ip"; then
+        log_debug "FQDN $fqdn resolves to: $resolved_ip"
+        echo "$resolved_ip"
+        return 0
+    else
+        log_debug "Failed to resolve FQDN: $fqdn"
+        return 1
+    fi
+}
+
+# Compare FQDN resolution with external IP
+compare_fqdn_external_ip() {
+    local fqdn="$1"
+    local external_ip="$2"
+    
+    if [[ -z "$fqdn" || -z "$external_ip" ]]; then
+        log_debug "FQDN or external IP not provided for comparison"
+        return 1
+    fi
+    
+    log_info "Comparing FQDN resolution with external IP..."
+    
+    local resolved_ip=""
+    if resolved_ip=$(resolve_fqdn_to_ip "$fqdn"); then
+        log_debug "FQDN $fqdn resolves to: $resolved_ip"
+        log_debug "External IP is: $external_ip"
+        
+        if [[ "$resolved_ip" == "$external_ip" ]]; then
+            log_success "FQDN resolves to external IP (DNS configured correctly)"
+            NAT_DETECTION_RESULTS+=("fqdn_match:success:$resolved_ip")
+            return 0
+        else
+            log_warning "FQDN resolves to different IP than external IP"
+            log_warning "  FQDN resolution: $resolved_ip"
+            log_warning "  External IP: $external_ip"
+            NAT_DETECTION_RESULTS+=("fqdn_match:mismatch:$resolved_ip")
+            return 1
+        fi
+    else
+        log_warning "Failed to resolve FQDN: $fqdn"
+        NAT_DETECTION_RESULTS+=("fqdn_match:dns_failed")
+        return 1
+    fi
+}
+
+# ===============================================================================
 # DETECTION FUNCTIONS - Various methods to detect FQDN
 # ===============================================================================
 
@@ -445,19 +674,16 @@ detect_fqdn_etc_hosts() {
     
     if [[ -f "/etc/hosts" ]]; then
         while IFS= read -r line; do
-            # Skip comments and empty lines
             [[ "$line" =~ ^[[:space:]]*# ]] && continue
             [[ -z "${line// }" ]] && continue
             
             local ip=$(echo "$line" | awk '{print $1}')
             local hostnames=$(echo "$line" | awk '{for(i=2;i<=NF;i++) print $i}')
             
-            # Skip localhost entries unless explicitly allowed
             if [[ "$ip" == "127.0.0.1" || "$ip" == "::1" ]]; then
                 [[ "$ALLOW_LOCALHOST" != "yes" ]] && continue
             fi
             
-            # Check each hostname
             for hostname in $hostnames; do
                 if is_valid_fqdn "$hostname"; then
                     log_debug "FQDN detected via /etc/hosts: $hostname"
@@ -477,7 +703,6 @@ detect_fqdn_reverse_dns() {
     local detected=""
     local primary_ip=""
     
-    # Get primary IP address
     if command_exists hostname; then
         primary_ip=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "")
     fi
@@ -487,7 +712,6 @@ detect_fqdn_reverse_dns() {
     fi
     
     if [[ -n "$primary_ip" && "$primary_ip" != "127.0.0.1" ]]; then
-        # Try different DNS tools
         if command_exists nslookup; then
             detected=$(timeout "$DNS_TIMEOUT" nslookup "$primary_ip" 2>/dev/null | grep "name =" | awk '{print $4}' | sed 's/\.$//' || echo "")
         elif command_exists dig; then
@@ -556,7 +780,6 @@ check_dns_resolution() {
     
     log_debug "Checking DNS resolution for: $fqdn"
     
-    # Try different DNS resolution tools
     local resolved=false
     local resolution_method=""
     
@@ -628,6 +851,11 @@ auto_detect_fqdn() {
     log_info "Starting FQDN detection process..."
     log_debug "Parameters: provided_fqdn='$provided_fqdn', require_ssl='$require_ssl', check_dns='$check_dns'"
     
+    # NAT detection if enabled
+    if [[ "$CHECK_NAT" == "yes" ]]; then
+        detect_nat
+    fi
+    
     # If FQDN is provided, validate and use it
     if [[ -n "$provided_fqdn" ]]; then
         log_info "Validating provided FQDN: $provided_fqdn"
@@ -646,6 +874,11 @@ auto_detect_fqdn() {
                     log_warning "Provided FQDN does not resolve (may be expected for new domains)"
                     VALIDATION_RESULTS+=("dns:failed")
                 fi
+            fi
+            
+            # Compare with external IP if NAT detection was successful
+            if [[ "$CHECK_NAT" == "yes" && -n "$EXTERNAL_IP" ]]; then
+                compare_fqdn_external_ip "$provided_fqdn" "$EXTERNAL_IP"
             fi
             
             echo "$provided_fqdn"
@@ -697,6 +930,11 @@ auto_detect_fqdn() {
                 fi
             fi
             
+            # Compare with external IP if NAT detection was successful
+            if [[ "$CHECK_NAT" == "yes" && -n "$EXTERNAL_IP" ]]; then
+                compare_fqdn_external_ip "$detected_fqdn" "$EXTERNAL_IP"
+            fi
+            
             echo "$detected_fqdn"
             return 0
         else
@@ -745,9 +983,18 @@ generate_json_output() {
     "method": "$DETECTION_METHOD",
     "status": "$status"
   },
+  "network": {
+    "local_ip": "$LOCAL_IP",
+    "external_ip": "$EXTERNAL_IP",
+    "behind_nat": "$IS_BEHIND_NAT"
+  },
   "validation": {
     "dns_check": "$CHECK_DNS",
     "results": [$(printf '"%s",' "${VALIDATION_RESULTS[@]}" | sed 's/,$//')"]
+  },
+  "nat_detection": {
+    "enabled": "$CHECK_NAT",
+    "results": [$(printf '"%s",' "${NAT_DETECTION_RESULTS[@]}" | sed 's/,$//')")]
   },
   "config": {
     "require_ssl": "$REQUIRE_SSL",
@@ -778,12 +1025,23 @@ generate_xml_output() {
     <method>$DETECTION_METHOD</method>
     <status>$status</status>
   </detection>
+  <network>
+    <local_ip>$LOCAL_IP</local_ip>
+    <external_ip>$EXTERNAL_IP</external_ip>
+    <behind_nat>$IS_BEHIND_NAT</behind_nat>
+  </network>
   <validation>
     <dns_check>$CHECK_DNS</dns_check>
     <results>
 $(for result in "${VALIDATION_RESULTS[@]}"; do echo "      <result>$result</result>"; done)
     </results>
   </validation>
+  <nat_detection>
+    <enabled>$CHECK_NAT</enabled>
+    <results>
+$(for result in "${NAT_DETECTION_RESULTS[@]}"; do echo "      <result>$result</result>"; done)
+    </results>
+  </nat_detection>
   <config>
     <require_ssl>$REQUIRE_SSL</require_ssl>
     <allow_localhost>$ALLOW_LOCALHOST</allow_localhost>
@@ -821,6 +1079,26 @@ get_validation_results() {
     printf '%s\n' "${VALIDATION_RESULTS[@]}"
 }
 
+# Get NAT detection results
+get_nat_results() {
+    printf '%s\n' "${NAT_DETECTION_RESULTS[@]}"
+}
+
+# Get local IP
+get_local_ip_result() {
+    echo "$LOCAL_IP"
+}
+
+# Get external IP
+get_external_ip_result() {
+    echo "$EXTERNAL_IP"
+}
+
+# Check if behind NAT
+is_behind_nat() {
+    echo "$IS_BEHIND_NAT"
+}
+
 # ===============================================================================
 # VALIDATION AND REPORTING FUNCTIONS
 # ===============================================================================
@@ -854,7 +1132,6 @@ validate_fqdn_comprehensive() {
         else
             log_warning "DNS resolution validation failed"
             validation_details+=("dns:failed")
-            # Don't fail validation for DNS issues unless strict mode
             [[ "$strict" == "yes" ]] && validation_passed=false
         fi
     fi
@@ -868,6 +1145,17 @@ validate_fqdn_comprehensive() {
             log_error "SSL readiness validation failed (localhost/IP not suitable for SSL)"
             validation_details+=("ssl:not_ready")
             validation_passed=false
+        fi
+    fi
+    
+    # NAT and external IP checks
+    if [[ "$CHECK_NAT" == "yes" ]]; then
+        if [[ -z "$EXTERNAL_IP" ]]; then
+            detect_nat
+        fi
+        
+        if [[ -n "$EXTERNAL_IP" ]]; then
+            compare_fqdn_external_ip "$fqdn" "$EXTERNAL_IP"
         fi
     fi
     
@@ -899,11 +1187,22 @@ show_fqdn_summary() {
     echo -e "${GREEN}• Timestamp: ${NC}$(get_timestamp)"
     echo ""
     
+    echo -e "${CYAN}Network Configuration:${NC}"
+    echo -e "${GREEN}• Local IP: ${NC}${LOCAL_IP:-"Unknown"}"
+    echo -e "${GREEN}• External IP: ${NC}${EXTERNAL_IP:-"Unknown"}"
+    echo -e "${GREEN}• Behind NAT: ${NC}${IS_BEHIND_NAT:-"Unknown"}"
+    echo ""
+    
     echo -e "${CYAN}Validation Status:${NC}"
     if [[ -n "$fqdn" && "$fqdn" != "localhost" ]]; then
         echo -e "${GREEN}• SSL Ready: ${NC}Yes"
         echo -e "${GREEN}• Domain Configuration: ${NC}Ready"
-        echo -e "${GREEN}• External Access: ${NC}Possible"
+        
+        if [[ "$IS_BEHIND_NAT" == "yes" ]]; then
+            echo -e "${YELLOW}• External Access: ${NC}Requires port forwarding/firewall rules"
+        else
+            echo -e "${GREEN}• External Access: ${NC}Direct connection possible"
+        fi
     else
         echo -e "${YELLOW}• SSL Ready: ${NC}No (localhost or invalid FQDN)"
         echo -e "${YELLOW}• Domain Configuration: ${NC}Manual setup required"
@@ -928,6 +1227,31 @@ show_fqdn_summary() {
             fi
             
             echo -e "${color}  $icon $check: $status${NC}"
+        done
+        echo ""
+    fi
+    
+    if [[ ${#NAT_DETECTION_RESULTS[@]} -gt 0 ]]; then
+        echo -e "${CYAN}NAT Detection Results:${NC}"
+        for result in "${NAT_DETECTION_RESULTS[@]}"; do
+            local check="${result%%:*}"
+            local status="${result#*:}"
+            status="${status%%:*}"
+            local value="${result##*:}"
+            
+            local icon="✓"
+            local color="$GREEN"
+            
+            if [[ "$status" == "failed" ]]; then
+                icon="✗"
+                color="$RED"
+            elif [[ "$status" == "mismatch" ]] || [[ "$status" == "behind_nat" ]]; then
+                icon="⚠"
+                color="$YELLOW"
+            fi
+            
+            echo -e "${color}  $icon $check: $status${NC}"
+            [[ "$value" != "$status" && "$value" != "$check" ]] && echo -e "    ${CYAN}→ $value${NC}"
         done
         echo ""
     fi
@@ -958,6 +1282,7 @@ show_fqdn_summary() {
     echo -e "${CYAN}Current Configuration:${NC}"
     echo -e "${BLUE}• Require SSL: ${NC}$REQUIRE_SSL"
     echo -e "${BLUE}• Check DNS: ${NC}$CHECK_DNS"
+    echo -e "${BLUE}• Check NAT: ${NC}$CHECK_NAT"
     echo -e "${BLUE}• Allow Localhost: ${NC}$ALLOW_LOCALHOST"
     echo -e "${BLUE}• Allow IP as FQDN: ${NC}$ALLOW_IP_AS_FQDN"
     echo ""
@@ -1049,6 +1374,35 @@ test_dns_resolution() {
     echo ""
 }
 
+# Test NAT detection
+test_nat_detection() {
+    echo "Testing NAT detection capabilities..."
+    echo ""
+    
+    echo -n "  Testing local IP detection... "
+    if local_ip=$(get_local_ip); then
+        echo -e "${GREEN}✓ $local_ip${NC}"
+    else
+        echo -e "${RED}✗ Failed${NC}"
+    fi
+    
+    echo -n "  Testing external IP detection... "
+    if external_ip=$(get_external_ip); then
+        echo -e "${GREEN}✓ $external_ip${NC}"
+    else
+        echo -e "${RED}✗ Failed${NC}"
+    fi
+    
+    echo -n "  Testing NAT detection... "
+    if detect_nat; then
+        echo -e "${GREEN}✓ Behind NAT: $IS_BEHIND_NAT${NC}"
+    else
+        echo -e "${RED}✗ Failed${NC}"
+    fi
+    
+    echo ""
+}
+
 # Comprehensive test suite
 run_comprehensive_tests() {
     echo -e "${BOLD}Running Comprehensive Test Suite${NC}"
@@ -1058,6 +1412,7 @@ run_comprehensive_tests() {
     test_validation_functions
     test_detection_methods
     test_dns_resolution
+    test_nat_detection
     
     echo "Testing complete FQDN detection process..."
     detected=$(auto_detect_fqdn "" "no" "yes")
@@ -1084,6 +1439,7 @@ ${BOLD}COMMANDS:${NC}
   detect [FQDN]         Auto-detect or validate FQDN
   validate FQDN         Validate specific FQDN
   test                  Run comprehensive tests
+  nat-info              Show NAT detection information
   config                Show current configuration
   save-config FILE      Save configuration to file
   load-config FILE      Load configuration from file
@@ -1091,6 +1447,7 @@ ${BOLD}COMMANDS:${NC}
 ${BOLD}OPTIONS:${NC}
   --require-ssl         Require SSL-compatible FQDN
   --no-dns-check        Skip DNS resolution check
+  --no-nat-check        Skip NAT detection
   --allow-localhost     Allow localhost as valid FQDN
   --allow-ip            Allow IP addresses as FQDN
   --min-parts N         Minimum domain parts required (default: $DEFAULT_MIN_DOMAIN_PARTS)
@@ -1100,11 +1457,13 @@ ${BOLD}OPTIONS:${NC}
   --no-colors           Disable colored output
   --strict              Enable strict validation mode
   --timeout N           Set DNS timeout in seconds
+  --external-timeout N  Set external IP detection timeout
 
 ${BOLD}EXAMPLES:${NC}
-  $0 detect                           # Auto-detect FQDN
+  $0 detect                           # Auto-detect FQDN with NAT info
   $0 detect example.com               # Validate provided FQDN
   $0 validate example.com             # Validate specific FQDN
+  $0 nat-info                         # Show NAT detection results
   $0 --require-ssl detect             # Require SSL-compatible FQDN
   $0 --output json detect             # Output in JSON format
   $0 --config /etc/fqdn.conf detect   # Use configuration file
@@ -1115,7 +1474,7 @@ To use this script as a template for other projects:
 1. Copy this script to your project
 2. Modify the configuration section at the top
 3. Customize the detection methods as needed
-4. Source the script: source helper_fqdn_lookup.sh
+4. Source the script: source helper_fqdn.sh
 5. Call functions: auto_detect_fqdn "\$provided_fqdn"
 
 ${BOLD}RETURN CODES:${NC}
@@ -1136,6 +1495,10 @@ parse_cli_arguments() {
                 ;;
             --no-dns-check)
                 CHECK_DNS="no"
+                shift
+                ;;
+            --no-nat-check)
+                CHECK_NAT="no"
                 shift
                 ;;
             --allow-localhost)
@@ -1175,6 +1538,10 @@ parse_cli_arguments() {
                 PING_TIMEOUT="$2"
                 shift 2
                 ;;
+            --external-timeout)
+                EXTERNAL_IP_TIMEOUT="$2"
+                shift 2
+                ;;
             -h|--help)
                 show_usage
                 exit 0
@@ -1194,7 +1561,6 @@ parse_cli_arguments() {
         esac
     done
     
-    # Store remaining arguments
     CLI_ARGS=("$@")
 }
 
@@ -1273,6 +1639,21 @@ main_cli() {
                         ;;
                 esac
                 return 1
+            fi
+            ;;
+        nat-info)
+            detect_nat
+            echo -e "${CYAN}NAT Detection Results:${NC}"
+            echo -e "${GREEN}• Local IP: ${NC}${LOCAL_IP:-"Unknown"}"
+            echo -e "${GREEN}• External IP: ${NC}${EXTERNAL_IP:-"Unknown"}"
+            echo -e "${GREEN}• Behind NAT: ${NC}${IS_BEHIND_NAT:-"Unknown"}"
+            
+            if [[ ${#NAT_DETECTION_RESULTS[@]} -gt 0 ]]; then
+                echo ""
+                echo -e "${CYAN}Detection Details:${NC}"
+                for result in "${NAT_DETECTION_RESULTS[@]}"; do
+                    echo -e "${BLUE}  • $result${NC}"
+                done
             fi
             ;;
         test)
