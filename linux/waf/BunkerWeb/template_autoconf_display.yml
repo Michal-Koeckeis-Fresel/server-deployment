@@ -60,12 +60,12 @@ services:
       LETS_ENCRYPT_MAX_RETRIES: "0"
       REPLACEME_DOMAIN_USE_TEMPLATE: "ui"
       REPLACEME_DOMAIN_USE_REVERSE_PROXY: "yes"
-      REPLACEME_DOMAIN_REVERSE_PROXY_URL: "REPLACEME_UI_PATH"
+      REPLACEME_DOMAIN_REVERSE_PROXY_URL: "/REPLACEME_UI_PATH"
       REPLACEME_DOMAIN_REVERSE_PROXY_HOST: "http://bw-ui:7000"
-      # Demo site configuration (conditional)
-      REPLACEME_DEMO_USE_REVERSE_PROXY: "yes"
-      REPLACEME_DEMO_REVERSE_PROXY_URL: "/demo"
-      REPLACEME_DEMO_REVERSE_PROXY_HOST: "http://demo-app:80"
+      # Demo site configuration (will be processed based on DEMOSITE setting)
+      REPLACEME_DOMAIN_demo_USE_REVERSE_PROXY: "yes"
+      REPLACEME_DOMAIN_demo_REVERSE_PROXY_URL: "/demo"
+      REPLACEME_DOMAIN_demo_REVERSE_PROXY_HOST: "http://demo-app:80"
     volumes:
       - /data/BunkerWeb/storage:/data
     restart: "unless-stopped"

@@ -711,17 +711,17 @@ process_template_with_release_channel() {
     
     echo -e "${BLUE}9. Processing Demo Site configuration...${NC}"
     if [[ "$DEMOSITE" == "yes" ]]; then
-        # Configure demo site reverse proxy
-        sed -i "s|REPLACEME_DEMO_USE_REVERSE_PROXY|${fqdn}_USE_REVERSE_PROXY|g" "$compose_file"
-        sed -i "s|REPLACEME_DEMO_REVERSE_PROXY_URL|${fqdn}_REVERSE_PROXY_URL|g" "$compose_file"
-        sed -i "s|REPLACEME_DEMO_REVERSE_PROXY_HOST|${fqdn}_REVERSE_PROXY_HOST|g" "$compose_file"
+        # Configure demo site reverse proxy using the new pattern
+        sed -i "s|REPLACEME_DOMAIN_demo_USE_REVERSE_PROXY|${fqdn}_demo_USE_REVERSE_PROXY|g" "$compose_file"
+        sed -i "s|REPLACEME_DOMAIN_demo_REVERSE_PROXY_URL|${fqdn}_demo_REVERSE_PROXY_URL|g" "$compose_file"
+        sed -i "s|REPLACEME_DOMAIN_demo_REVERSE_PROXY_HOST|${fqdn}_demo_REVERSE_PROXY_HOST|g" "$compose_file"
         
         echo -e "${GREEN}✓ Demo site enabled and configured${NC}"
         echo -e "${GREEN}✓ Demo site accessible at: http://$fqdn/demo${NC}"
     else
         # Remove demo app service and configuration if disabled
         sed -i '/# Demo application/,/bw-services/d' "$compose_file"
-        sed -i '/REPLACEME_DEMO_/d' "$compose_file"
+        sed -i '/REPLACEME_DOMAIN_demo_/d' "$compose_file"
         echo -e "${BLUE}ℹ Demo site disabled and removed${NC}"
     fi
     
