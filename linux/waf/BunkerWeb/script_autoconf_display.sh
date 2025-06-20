@@ -147,7 +147,7 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-# Generates secure admin password with mixed character types
+# Generates secure admin password with strict requirements: at least one lowercase, one uppercase, one number, one special character
 generate_secure_admin_password() {
     local uppercase="ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     local lowercase="abcdefghijklmnopqrstuvwxyz"
@@ -156,23 +156,52 @@ generate_secure_admin_password() {
     
     local password=""
     
-    for i in {1..3}; do
-        password+="${uppercase:$((RANDOM % ${#uppercase})):1}"
+    # Ensure at least one character from each required category
+    password+="${uppercase:$((RANDOM % ${#uppercase})):1}"
+    password+="${lowercase:$((RANDOM % ${#lowercase})):1}"
+    password+="${numbers:$((RANDOM % ${#numbers})):1}"
+    password+="${special_chars:$((RANDOM % ${#special_chars})):1}"
+    
+    # Add additional characters to reach desired length (minimum 12 characters)
+    local all_chars="${uppercase}${lowercase}${numbers}${special_chars}"
+    for i in {1..8}; do
+        password+="${all_chars:$((RANDOM % ${#all_chars})):1}"
     done
     
-    for i in {1..3}; do
-        password+="${lowercase:$((RANDOM % ${#lowercase})):1}"
-    done
-    
-    for i in {1..3}; do
-        password+="${numbers:$((RANDOM % ${#numbers})):1}"
-    done
-    
-    for i in {1..3}; do
-        password+="${special_chars:$((RANDOM % ${#special_chars})):1}"
-    done
-    
+    # Shuffle the password to randomize character positions
     echo "$password" | fold -w1 | shuf | tr -d '\n'
+}
+
+# Validates that a password meets security requirements
+validate_password_requirements() {
+    local password="$1"
+    
+    # Check minimum length
+    if [[ ${#password} -lt 8 ]]; then
+        return 1
+    fi
+    
+    # Check for at least one lowercase letter
+    if [[ ! "$password" =~ [a-z] ]]; then
+        return 1
+    fi
+    
+    # Check for at least one uppercase letter
+    if [[ ! "$password" =~ [A-Z] ]]; then
+        return 1
+    fi
+    
+    # Check for at least one number
+    if [[ ! "$password" =~ [0-9] ]]; then
+        return 1
+    fi
+    
+    # Check for at least one special character
+    if [[ ! "$password" =~ [#$@!%*+=?] ]]; then
+        return 1
+    fi
+    
+    return 0
 }
 
 # Generates random 8-character string for secure UI access path
@@ -702,7 +731,6 @@ process_template_with_release_channel() {
     fi
     
     if [[ -n "$SSL_CIPHERS_CUSTOM" ]]; then
-        # Uncomment and set custom SSL ciphers if provided
         sed -i "s|#SSL_CIPHERS_CUSTOM: \".*\"|SSL_CIPHERS_CUSTOM: \"$SSL_CIPHERS_CUSTOM\"|g" "$compose_file"
         echo -e "${GREEN}✓ Custom SSL Ciphers configured${NC}"
     else
@@ -711,7 +739,6 @@ process_template_with_release_channel() {
     
     echo -e "${BLUE}9. Processing Demo Site configuration...${NC}"
     if [[ "$DEMOSITE" == "yes" ]]; then
-        # Configure demo site reverse proxy using the new pattern
         sed -i "s|REPLACEME_DOMAIN_demo_USE_REVERSE_PROXY|${fqdn}_demo_USE_REVERSE_PROXY|g" "$compose_file"
         sed -i "s|REPLACEME_DOMAIN_demo_REVERSE_PROXY_URL|${fqdn}_demo_REVERSE_PROXY_URL|g" "$compose_file"
         sed -i "s|REPLACEME_DOMAIN_demo_REVERSE_PROXY_HOST|${fqdn}_demo_REVERSE_PROXY_HOST|g" "$compose_file"
@@ -719,7 +746,6 @@ process_template_with_release_channel() {
         echo -e "${GREEN}✓ Demo site enabled and configured${NC}"
         echo -e "${GREEN}✓ Demo site accessible at: http://$fqdn/demo${NC}"
     else
-        # Remove demo app service and configuration if disabled
         sed -i '/# Demo application/,/bw-services/d' "$compose_file"
         sed -i '/REPLACEME_DOMAIN_demo_/d' "$compose_file"
         echo -e "${BLUE}ℹ Demo site disabled and removed${NC}"
@@ -727,11 +753,9 @@ process_template_with_release_channel() {
     
     echo -e "${BLUE}10. Processing Blacklist configuration...${NC}"
     if [[ "$USE_BLACKLIST" == "yes" ]]; then
-        # Enable blacklist feature
         sed -i "s|USE_BLACKLIST: \"yes\"|USE_BLACKLIST: \"$USE_BLACKLIST\"|g" "$compose_file"
         echo -e "${GREEN}✓ Blacklist feature enabled${NC}"
         
-        # Process all blacklist settings
         if [[ -n "$BLACKLIST_IP" ]]; then
             sed -i "s|BLACKLIST_IP: \".*\"|BLACKLIST_IP: \"$BLACKLIST_IP\"|g" "$compose_file"
             echo -e "${GREEN}✓ Blacklist IP addresses: $BLACKLIST_IP${NC}"
@@ -767,7 +791,6 @@ process_template_with_release_channel() {
             echo -e "${GREEN}✓ Blacklist countries: $BLACKLIST_COUNTRY${NC}"
         fi
         
-        # Process blacklist ignore settings
         if [[ -n "$BLACKLIST_IGNORE_IP" ]]; then
             sed -i "s|BLACKLIST_IGNORE_IP: \".*\"|BLACKLIST_IGNORE_IP: \"$BLACKLIST_IGNORE_IP\"|g" "$compose_file"
             echo -e "${GREEN}✓ Blacklist ignore IP addresses: $BLACKLIST_IGNORE_IP${NC}"
@@ -793,7 +816,6 @@ process_template_with_release_channel() {
             echo -e "${GREEN}✓ Blacklist ignore URI: $BLACKLIST_IGNORE_URI${NC}"
         fi
         
-        # Process blacklist URL sources
         if [[ -n "$BLACKLIST_IP_URLS" ]]; then
             local escaped_ip_urls=$(printf '%s\n' "$BLACKLIST_IP_URLS" | sed 's/[[\.*^$()+?{|]/\\&/g')
             sed -i "s|BLACKLIST_IP_URLS: \".*\"|BLACKLIST_IP_URLS: \"$escaped_ip_urls\"|g" "$compose_file"
@@ -824,7 +846,6 @@ process_template_with_release_channel() {
             echo -e "${GREEN}✓ Blacklist URI URLs: $BLACKLIST_URI_URLS${NC}"
         fi
         
-        # Process blacklist ignore URL sources
         if [[ -n "$BLACKLIST_IGNORE_IP_URLS" ]]; then
             local escaped_ignore_ip_urls=$(printf '%s\n' "$BLACKLIST_IGNORE_IP_URLS" | sed 's/[[\.*^$()+?{|]/\\&/g')
             sed -i "s|BLACKLIST_IGNORE_IP_URLS: \".*\"|BLACKLIST_IGNORE_IP_URLS: \"$escaped_ignore_ip_urls\"|g" "$compose_file"
@@ -855,7 +876,6 @@ process_template_with_release_channel() {
             echo -e "${GREEN}✓ Blacklist ignore URI URLs: $BLACKLIST_IGNORE_URI_URLS${NC}"
         fi
         
-        # Process DNSBL configuration
         if [[ -n "$DNSBL_LIST" ]]; then
             sed -i "s|USE_DNSBL: \"yes\"|USE_DNSBL: \"yes\"|g" "$compose_file"
             sed -i "s|DNSBL_LIST: \".*\"|DNSBL_LIST: \"$DNSBL_LIST\"|g" "$compose_file"
@@ -866,7 +886,6 @@ process_template_with_release_channel() {
         echo -e "${GREEN}✓ Blocking TOR exit nodes, FireHOL Level 3 threats, and malicious bots${NC}"
         echo -e "${GREEN}✓ Scanning services (Shodan, Censys) blocked by rDNS${NC}"
     else
-        # Disable blacklist feature
         sed -i "s|USE_BLACKLIST: \"yes\"|USE_BLACKLIST: \"no\"|g" "$compose_file"
         echo -e "${BLUE}ℹ Blacklist feature disabled${NC}"
     fi
@@ -1032,7 +1051,6 @@ load_configuration() {
             FQDN_ALLOW_LOCALHOST="$FQDN_ALLOW_LOCALHOST"
         fi
         
-        # Load ModSecurity and SSL configurations
         if [[ -n "${USE_MODSECURITY_GLOBAL_CRS:-}" ]]; then
             USE_MODSECURITY_GLOBAL_CRS="$USE_MODSECURITY_GLOBAL_CRS"
         fi
@@ -1043,7 +1061,6 @@ load_configuration() {
             SSL_CIPHERS_CUSTOM="$SSL_CIPHERS_CUSTOM"
         fi
         
-        # Load Demo Site configurations
         if [[ -n "${DEMOSITE:-}" ]]; then
             DEMOSITE="$DEMOSITE"
         fi
@@ -1051,7 +1068,6 @@ load_configuration() {
             DEMOSITE_USE_REVERSE_DNS="$DEMOSITE_USE_REVERSE_DNS"
         fi
         
-        # Load Blacklist configurations
         if [[ -n "${USE_BLACKLIST:-}" ]]; then
             USE_BLACKLIST="$USE_BLACKLIST"
         fi
@@ -1089,7 +1105,6 @@ load_configuration() {
             BLACKLIST_URI_URLS="$BLACKLIST_URI_URLS"
         fi
         
-        # Load Let's Encrypt configurations
         if [[ -n "${LETS_ENCRYPT_PROFILE:-}" ]]; then
             LETS_ENCRYPT_PROFILE="$LETS_ENCRYPT_PROFILE"
         fi
@@ -1097,12 +1112,10 @@ load_configuration() {
             LETS_ENCRYPT_MAX_RETRIES="$LETS_ENCRYPT_MAX_RETRIES"
         fi
         
-        # Load DNSBL configuration
         if [[ -n "${DNSBL_LIST:-}" ]]; then
             DNSBL_LIST="$DNSBL_LIST"
         fi
         
-        # Load all Allowlist configurations
         if [[ -n "${USE_ALLOWLIST:-}" ]]; then
             USE_ALLOWLIST="$USE_ALLOWLIST"
         fi
@@ -1122,7 +1135,6 @@ load_configuration() {
             ALLOWLIST_STATUS_CODE="$ALLOWLIST_STATUS_CODE"
         fi
         
-        # Load all Greylist configurations
         if [[ -n "${USE_GREYLIST:-}" ]]; then
             USE_GREYLIST="$USE_GREYLIST"
         fi
@@ -1387,7 +1399,42 @@ manage_credentials() {
     
     if [[ -z "$admin_password" ]]; then
         admin_password=$(generate_secure_admin_password)
-        echo -e "${GREEN}✓ Generated secure admin password (12 chars with mixed case, numbers, special chars)${NC}"
+        
+        # Validate the generated password meets requirements
+        if validate_password_requirements "$admin_password"; then
+            echo -e "${GREEN}✓ Generated secure admin password (${#admin_password} chars with lowercase, uppercase, numbers, special chars)${NC}"
+        else
+            echo -e "${RED}✗ Generated password does not meet security requirements, regenerating...${NC}"
+            # Try up to 5 times to generate a valid password
+            local attempts=0
+            while [[ $attempts -lt 5 ]]; do
+                admin_password=$(generate_secure_admin_password)
+                if validate_password_requirements "$admin_password"; then
+                    echo -e "${GREEN}✓ Generated secure admin password on attempt $((attempts+1)) (${#admin_password} chars)${NC}"
+                    break
+                fi
+                ((attempts++))
+            done
+            
+            if [[ $attempts -eq 5 ]]; then
+                echo -e "${RED}✗ Failed to generate valid password after 5 attempts${NC}"
+                return 1
+            fi
+        fi
+    else
+        # Validate existing password
+        if validate_password_requirements "$admin_password"; then
+            echo -e "${GREEN}✓ Existing admin password meets security requirements${NC}"
+        else
+            echo -e "${YELLOW}⚠ Existing admin password does not meet security requirements, regenerating...${NC}"
+            admin_password=$(generate_secure_admin_password)
+            if validate_password_requirements "$admin_password"; then
+                echo -e "${GREEN}✓ Generated new secure admin password (${#admin_password} chars)${NC}"
+            else
+                echo -e "${RED}✗ Failed to generate secure admin password${NC}"
+                return 1
+            fi
+        fi
     fi
     
     if [[ -z "$flask_secret" ]]; then
@@ -1418,6 +1465,13 @@ $(if [[ "$redis_enabled" == "yes" ]]; then echo "Redis Password: $redis_password
 Admin Username: $admin_username
 Admin Password: $admin_password
 Flask Secret: $flask_secret
+
+# Password Security Requirements Met:
+# ✓ Minimum 8 characters (actual: ${#admin_password})
+# ✓ At least one lowercase letter
+# ✓ At least one uppercase letter  
+# ✓ At least one number
+# ✓ At least one special character (#$@!%*+=?)
 
 # Domain Configuration
 FQDN: ${fqdn:-"localhost"}
@@ -1494,7 +1548,7 @@ fi)
 
 # Security Information:
 # MySQL passwords: 264-bit entropy (~44 characters)
-# Admin password: 12 characters with uppercase, lowercase, numbers, and special characters
+# Admin password: ${#admin_password} characters with strict security requirements
 # All other secrets: 264-bit entropy for maximum security
 EOF
     
@@ -1510,7 +1564,7 @@ EOF
     
     echo -e "${BLUE}Credential Summary:${NC}"
     echo -e "${GREEN}• Admin Username: $admin_username${NC}"
-    echo -e "${GREEN}• Admin Password: ${admin_password:0:4}... (${#admin_password} chars)${NC}"
+    echo -e "${GREEN}• Admin Password: ${admin_password:0:4}... (${#admin_password} chars, meets security requirements)${NC}"
     echo -e "${GREEN}• MySQL Password: ${mysql_password:0:8}... (${#mysql_password} chars)${NC}"
     echo -e "${GREEN}• TOTP Secret: ${totp_secret:0:8}... (${#totp_secret} chars)${NC}"
     echo -e "${GREEN}• Flask Secret: ${flask_secret:0:8}... (${#flask_secret} chars)${NC}"
