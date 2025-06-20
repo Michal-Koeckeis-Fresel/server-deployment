@@ -604,13 +604,16 @@ process_template_with_release_channel() {
         return 1
     fi
     
-    local backup_file="$compose_file.backup.$(date +%Y%m%d_%H%M%S)"
-    if cp "$compose_file" "$backup_file"; then
-        echo -e "${GREEN}✓ Backup created: $backup_file${NC}"
-    else
-        echo -e "${RED}✗ Failed to create backup${NC}"
-        return 1
+    local backup_file=$(create_backup "$compose_file" "template-processing")
+    echo -e "${GREEN}✓ Backup created${NC}"
+    
+    # Check if template needs processing
+    if ! grep -q "REPLACEME_" "$compose_file"; then
+        echo -e "${BLUE}ℹ No placeholders found in template${NC}"
+        return 0
     fi
+    
+    local processing_errors=0
     
     echo -e "${BLUE}Processing template placeholders in correct order...${NC}"
     
@@ -620,7 +623,7 @@ process_template_with_release_channel() {
         echo -e "${GREEN}✓ Release channel: $release_channel${NC}"
     else
         echo -e "${RED}✗ Failed to update Docker image tags${NC}"
-        return 1
+        ((processing_errors++))
     fi
     
     echo -e "${BLUE}2. Processing basic credentials...${NC}"
@@ -652,12 +655,11 @@ process_template_with_release_channel() {
     fi
     
     echo -e "${BLUE}4. Processing DNS configuration...${NC}"
-    if [[ -n "$DNS_RESOLVERS" ]]; then
-        sed -i "s|REPLACEME_DNS_RESOLVERS|$DNS_RESOLVERS|g" "$compose_file"
-        echo -e "${GREEN}✓ DNS resolvers updated to: $DNS_RESOLVERS${NC}"
+    if replace_dns_resolvers "$compose_file" "${DNS_RESOLVERS:-127.0.0.11}"; then
+        echo -e "${GREEN}✓ DNS resolvers configured${NC}"
     else
-        sed -i "s|REPLACEME_DNS_RESOLVERS|127.0.0.11|g" "$compose_file"
-        echo -e "${GREEN}✓ DNS resolvers set to default: 127.0.0.11${NC}"
+        echo -e "${RED}✗ Failed to configure DNS resolvers${NC}"
+        ((processing_errors++))
     fi
     
     echo -e "${BLUE}5. Processing HTTP/3 configuration...${NC}"
@@ -680,26 +682,6 @@ process_template_with_release_channel() {
     if [[ -n "$LETS_ENCRYPT_STAGING" ]]; then
         sed -i "s|USE_LETS_ENCRYPT_STAGING: \"yes\"|USE_LETS_ENCRYPT_STAGING: \"$LETS_ENCRYPT_STAGING\"|g" "$compose_file"
         echo -e "${GREEN}✓ Let's Encrypt staging: $LETS_ENCRYPT_STAGING${NC}"
-    fi
-    
-    if [[ -n "$LETS_ENCRYPT_PROFILE" ]]; then
-        # Add LETS_ENCRYPT_PROFILE to scheduler environment if not present
-        if ! grep -q "LETS_ENCRYPT_PROFILE:" "$compose_file"; then
-            sed -i "/USE_LETS_ENCRYPT_STAGING:/a\\      LETS_ENCRYPT_PROFILE: \"$LETS_ENCRYPT_PROFILE\"" "$compose_file"
-        else
-            sed -i "s|LETS_ENCRYPT_PROFILE: \".*\"|LETS_ENCRYPT_PROFILE: \"$LETS_ENCRYPT_PROFILE\"|g" "$compose_file"
-        fi
-        echo -e "${GREEN}✓ Let's Encrypt profile: $LETS_ENCRYPT_PROFILE${NC}"
-    fi
-    
-    if [[ -n "$LETS_ENCRYPT_MAX_RETRIES" ]]; then
-        # Add LETS_ENCRYPT_MAX_RETRIES to scheduler environment if not present
-        if ! grep -q "LETS_ENCRYPT_MAX_RETRIES:" "$compose_file"; then
-            sed -i "/LETS_ENCRYPT_PROFILE:/a\\      LETS_ENCRYPT_MAX_RETRIES: \"$LETS_ENCRYPT_MAX_RETRIES\"" "$compose_file"
-        else
-            sed -i "s|LETS_ENCRYPT_MAX_RETRIES: \".*\"|LETS_ENCRYPT_MAX_RETRIES: \"$LETS_ENCRYPT_MAX_RETRIES\"|g" "$compose_file"
-        fi
-        echo -e "${GREEN}✓ Let's Encrypt max retries: $LETS_ENCRYPT_MAX_RETRIES${NC}"
     fi
     
     echo -e "${BLUE}7. Processing multisite configuration...${NC}"
