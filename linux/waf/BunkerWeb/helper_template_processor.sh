@@ -280,6 +280,7 @@ replace_ui_path_placeholders() {
     local compose_file="$1"
     local fqdn="$2"
     local ui_path="${3}"
+    local creds_file="${4}"
     
     echo -e "${BLUE}Configuring UI path and labels...${NC}" >&2
     
@@ -299,6 +300,34 @@ replace_ui_path_placeholders() {
         echo -e "${RED}✗ Failed to replace UI path placeholder${NC}" >&2
         FAILED_REPLACEMENTS+=("REPLACEME_UI_PATH")
         return 1
+    fi
+    
+    # Save UI access information to credentials file
+    if [[ -n "$creds_file" && -f "$creds_file" ]]; then
+        echo -e "${BLUE}Saving UI access information to credentials file...${NC}" >&2
+        
+        local hostname_ip=$(hostname -I | awk '{print $1}' 2>/dev/null || echo "")
+        
+        # Add UI access information to credentials file
+        {
+            echo ""
+            echo "# BunkerWeb UI Access Information"
+            echo "UI Access Path: /$ui_path"
+            if [[ -n "$fqdn" && "$fqdn" != "localhost" ]]; then
+                echo "Full UI URL: https://$fqdn/$ui_path"
+                echo "HTTP UI URL: http://$fqdn/$ui_path"
+            fi
+            if [[ -n "$hostname_ip" ]]; then
+                echo "Direct Access: http://$hostname_ip/$ui_path"
+            fi
+            echo "UI Path Length: ${#ui_path} characters"
+            echo "UI Path Security: Randomly generated alphanumeric"
+            echo "# NOTE: Keep this path secret - it provides access to BunkerWeb admin interface"
+        } >> "$creds_file"
+        
+        echo -e "${GREEN}✓ UI access information saved to credentials file${NC}" >&2
+    else
+        echo -e "${YELLOW}⚠ Credentials file not provided or not found - UI path not saved${NC}" >&2
     fi
     
     # Add BunkerWeb labels to bw-ui service if not already present
@@ -573,7 +602,8 @@ process_template_with_release_channel() {
     fi
     
     echo -e "${BLUE}10. Configuring UI path and labels...${NC}"
-    if replace_ui_path_placeholders "$compose_file" "$fqdn"; then
+    local creds_file="${compose_file%/*}/credentials.txt"
+    if replace_ui_path_placeholders "$compose_file" "$fqdn" "" "$creds_file"; then
         echo -e "${GREEN}✓ UI path and labels configured successfully${NC}"
     else
         echo -e "${RED}✗ Failed to configure UI path and labels${NC}"
@@ -657,7 +687,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     echo "  replace_ssl_placeholders - Replace SSL/domain settings"
     echo "  replace_network_placeholders - Replace network settings"
     echo "  replace_dns_resolvers - Replace DNS resolver settings"
-    echo "  replace_ui_path_placeholders - Replace UI path and configure labels"
+    echo "  replace_ui_path_placeholders - Replace UI path, configure labels, and save to credentials"
     echo "  configure_automated_setup - Configure setup mode"
     echo "  verify_placeholder_replacement - Verify all placeholders replaced"
     echo "  validate_compose_syntax - Validate Docker Compose syntax"
