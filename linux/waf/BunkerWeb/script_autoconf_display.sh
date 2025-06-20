@@ -67,7 +67,7 @@ LETS_ENCRYPT_STAGING="yes"
 LETS_ENCRYPT_WILDCARD="no"
 
 # DNSBL Configuration
-DNSBL_LIST="bl.blocklist.de sbl.spamhaus.org xbl.spamhaus.org"
+DNSBL_LIST="bl.blocklist.de zen.spamhaus.org"
 
 # Allowlist Configuration (Global Access Control)
 USE_ALLOWLIST="no"
@@ -77,6 +77,30 @@ BLACKLIST_COUNTRY=""
 ALLOWLIST_DNS=""
 ALLOWLIST_MODE="block"
 ALLOWLIST_STATUS_CODE="403"
+
+# Blacklist Configuration (Global IP/Network/rDNS/ASN Blocking)
+USE_BLACKLIST="no"
+BLACKLIST_IP=""
+BLACKLIST_RDNS=""
+BLACKLIST_RDNS_GLOBAL="yes"
+BLACKLIST_ASN=""
+BLACKLIST_USER_AGENT=""
+BLACKLIST_URI=""
+BLACKLIST_IGNORE_IP=""
+BLACKLIST_IGNORE_RDNS=""
+BLACKLIST_IGNORE_ASN=""
+BLACKLIST_IGNORE_USER_AGENT=""
+BLACKLIST_IGNORE_URI=""
+BLACKLIST_IP_URLS=""
+BLACKLIST_RDNS_URLS=""
+BLACKLIST_ASN_URLS=""
+BLACKLIST_USER_AGENT_URLS=""
+BLACKLIST_URI_URLS=""
+BLACKLIST_IGNORE_IP_URLS=""
+BLACKLIST_IGNORE_RDNS_URLS=""
+BLACKLIST_IGNORE_ASN_URLS=""
+BLACKLIST_IGNORE_USER_AGENT_URLS=""
+BLACKLIST_IGNORE_URI_URLS=""
 
 # Greylist Configuration (Admin Interface Protection)
 USE_GREYLIST="yes"
@@ -98,6 +122,17 @@ FQDN_STRICT_MODE="no"
 
 # Log Level Configuration
 LOG_LEVEL="INFO"
+
+# ModSecurity Configuration
+USE_MODSECURITY_GLOBAL_CRS="yes"
+
+# SSL/TLS Configuration  
+SSL_PROTOCOLS="TLSv1.2 TLSv1.3"
+SSL_CIPHERS_CUSTOM=""
+
+# Demo Site Configuration
+DEMOSITE="no"
+DEMOSITE_USE_REVERSE_DNS="no"
 
 # Global variable to store generated UI path
 UI_ACCESS_PATH=""
@@ -650,7 +685,66 @@ process_template_with_release_channel() {
         echo -e "${GREEN}✓ Multisite mode: $MULTISITE${NC}"
     fi
     
-    echo -e "${BLUE}8. Processing SSL configuration...${NC}"
+    echo -e "${BLUE}8. Processing ModSecurity and SSL configuration...${NC}"
+    if [[ -n "$USE_MODSECURITY_GLOBAL_CRS" ]]; then
+        sed -i "s|USE_MODSECURITY_GLOBAL_CRS: \"yes\"|USE_MODSECURITY_GLOBAL_CRS: \"$USE_MODSECURITY_GLOBAL_CRS\"|g" "$compose_file"
+        echo -e "${GREEN}✓ ModSecurity Global CRS: $USE_MODSECURITY_GLOBAL_CRS${NC}"
+    fi
+    
+    if [[ -n "$SSL_PROTOCOLS" ]]; then
+        sed -i "s|SSL_PROTOCOLS: \"TLSv1.2 TLSv1.3\"|SSL_PROTOCOLS: \"$SSL_PROTOCOLS\"|g" "$compose_file"
+        echo -e "${GREEN}✓ SSL Protocols: $SSL_PROTOCOLS${NC}"
+    fi
+    
+    if [[ -n "$SSL_CIPHERS_CUSTOM" ]]; then
+        # Uncomment and set custom SSL ciphers if provided
+        sed -i "s|#SSL_CIPHERS_CUSTOM: \".*\"|SSL_CIPHERS_CUSTOM: \"$SSL_CIPHERS_CUSTOM\"|g" "$compose_file"
+        echo -e "${GREEN}✓ Custom SSL Ciphers configured${NC}"
+    else
+        echo -e "${BLUE}ℹ Custom SSL Ciphers disabled (using defaults)${NC}"
+    fi
+    
+    echo -e "${BLUE}9. Processing Demo Site configuration...${NC}"
+    if [[ "$DEMOSITE" == "yes" ]]; then
+        # Configure demo site reverse proxy
+        sed -i "s|REPLACEME_DEMO_USE_REVERSE_PROXY|${fqdn}_USE_REVERSE_PROXY|g" "$compose_file"
+        sed -i "s|REPLACEME_DEMO_REVERSE_PROXY_URL|${fqdn}_REVERSE_PROXY_URL|g" "$compose_file"
+        sed -i "s|REPLACEME_DEMO_REVERSE_PROXY_HOST|${fqdn}_REVERSE_PROXY_HOST|g" "$compose_file"
+        
+        echo -e "${GREEN}✓ Demo site enabled and configured${NC}"
+        echo -e "${GREEN}✓ Demo site accessible at: http://$fqdn/demo${NC}"
+    else
+        # Remove demo app service and configuration if disabled
+        sed -i '/# Demo application/,/bw-services/d' "$compose_file"
+        sed -i '/REPLACEME_DEMO_/d' "$compose_file"
+        echo -e "${BLUE}ℹ Demo site disabled and removed${NC}"
+    fi
+    
+    echo -e "${BLUE}10. Processing Blacklist configuration...${NC}"
+    if [[ "$USE_BLACKLIST" == "yes" ]]; then
+        echo -e "${GREEN}✓ Blacklist feature enabled${NC}"
+        
+        # Process blacklist IP URLs if configured
+        if [[ -n "$BLACKLIST_IP_URLS" ]]; then
+            echo -e "${GREEN}✓ Blacklist IP URLs configured: $BLACKLIST_IP_URLS${NC}"
+        fi
+        
+        # Process blacklist rDNS if configured
+        if [[ -n "$BLACKLIST_RDNS" ]]; then
+            echo -e "${GREEN}✓ Blacklist rDNS configured: $BLACKLIST_RDNS${NC}"
+        fi
+        
+        # Process blacklist User-Agent URLs if configured
+        if [[ -n "$BLACKLIST_USER_AGENT_URLS" ]]; then
+            echo -e "${GREEN}✓ Blacklist User-Agent URLs configured${NC}"
+        fi
+        
+        echo -e "${GREEN}✓ External blocklists will be automatically downloaded and updated${NC}"
+    else
+        echo -e "${BLUE}ℹ Blacklist feature disabled${NC}"
+    fi
+    
+    echo -e "${BLUE}11. Processing SSL configuration...${NC}"
     if [[ -n "$auto_cert_type" ]]; then
         sed -i "s|REPLACEME_AUTO_LETS_ENCRYPT|yes|g" "$compose_file"
         sed -i "s|REPLACEME_EMAIL_LETS_ENCRYPT|$auto_cert_contact|g" "$compose_file"
@@ -660,20 +754,20 @@ process_template_with_release_channel() {
         echo -e "${GREEN}✓ SSL certificates disabled${NC}"
     fi
     
-    echo -e "${BLUE}9. Processing domain configuration...${NC}"
+    echo -e "${BLUE}12. Processing domain configuration...${NC}"
     if [[ -n "$fqdn" ]]; then
         sed -i "s|REPLACEME_DOMAIN|$fqdn|g" "$compose_file"
         sed -i "s|SERVER_NAME: \"\"|SERVER_NAME: \"$fqdn\"|g" "$compose_file"
         echo -e "${GREEN}✓ Domain configured: $fqdn${NC}"
     fi
     
-    echo -e "${BLUE}6. Adding UI labels and syncing scheduler...${NC}"
+    echo -e "${BLUE}13. Adding UI labels and syncing scheduler...${NC}"
     add_bw_ui_labels "$compose_file" "$fqdn"
     
-    echo -e "${BLUE}7. Configuring setup mode and credentials...${NC}"
+    echo -e "${BLUE}14. Configuring setup mode and credentials...${NC}"
     configure_setup_mode "$compose_file" "$setup_mode" "$admin_username" "$admin_password" "$flask_secret"
     
-    echo -e "${BLUE}8. Validating placeholder replacement...${NC}"
+    echo -e "${BLUE}15. Validating placeholder replacement...${NC}"
     local remaining_critical=$(grep -o "REPLACEME_MYSQL\|REPLACEME_DEFAULT\|REPLACEME_AUTO_LETS_ENCRYPT\|REPLACEME_EMAIL_LETS_ENCRYPT\|REPLACEME_TAG\|REPLACEME_DNS_RESOLVERS" "$compose_file" || true)
     if [[ -n "$remaining_critical" ]]; then
         echo -e "${RED}✗ Critical placeholders not replaced: $remaining_critical${NC}"
@@ -689,7 +783,7 @@ process_template_with_release_channel() {
         echo -e "${GREEN}  UI Labels: $ui_path${NC}"
     fi
     
-    echo -e "${BLUE}9. Validating Docker Compose syntax...${NC}"
+    echo -e "${BLUE}16. Validating Docker Compose syntax...${NC}"
     local current_dir=$(pwd)
     cd "$(dirname "$compose_file")"
     if docker compose config >/dev/null 2>&1; then
@@ -710,6 +804,10 @@ process_template_with_release_channel() {
     echo -e "${GREEN}✓ DNS resolvers: $DNS_RESOLVERS${NC}"
     echo -e "${GREEN}✓ HTTP/3 enabled: $HTTP3${NC}"
     echo -e "${GREEN}✓ Multisite mode: $MULTISITE${NC}"
+    echo -e "${GREEN}✓ ModSecurity Global CRS: $USE_MODSECURITY_GLOBAL_CRS${NC}"
+    echo -e "${GREEN}✓ SSL Protocols: $SSL_PROTOCOLS${NC}"
+    echo -e "${GREEN}✓ Demo Site: $DEMOSITE${NC}"
+    echo -e "${GREEN}✓ Blacklist: $USE_BLACKLIST${NC}"
     echo -e "${GREEN}✓ All placeholders properly replaced${NC}"
     echo -e "${GREEN}✓ Admin credentials correctly configured${NC}"
     echo -e "${GREEN}✓ UI path synchronized between scheduler and UI service${NC}"
@@ -752,6 +850,63 @@ load_configuration() {
         fi
         if [[ -n "${FQDN_ALLOW_LOCALHOST:-}" ]]; then
             FQDN_ALLOW_LOCALHOST="$FQDN_ALLOW_LOCALHOST"
+        fi
+        
+        # Load ModSecurity and SSL configurations
+        if [[ -n "${USE_MODSECURITY_GLOBAL_CRS:-}" ]]; then
+            USE_MODSECURITY_GLOBAL_CRS="$USE_MODSECURITY_GLOBAL_CRS"
+        fi
+        if [[ -n "${SSL_PROTOCOLS:-}" ]]; then
+            SSL_PROTOCOLS="$SSL_PROTOCOLS"
+        fi
+        if [[ -n "${SSL_CIPHERS_CUSTOM:-}" ]]; then
+            SSL_CIPHERS_CUSTOM="$SSL_CIPHERS_CUSTOM"
+        fi
+        
+        # Load Demo Site configurations
+        if [[ -n "${DEMOSITE:-}" ]]; then
+            DEMOSITE="$DEMOSITE"
+        fi
+        if [[ -n "${DEMOSITE_USE_REVERSE_DNS:-}" ]]; then
+            DEMOSITE_USE_REVERSE_DNS="$DEMOSITE_USE_REVERSE_DNS"
+        fi
+        
+        # Load Blacklist configurations
+        if [[ -n "${USE_BLACKLIST:-}" ]]; then
+            USE_BLACKLIST="$USE_BLACKLIST"
+        fi
+        if [[ -n "${BLACKLIST_IP:-}" ]]; then
+            BLACKLIST_IP="$BLACKLIST_IP"
+        fi
+        if [[ -n "${BLACKLIST_RDNS:-}" ]]; then
+            BLACKLIST_RDNS="$BLACKLIST_RDNS"
+        fi
+        if [[ -n "${BLACKLIST_RDNS_GLOBAL:-}" ]]; then
+            BLACKLIST_RDNS_GLOBAL="$BLACKLIST_RDNS_GLOBAL"
+        fi
+        if [[ -n "${BLACKLIST_ASN:-}" ]]; then
+            BLACKLIST_ASN="$BLACKLIST_ASN"
+        fi
+        if [[ -n "${BLACKLIST_USER_AGENT:-}" ]]; then
+            BLACKLIST_USER_AGENT="$BLACKLIST_USER_AGENT"
+        fi
+        if [[ -n "${BLACKLIST_URI:-}" ]]; then
+            BLACKLIST_URI="$BLACKLIST_URI"
+        fi
+        if [[ -n "${BLACKLIST_IP_URLS:-}" ]]; then
+            BLACKLIST_IP_URLS="$BLACKLIST_IP_URLS"
+        fi
+        if [[ -n "${BLACKLIST_RDNS_URLS:-}" ]]; then
+            BLACKLIST_RDNS_URLS="$BLACKLIST_RDNS_URLS"
+        fi
+        if [[ -n "${BLACKLIST_ASN_URLS:-}" ]]; then
+            BLACKLIST_ASN_URLS="$BLACKLIST_ASN_URLS"
+        fi
+        if [[ -n "${BLACKLIST_USER_AGENT_URLS:-}" ]]; then
+            BLACKLIST_USER_AGENT_URLS="$BLACKLIST_USER_AGENT_URLS"
+        fi
+        if [[ -n "${BLACKLIST_URI_URLS:-}" ]]; then
+            BLACKLIST_URI_URLS="$BLACKLIST_URI_URLS"
         fi
         
         if [[ -n "$AUTO_CERT_TYPE" ]]; then
@@ -1058,6 +1213,23 @@ DNS Resolvers: ${DNS_RESOLVERS:-"127.0.0.11"}
 HTTP3 Enabled: ${HTTP3:-"yes"}
 HTTP3 Alt-Svc Port: ${HTTP3_ALT_SVC_PORT:-"443"}
 
+# ModSecurity Configuration
+ModSecurity Global CRS: ${USE_MODSECURITY_GLOBAL_CRS:-"yes"}
+
+# SSL/TLS Configuration
+SSL Protocols: ${SSL_PROTOCOLS:-"TLSv1.2 TLSv1.3"}
+$(if [[ -n "$SSL_CIPHERS_CUSTOM" ]]; then echo "SSL Custom Ciphers: $SSL_CIPHERS_CUSTOM"; fi)
+
+# Demo Site Configuration
+Demo Site Enabled: ${DEMOSITE:-"no"}
+$(if [[ "$DEMOSITE" == "yes" ]]; then echo "Demo Site URL: http://${fqdn:-localhost}/demo"; fi)
+
+# Blacklist Configuration
+Blacklist Enabled: ${USE_BLACKLIST:-"no"}
+$(if [[ "$USE_BLACKLIST" == "yes" && -n "$BLACKLIST_IP_URLS" ]]; then echo "Blacklist IP URLs: $BLACKLIST_IP_URLS"; fi)
+$(if [[ "$USE_BLACKLIST" == "yes" && -n "$BLACKLIST_RDNS" ]]; then echo "Blacklist rDNS: $BLACKLIST_RDNS"; fi)
+$(if [[ "$USE_BLACKLIST" == "yes" && -n "$BLACKLIST_USER_AGENT_URLS" ]]; then echo "Blacklist User-Agent URLs: Enabled"; fi)
+
 # Let's Encrypt Configuration
 LE Challenge Type: ${LETS_ENCRYPT_CHALLENGE:-"http"}
 LE Staging Mode: ${LETS_ENCRYPT_STAGING:-"yes"}
@@ -1115,6 +1287,8 @@ EOF
     echo -e "${GREEN}• Release Channel: $release_channel${NC}"
     echo -e "${GREEN}• Docker Image Tag: $image_tag${NC}"
     echo -e "${GREEN}• DNS Resolvers: ${DNS_RESOLVERS:-"127.0.0.11"}${NC}"
+    echo -e "${GREEN}• ModSecurity Global CRS: ${USE_MODSECURITY_GLOBAL_CRS:-"yes"}${NC}"
+    echo -e "${GREEN}• SSL Protocols: ${SSL_PROTOCOLS:-"TLSv1.2 TLSv1.3"}${NC}"
     echo -e "${GREEN}• Log Level: ${FQDN_LOG_LEVEL:-"INFO"}${NC}"
     echo -e "${GREEN}• Debug Mode: ${DEBUG:-"no"}${NC}"
     
@@ -1159,8 +1333,12 @@ show_setup_summary() {
     echo -e "${YELLOW}DNS Resolvers:${NC} ${DNS_RESOLVERS:-"127.0.0.11"}"
     echo -e "${YELLOW}HTTP/3 Enabled:${NC} ${HTTP3:-"yes"}"
     echo -e "${YELLOW}Multisite Mode:${NC} ${MULTISITE:-"yes"}"
+    echo -e "${YELLOW}ModSecurity Global CRS:${NC} ${USE_MODSECURITY_GLOBAL_CRS:-"yes"}"
+    echo -e "${YELLOW}SSL Protocols:${NC} ${SSL_PROTOCOLS:-"TLSv1.2 TLSv1.3"}"
     echo -e "${YELLOW}Log Level:${NC} $FQDN_LOG_LEVEL"
     echo -e "${YELLOW}Debug Mode:${NC} ${DEBUG:-"no"}"
+    echo -e "${YELLOW}Demo Site:${NC} $DEMOSITE"
+    echo -e "${YELLOW}Blacklist Enabled:${NC} $USE_BLACKLIST"
     echo -e "${YELLOW}Redis Enabled:${NC} $REDIS_ENABLED"
     echo -e "${YELLOW}Allowlist Enabled:${NC} $USE_ALLOWLIST"
     echo -e "${YELLOW}Greylist Enabled:${NC} $USE_GREYLIST"
@@ -1229,6 +1407,32 @@ show_setup_summary() {
         echo -e "${GREEN}• Check certificate status after a few minutes${NC}"
     fi
     
+    if [[ "$DEMOSITE" == "yes" ]]; then
+        echo ""
+        echo -e "${BLUE}Demo Site Information:${NC}"
+        echo -e "${GREEN}• Demo site enabled with nginx-hello container${NC}"
+        echo -e "${GREEN}• Access demo at: http://$FQDN/demo${NC}"
+        echo -e "${GREEN}• Demo shows nginx information and request details${NC}"
+        echo -e "${YELLOW}• Demo site is for testing purposes only${NC}"
+    fi
+    
+    if [[ "$USE_BLACKLIST" == "yes" ]]; then
+        echo ""
+        echo -e "${BLUE}Blacklist Protection Information:${NC}"
+        echo -e "${GREEN}• External IP blacklists enabled for enhanced security${NC}"
+        if [[ -n "$BLACKLIST_IP_URLS" ]]; then
+            echo -e "${GREEN}• TOR exit nodes and FireHOL Level 3 threats blocked${NC}"
+        fi
+        if [[ -n "$BLACKLIST_RDNS" ]]; then
+            echo -e "${GREEN}• Scanning services (Shodan, Censys) blocked by rDNS${NC}"
+        fi
+        if [[ -n "$BLACKLIST_USER_AGENT_URLS" ]]; then
+            echo -e "${GREEN}• Malicious user agents and bad bots blocked${NC}"
+        fi
+        echo -e "${GREEN}• Blacklists are automatically updated from external sources${NC}"
+        echo -e "${YELLOW}• Monitor logs for blocked IPs and adjust whitelist as needed${NC}"
+    fi
+    
     echo ""
     echo -e "${GREEN}Setup completed successfully!${NC}"
 }
@@ -1288,11 +1492,16 @@ main() {
     echo -e "${GREEN}• DNS Resolvers: ${DNS_RESOLVERS:-"127.0.0.11"}${NC}"
     echo -e "${GREEN}• HTTP/3 Enabled: ${HTTP3:-"yes"}${NC}"
     echo -e "${GREEN}• Multisite Mode: ${MULTISITE:-"yes"}${NC}"
+    echo -e "${GREEN}• ModSecurity Global CRS: ${USE_MODSECURITY_GLOBAL_CRS:-"yes"}${NC}"
+    echo -e "${GREEN}• SSL Protocols: ${SSL_PROTOCOLS:-"TLSv1.2 TLSv1.3"}${NC}"
     echo -e "${GREEN}• Log Level: $FQDN_LOG_LEVEL${NC}"
     echo -e "${GREEN}• Debug Mode: ${DEBUG:-"no"}${NC}"
     echo -e "${GREEN}• Allowlist Enabled: $USE_ALLOWLIST${NC}"
+    echo -e "${GREEN}• Blacklist Enabled: $USE_BLACKLIST${NC}"
     echo -e "${GREEN}• Greylist Enabled: $USE_GREYLIST${NC}"
     echo -e "${GREEN}• Redis Enabled: $REDIS_ENABLED${NC}"
+    echo -e "${GREEN}• Demo Site: $DEMOSITE${NC}"
+    echo -e "${GREEN}• Blacklist Enabled: $USE_BLACKLIST${NC}"
     echo -e "${GREEN}• Network Detection: $AUTO_DETECT_NETWORK_CONFLICTS${NC}"
     echo ""
     

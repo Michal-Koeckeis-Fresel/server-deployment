@@ -1,9 +1,13 @@
 #!/bin/bash
+#
 # Copyright (c) 2025 Michal Koeckeis-Fresel
+# 
 # This software is dual-licensed under your choice of:
 # - MIT License (see LICENSE-MIT)
 # - GNU Affero General Public License v3.0 (see LICENSE-AGPL)
+# 
 # SPDX-License-Identifier: MIT OR AGPL-3.0-or-later
+#
 
 # Enhanced BunkerWeb Uninstall Script with Data Preservation Options
 # This script can preserve Redis and other data based on configuration settings
@@ -18,7 +22,7 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 # Default values for data preservation
 KEEP_REDIS="yes"
@@ -26,7 +30,7 @@ KEEP_DATA="yes"
 KEEP_SYSLOG="yes"
 FORCE_REMOVAL="no"
 
-# Function to display usage
+# Displays usage information and available options
 show_usage() {
     echo -e "${BLUE}Usage: $0 [OPTIONS]${NC}"
     echo ""
@@ -98,7 +102,6 @@ echo ""
 if [[ -f "$CONFIG_FILE" ]]; then
     echo -e "${BLUE}Loading configuration from $CONFIG_FILE...${NC}"
     
-    # Only load from config if not overridden by command line
     if [[ "$KEEP_REDIS" == "no" ]]; then
         CONFIG_KEEP_REDIS=$(grep "^KEEP_REDIS=" "$CONFIG_FILE" 2>/dev/null | cut -d'=' -f2 | tr -d '"' || echo "no")
         if [[ -n "$CONFIG_KEEP_REDIS" ]]; then
@@ -213,12 +216,10 @@ fi
 # Stop and remove containers
 echo -e "${BLUE}Stopping BunkerWeb containers...${NC}"
 if [[ -f "docker-compose.yml" ]]; then
-    # Stop all containers first
     docker compose down 2>/dev/null || echo -e "${YELLOW}⚠ Docker compose down failed (containers may not be running)${NC}"
     echo -e "${GREEN}✓ Containers stopped via docker-compose${NC}"
 else
     echo -e "${YELLOW}⚠ docker-compose.yml not found, stopping containers manually${NC}"
-    # Stop containers manually
     docker stop $(docker ps -q --filter "name=bw-") 2>/dev/null || echo -e "${YELLOW}⚠ No BunkerWeb containers running${NC}"
 fi
 
@@ -276,7 +277,6 @@ if [[ -n "$ALL_BW_CONTAINERS" ]]; then
             fi
         done
     else
-        # Remove all BunkerWeb containers
         echo $ALL_BW_CONTAINERS | xargs docker rm -f 2>/dev/null || true
         echo -e "${GREEN}✓ All BunkerWeb containers removed${NC}"
     fi
@@ -289,12 +289,10 @@ echo -e "${BLUE}Removing BunkerWeb networks...${NC}"
 if [[ "$KEEP_REDIS" == "yes" || "$KEEP_SYSLOG" == "yes" ]]; then
     echo -e "${BLUE}Checking network usage before removal...${NC}"
     
-    # Remove networks that are not being used by preserved containers
     for network in bw-universe bw-services bw-docker bw-db bw-redis bw-syslog; do
         if docker network ls --format "{{.Name}}" | grep -q "^${network}$"; then
             NETWORK_IN_USE=false
             
-            # Check if any preserved containers are using this network
             if [[ "$KEEP_REDIS" == "yes" ]] && docker inspect bw-redis 2>/dev/null | grep -q "\"${network}\""; then
                 NETWORK_IN_USE=true
             fi
@@ -312,7 +310,6 @@ if [[ "$KEEP_REDIS" == "yes" || "$KEEP_SYSLOG" == "yes" ]]; then
         fi
     done
 else
-    # Remove all BunkerWeb networks
     for network in bw-universe bw-services bw-docker bw-db bw-redis bw-syslog; do
         docker network rm "$network" 2>/dev/null || true
     done
@@ -327,7 +324,6 @@ if [[ "$KEEP_REDIS" == "yes" || "$KEEP_SYSLOG" == "yes" ]]; then
     [[ "$KEEP_SYSLOG" == "yes" ]] && PRESERVED_SERVICES="$PRESERVED_SERVICES Syslog"
     echo -e "${BLUE}Preserving images for:$PRESERVED_SERVICES${NC}"
     
-    # Remove BunkerWeb images but not preserved service images
     docker images | grep bunkerity/bunkerweb | awk '{print $1":"$2}' | xargs docker rmi 2>/dev/null || true
     docker images | grep bunkerity/bunkerweb-scheduler | awk '{print $1":"$2}' | xargs docker rmi 2>/dev/null || true
     docker images | grep bunkerity/bunkerweb-ui | awk '{print $1":"$2}' | xargs docker rmi 2>/dev/null || true
@@ -335,12 +331,10 @@ if [[ "$KEEP_REDIS" == "yes" || "$KEEP_SYSLOG" == "yes" ]]; then
     docker images | grep tecnativa/docker-socket-proxy | awk '{print $1":"$2}' | xargs docker rmi 2>/dev/null || true
     docker images | grep mariadb | awk '{print $1":"$2}' | xargs docker rmi 2>/dev/null || true
     
-    # Remove Redis image only if not preserved
     if [[ "$KEEP_REDIS" != "yes" ]]; then
         docker images | grep redis | awk '{print $1":"$2}' | xargs docker rmi 2>/dev/null || true
     fi
     
-    # Remove Syslog images only if not preserved
     if [[ "$KEEP_SYSLOG" != "yes" ]]; then
         docker images | grep balabit/syslog-ng | awk '{print $1":"$2}' | xargs docker rmi 2>/dev/null || true
         docker images | grep "linuxserver/syslog-ng" | awk '{print $1":"$2}' | xargs docker rmi 2>/dev/null || true
@@ -348,7 +342,6 @@ if [[ "$KEEP_REDIS" == "yes" || "$KEEP_SYSLOG" == "yes" ]]; then
     
     echo -e "${GREEN}✓ BunkerWeb images removed ($PRESERVED_SERVICES images preserved)${NC}"
 else
-    # Remove all images including Redis and Syslog
     docker images | grep bunkerity/bunkerweb | awk '{print $1":"$2}' | xargs docker rmi 2>/dev/null || true
     docker images | grep bunkerity/bunkerweb-scheduler | awk '{print $1":"$2}' | xargs docker rmi 2>/dev/null || true
     docker images | grep bunkerity/bunkerweb-ui | awk '{print $1":"$2}' | xargs docker rmi 2>/dev/null || true
@@ -372,19 +365,16 @@ elif [[ "$KEEP_REDIS" == "yes" || "$KEEP_SYSLOG" == "yes" ]]; then
     if [[ -d "$INSTALL_DIR" ]]; then
         cd "$INSTALL_DIR"
         
-        # Build exclusion list for preserved services
         PRESERVE_DIRS="."
         [[ "$KEEP_REDIS" == "yes" ]] && PRESERVE_DIRS="$PRESERVE_DIRS redis"
         [[ "$KEEP_SYSLOG" == "yes" ]] && PRESERVE_DIRS="$PRESERVE_DIRS logs syslog"
         PRESERVE_DIRS="$PRESERVE_DIRS BunkerWeb.conf"
         
-        # Create find exclusion pattern
         FIND_EXCLUDES=""
         for dir in $PRESERVE_DIRS; do
-            FIND_EXCLUDES="$FIND_EXCLUDES -not -name \"$dir\""
+            FIND_EXCLUDES="$FIND_EXCLUDES -not -name $dir"
         done
         
-        # Remove everything except preserved directories
         eval "find . -maxdepth 1 $FIND_EXCLUDES -exec rm -rf {} \;" 2>/dev/null || true
         
         echo -e "${GREEN}✓ BunkerWeb data removed${NC}"
@@ -452,7 +442,6 @@ elif [[ "$KEEP_REDIS" == "yes" || "$KEEP_SYSLOG" == "yes" ]]; then
     echo -e "${BLUE}2.$PRESERVED_SERVICES data and configuration will be reused${NC}"
     echo -e "${BLUE}3. Set appropriate USE_* flags in your configuration${NC}"
     
-    # Show connection info for preserved services
     CREDS_FILE="/root/BunkerWeb-Credentials.txt"
     echo ""
     echo -e "${BLUE}🔗 Preserved Service Connection Info:${NC}"

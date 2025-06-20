@@ -49,17 +49,21 @@ services:
       USE_BROTLI: "yes"
       BROTLI_COMP_LEVEL: "11"
       BROTLI_MIN_LENGTH: "1000"
+      USE_MODSECURITY_GLOBAL_CRS: "yes"
+      SSL_PROTOCOLS: "TLSv1.2 TLSv1.3"
+      #SSL_CIPHERS_CUSTOM: "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305"
       AUTO_LETS_ENCRYPT: "REPLACEME_AUTO_LETS_ENCRYPT"
       EMAIL_LETS_ENCRYPT: "REPLACEME_EMAIL_LETS_ENCRYPT"
       LETS_ENCRYPT_CHALLENGE: "http"
       USE_LETS_ENCRYPT_STAGING: "yes"
-      USE_MODSECURITY_GLOBAL_CRS: "yes"
-      SSL_PROTOCOLS: "TLSv1.2 TLSv1.3"
-      #SSL_CIPHERS_CUSTOM: "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305"
       REPLACEME_DOMAIN_USE_TEMPLATE: "ui"
       REPLACEME_DOMAIN_USE_REVERSE_PROXY: "yes"
-      REPLACEME_DOMAIN_REVERSE_PROXY_URL: "/REPLACEME_UI_PATH"
+      REPLACEME_DOMAIN_REVERSE_PROXY_URL: "REPLACEME_UI_PATH"
       REPLACEME_DOMAIN_REVERSE_PROXY_HOST: "http://bw-ui:7000"
+      # Demo site configuration (conditional)
+      REPLACEME_DEMO_USE_REVERSE_PROXY: "yes"
+      REPLACEME_DEMO_REVERSE_PROXY_URL: "/demo"
+      REPLACEME_DEMO_REVERSE_PROXY_HOST: "http://demo-app:80"
     volumes:
       - /data/BunkerWeb/storage:/data
     restart: "unless-stopped"
@@ -113,7 +117,7 @@ services:
   bw-db:
     image: mariadb:11
     environment:
-      #MYSQL_RANDOM_ROOT_PASSWORD: "yes"
+      # MYSQL_RANDOM_ROOT_PASSWORD: "yes"
       MYSQL_DATABASE: "db"
       MYSQL_USER: "bunkerweb"
       MYSQL_PASSWORD: "REPLACEME_MYSQL"
@@ -122,6 +126,14 @@ services:
     restart: "unless-stopped"
     networks:
       - bw-db
+
+  # Demo application (conditional - controlled by DEMOSITE configuration)
+  demo-app:
+    image: nginxdemos/nginx-hello
+    container_name: demo-app
+    restart: "unless-stopped"
+    networks:
+      - bw-services
 
 networks:
   bw-universe:
