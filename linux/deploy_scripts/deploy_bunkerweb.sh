@@ -52,6 +52,63 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# Get remote file size using curl HEAD request
+get_remote_file_size() {
+    local url="$1"
+    local size=""
+    
+    if command_exists curl; then
+        size=$(curl -sI --connect-timeout 10 --max-time 30 "$url" | \
+               grep -i content-length | awk '{print $2}' | tr -d '\r\n' || echo "")
+    fi
+    
+    echo "$size"
+}
+
+# Get local file size
+get_local_file_size() {
+    local file="$1"
+    if [ -f "$file" ]; then
+        stat -c%s "$file" 2>/dev/null || echo "0"
+    else
+        echo "0"
+    fi
+}
+
+# Check if file needs download by comparing sizes
+needs_download() {
+    local url="$1"
+    local file="$2"
+    
+    # If file doesn't exist, download needed
+    if [ ! -f "$file" ]; then
+        return 0
+    fi
+    
+    # If file is empty, download needed
+    if [ ! -s "$file" ]; then
+        return 0
+    fi
+    
+    # Get remote and local file sizes
+    local remote_size=$(get_remote_file_size "$url")
+    local local_size=$(get_local_file_size "$file")
+    
+    # If we can't get remote size, assume download is needed
+    if [ -z "$remote_size" ] || [ "$remote_size" = "0" ]; then
+        return 0
+    fi
+    
+    # Compare sizes
+    if [ "$remote_size" != "$local_size" ]; then
+        echo "[SIZE MISMATCH] Remote: $remote_size bytes, Local: $local_size bytes"
+        return 0
+    fi
+    
+    # File exists and sizes match
+    return 1
+}
+
 # Install required packages if missing
 install_required_packages() {
     log_step "Checking required packages..."
@@ -155,7 +212,7 @@ install_required_packages() {
     return 0
 }
 
-# Download files with curl (primary) and wget (fallback) - tools are auto-installed if missing
+# Download files with curl (primary) and wget (fallback) with size verification
 download_file() {
     local url="$1"
     local output_file="$2"
@@ -177,6 +234,47 @@ download_file() {
     fi
     
     return 1
+}
+
+# Download file with size comparison and retry logic
+download_with_verification() {
+    local url="$1"
+    local file="$2"
+    
+    # Check if download is needed
+    if ! needs_download "$url" "$file"; then
+        echo "UP-TO-DATE (size match)"
+        return 2
+    fi
+    
+    # Remove existing file if it exists
+    [ -f "$file" ] && rm -f "$file"
+    
+    # Download the file
+    if download_file "$url" "$file"; then
+        if [ -f "$file" ] && [ -s "$file" ]; then
+            # Verify size after download
+            local remote_size=$(get_remote_file_size "$url")
+            local local_size=$(get_local_file_size "$file")
+            
+            if [ -n "$remote_size" ] && [ "$remote_size" != "0" ] && \
+               [ "$remote_size" != "$local_size" ]; then
+                echo "FAILED (size mismatch after download: expected $remote_size, got $local_size)"
+                rm -f "$file" 2>/dev/null || true
+                return 1
+            fi
+            
+            echo "SUCCESS"
+            return 0
+        else
+            echo "FAILED (empty file)"
+            rm -f "$file" 2>/dev/null || true
+            return 1
+        fi
+    else
+        echo "FAILED (download error)"
+        return 1
+    fi
 }
 
 # Main execution
@@ -226,7 +324,8 @@ main() {
         else
             # Check if file exists but contains only whitespace/comments
             local non_empty_content
-            non_empty_content=$(grep -v '^[[:space:]]*$' /root/BunkerWeb.conf 2>/dev/null | grep -v '^[[:space:]]*#' | head -1 || echo "")
+            non_empty_content=$(grep -v '^[[:space:]]*$' /root/BunkerWeb.conf 2>/dev/null | \
+                              grep -v '^[[:space:]]*#' | head -1 || echo "")
             if [ -z "$non_empty_content" ]; then
                 log_info "Found empty BunkerWeb.conf - downloading template"
                 if download_file "$BASE_URL/BunkerWeb.conf" "/root/BunkerWeb.conf"; then
@@ -316,6 +415,7 @@ main() {
     local downloaded_count=0
     local failed_count=0
     local skipped_count=0
+    local uptodate_count=0
     
     # List of files to download from main repository
     echo "Downloading main repository files..."
@@ -326,30 +426,23 @@ main() {
                 template_sample_app_display.yml uninstall_BunkerWeb.sh helper_password_manager.sh \
                 helper_network_detection.sh helper_template_processor.sh helper_greylist.sh \
                 helper_allowlist.sh helper_release_channel_manager.sh helper_directory_layout.sh \
-                helper_bunkerweb_config_checker.sh helper_fqdn_lookup.sh fluent-bit.conf fluent_bit_parsers.txt; do
+                helper_bunkerweb_config_checker.sh helper_fqdn_lookup.sh fluent-bit.conf \
+                fluent_bit_parsers.txt; do
         echo -n "Processing $file... "
         
-        # Skip if file already exists and is not empty
-        if [ -f "$file" ] && [ -s "$file" ]; then
-            echo "SKIPPED (exists)"
-            skipped_count=$((skipped_count + 1))
-            continue
-        fi
-        
-        # Download the file
-        if download_file "$BASE_URL/$file" "$file"; then
-            if [ -f "$file" ] && [ -s "$file" ]; then
-                echo "SUCCESS"
+        # Use new download function with verification
+        result=$(download_with_verification "$BASE_URL/$file" "$file")
+        case $? in
+            0) # Downloaded successfully
                 downloaded_count=$((downloaded_count + 1))
-            else
-                echo "FAILED (empty file)"
-                rm -f "$file" 2>/dev/null || true
+                ;;
+            1) # Download failed
                 failed_count=$((failed_count + 1))
-            fi
-        else
-            echo "FAILED (download error)"
-            failed_count=$((failed_count + 1))
-        fi
+                ;;
+            2) # File up to date
+                uptodate_count=$((uptodate_count + 1))
+                ;;
+        esac
     done
     
     # Download special files with custom URLs
@@ -369,33 +462,26 @@ main() {
         
         echo -n "Processing $file (special URL)... "
         
-        # Skip if file already exists and is not empty
-        if [ -f "$file" ] && [ -s "$file" ]; then
-            echo "SKIPPED (exists)"
-            skipped_count=$((skipped_count + 1))
-        else
-            # Download the file
-            if download_file "$url" "$file"; then
-                if [ -f "$file" ] && [ -s "$file" ]; then
-                    echo "SUCCESS"
-                    downloaded_count=$((downloaded_count + 1))
-                else
-                    echo "FAILED (empty file)"
-                    rm -f "$file" 2>/dev/null || true
-                    failed_count=$((failed_count + 1))
-                fi
-            else
-                echo "FAILED (download error)"
+        # Use new download function with verification
+        result=$(download_with_verification "$url" "$file")
+        case $? in
+            0) # Downloaded successfully
+                downloaded_count=$((downloaded_count + 1))
+                ;;
+            1) # Download failed
                 failed_count=$((failed_count + 1))
-            fi
-        fi
+                ;;
+            2) # File up to date
+                uptodate_count=$((uptodate_count + 1))
+                ;;
+        esac
     done
     
     # Report statistics
     log_step "Download Summary"
     log_success "Downloaded: $downloaded_count files"
-    if [ "$skipped_count" -gt 0 ]; then
-        log_info "Skipped: $skipped_count files (already exist)"
+    if [ "$uptodate_count" -gt 0 ]; then
+        log_info "Up-to-date: $uptodate_count files (size match)"
     fi
     if [ "$failed_count" -gt 0 ]; then
         log_warning "Failed: $failed_count files"
@@ -409,7 +495,8 @@ main() {
                   uninstall_BunkerWeb.sh helper_password_manager.sh helper_network_detection.sh \
                   helper_template_processor.sh helper_greylist.sh helper_allowlist.sh \
                   helper_release_channel_manager.sh helper_directory_layout.sh \
-                  helper_bunkerweb_config_checker.sh helper_fqdn_lookup.sh helper_fqdn.sh helper_net_nat.sh; do
+                  helper_bunkerweb_config_checker.sh helper_fqdn_lookup.sh helper_fqdn.sh \
+                  helper_net_nat.sh; do
         if [ -f "$script" ]; then
             chmod +x "$script" && executable_count=$((executable_count + 1))
         fi
