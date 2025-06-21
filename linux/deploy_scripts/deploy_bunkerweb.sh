@@ -450,10 +450,10 @@ main() {
     
     # Define helper scripts with custom URLs
     declare -A special_files=(
-        ["helper_fqdn.sh"]="https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment"
+        ["helper_net_fqdn.sh"]="https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment"
         ["helper_net_nat.sh"]="https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment"
     )
-    special_files["helper_fqdn.sh"]+="/refs/heads/main/linux/deploy_scripts/helper-scripts/helper_fqdn.sh"
+    special_files["helper_net_fqdn.sh"]+="/refs/heads/main/linux/deploy_scripts/helper-scripts/helper_net_fqdn.sh"
     special_files["helper_net_nat.sh"]+="/refs/heads/main/linux/deploy_scripts/helper-scripts/helper_net_nat.sh"
     
     # Download each special file
@@ -495,7 +495,7 @@ main() {
                   uninstall_BunkerWeb.sh helper_password_manager.sh helper_network_detection.sh \
                   helper_template_processor.sh helper_greylist.sh helper_allowlist.sh \
                   helper_release_channel_manager.sh helper_directory_layout.sh \
-                  helper_bunkerweb_config_checker.sh helper_fqdn_lookup.sh helper_fqdn.sh \
+                  helper_bunkerweb_config_checker.sh helper_fqdn_lookup.sh helper_net_fqdn.sh \
                   helper_net_nat.sh; do
         if [ -f "$script" ]; then
             chmod +x "$script" && executable_count=$((executable_count + 1))
@@ -509,7 +509,7 @@ main() {
     local missing_critical=0
     
     for file in script_autoconf_display.sh script_template_selector.sh helper_release_channel_manager.sh \
-                helper_fqdn.sh template_autoconf_display.yml BunkerWeb.conf; do
+                helper_net_fqdn.sh template_autoconf_display.yml BunkerWeb.conf; do
         if [ -f "$file" ] || [ -L "$file" ]; then
             echo "✓ $file"
         else
