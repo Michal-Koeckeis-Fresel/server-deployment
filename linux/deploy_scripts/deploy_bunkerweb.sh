@@ -22,23 +22,27 @@ if [ "${DEBUG:-no}" = "yes" ]; then
     echo "[DEBUG] Debug mode enabled"
 fi
 
-# Logging functions
+# Output informational messages
 log_info() {
     echo "[INFO] $1"
 }
 
+# Output success messages
 log_success() {
     echo "[SUCCESS] $1"
 }
 
+# Output warning messages
 log_warning() {
     echo "[WARNING] $1"
 }
 
+# Output error messages
 log_error() {
     echo "[ERROR] $1"
 }
 
+# Output step messages
 log_step() {
     echo "[STEP] $1"
 }
@@ -150,7 +154,7 @@ install_required_packages() {
     return 0
 }
 
-# Download function with curl (primary) and wget (fallback) - tools are auto-installed if missing
+# Download files with curl (primary) and wget (fallback) - tools are auto-installed if missing
 download_file() {
     local url="$1"
     local output_file="$2"
@@ -268,7 +272,6 @@ main() {
         log_success "Created symlink for existing /root/BunkerWeb.conf"
         
     else
-        # This should already be handled by the download section above
         ln -s "/root/BunkerWeb.conf" "/data/BunkerWeb/BunkerWeb.conf"
         log_success "Created symbolic link: /data/BunkerWeb/BunkerWeb.conf -> /root/BunkerWeb.conf"
     fi
@@ -279,23 +282,26 @@ main() {
         log_info "Found existing credentials.txt - moving to /root/ and creating symlink"
         
         # Backup existing file in /root/ if it exists
-        if [ -f "/root/credentials.txt" ]; then
-            mv "/root/credentials.txt" "/root/credentials.txt.backup.$(date +%Y%m%d_%H%M%S)"
-            log_info "Backed up existing /root/credentials.txt"
+        if [ -f "/root/BunkerWeb-credentials.txt" ]; then
+            mv "/root/BunkerWeb-credentials.txt" "/root/BunkerWeb-credentials.txt.backup.$(date +%Y%m%d_%H%M%S)"
+            log_info "Backed up existing /root/BunkerWeb-credentials.txt"
         fi
         
         # Move file to /root/ and create symlink
-        mv "/data/BunkerWeb/credentials.txt" "/root/credentials.txt"
-        ln -s "/root/credentials.txt" "/data/BunkerWeb/credentials.txt"
+        mv "/data/BunkerWeb/credentials.txt" "/root/BunkerWeb-credentials.txt"
+        ln -s "/root/BunkerWeb-credentials.txt" "/data/BunkerWeb/credentials.txt"
         log_success "Moved credentials.txt to /root/ and created symlink"
-    elif [ -f "/root/credentials.txt" ] && [ ! -L "/data/BunkerWeb/credentials.txt" ]; then
-        log_info "Found credentials.txt in /root/ - creating symlink"
-        ln -s "/root/credentials.txt" "/data/BunkerWeb/credentials.txt"
-        log_success "Created symlink for existing /root/credentials.txt"
+    elif [ -f "/root/BunkerWeb-credentials.txt" ] && [ ! -L "/data/BunkerWeb/credentials.txt" ]; then
+        log_info "Found BunkerWeb-credentials.txt in /root/ - creating symlink"
+        ln -s "/root/BunkerWeb-credentials.txt" "/data/BunkerWeb/credentials.txt"
+        log_success "Created symlink for existing /root/BunkerWeb-credentials.txt"
     elif [ -L "/data/BunkerWeb/credentials.txt" ]; then
         log_info "Credentials.txt symlink already exists"
     else
-        log_info "No existing credentials.txt found (will be created during setup)"
+        log_info "Creating empty credentials.txt and linking to /root/BunkerWeb-credentials.txt"
+        touch "/root/BunkerWeb-credentials.txt"
+        ln -s "/root/BunkerWeb-credentials.txt" "/data/BunkerWeb/credentials.txt"
+        log_success "Created empty credentials.txt and symlink"
     fi
     
     # Download files
@@ -432,6 +438,7 @@ main() {
     echo ""
     echo "Files downloaded to: /data/BunkerWeb"
     echo "Configuration: /root/BunkerWeb.conf"
+    echo "Credentials: /root/BunkerWeb-credentials.txt"
     echo ""
     echo -e "\033[31mWARNING: YOU MUST EDIT THE LINE CONTAINING\033[0m"
     echo -e "\033[31mAUTO_CERT_CONTACT\033[0m"
