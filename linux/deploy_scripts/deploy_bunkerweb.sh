@@ -13,11 +13,12 @@
 
 # Load debug configuration if available
 if [ -f "/root/BunkerWeb.conf" ]; then
-    source "/root/BunkerWeb.conf" 2>/dev/null || true
+    . "/root/BunkerWeb.conf" 2>/dev/null
 fi
 
 # Enable debug mode if requested
-if [ "${DEBUG:-no}" = "yes" ]; then
+DEBUG_MODE="${DEBUG:-no}"
+if [ "$DEBUG_MODE" = "yes" ]; then
     set -x
     echo "[DEBUG] Debug mode enabled"
 fi
@@ -58,8 +59,7 @@ get_remote_file_size() {
     local size=""
     
     if command_exists curl; then
-        size=$(curl -sI --connect-timeout 10 --max-time 30 "$url" | \
-               grep -i content-length | awk '{print $2}' | tr -d '\r\n' || echo "")
+        size=$(curl -sI --connect-timeout 10 --max-time 30 "$url" | grep -i content-length | awk '{print $2}' | tr -d '\r\n')
     fi
     
     echo "$size"
@@ -401,6 +401,9 @@ main() {
     # List of files to download from main repository
     echo "Downloading main repository files..."
     
+    # List of files to download from main repository
+    echo "Downloading main repository files..."
+    
     # Process files one by one to avoid array issues
     for file in script_autoconf_display.sh script_password_reset_display.sh script_template_selector.sh \
                 template_autoconf_display.yml template_basic_display.yml template_ui_integrated_display.yml \
@@ -414,20 +417,16 @@ main() {
         # Use new download function with verification
         download_with_verification "$BASE_URL/$file" "$file"
         download_result=$?
-        case $download_result in
-            0) # Downloaded successfully
-                downloaded_count=$((downloaded_count + 1))
-                ;;
-            1) # Download failed
-                failed_count=$((failed_count + 1))
-                ;;
-            2) # File up to date
-                uptodate_count=$((uptodate_count + 1))
-                ;;
-        esac
+        if [ $download_result -eq 0 ]; then
+            downloaded_count=$((downloaded_count + 1))
+        elif [ $download_result -eq 1 ]; then
+            failed_count=$((failed_count + 1))
+        elif [ $download_result -eq 2 ]; then
+            uptodate_count=$((uptodate_count + 1))
+        fi
     done
     
-    # Download special files with custom URLs
+    # Download additional helper files
     echo "Downloading additional helper files..."
     
     # Process additional helper files one by one
@@ -435,36 +434,28 @@ main() {
         echo -n "Processing $file (special URL)... "
         
         # Set URL based on filename
-        case "$file" in
-            "helper_fqdn.sh")
-                file_url="https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment"
-                file_url+="/refs/heads/main/linux/deploy_scripts/helper-scripts/helper_fqdn.sh"
-                ;;
-            "helper_net_nat.sh")
-                file_url="https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment"
-                file_url+="/refs/heads/main/linux/deploy_scripts/helper-scripts/helper_net_nat.sh"
-                ;;
-            *)
-                echo "FAILED (unknown file)"
-                failed_count=$((failed_count + 1))
-                continue
-                ;;
-        esac
+        if [ "$file" = "helper_fqdn.sh" ]; then
+            file_url="https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment"
+            file_url="${file_url}/refs/heads/main/linux/deploy_scripts/helper-scripts/helper_fqdn.sh"
+        elif [ "$file" = "helper_net_nat.sh" ]; then
+            file_url="https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment"
+            file_url="${file_url}/refs/heads/main/linux/deploy_scripts/helper-scripts/helper_net_nat.sh"
+        else
+            echo "FAILED (unknown file)"
+            failed_count=$((failed_count + 1))
+            continue
+        fi
         
         # Use new download function with verification
         download_with_verification "$file_url" "$file"
         download_result=$?
-        case $download_result in
-            0) # Downloaded successfully
-                downloaded_count=$((downloaded_count + 1))
-                ;;
-            1) # Download failed
-                failed_count=$((failed_count + 1))
-                ;;
-            2) # File up to date
-                uptodate_count=$((uptodate_count + 1))
-                ;;
-        esac
+        if [ $download_result -eq 0 ]; then
+            downloaded_count=$((downloaded_count + 1))
+        elif [ $download_result -eq 1 ]; then
+            failed_count=$((failed_count + 1))
+        elif [ $download_result -eq 2 ]; then
+            uptodate_count=$((uptodate_count + 1))
+        fi
     done
     
     # Report statistics
