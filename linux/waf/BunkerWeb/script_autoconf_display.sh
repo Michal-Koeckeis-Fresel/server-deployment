@@ -222,7 +222,7 @@ source_modules() {
         "helper_password_manager.sh"
         "helper_network_detection.sh" 
         "helper_template_processor.sh"
-        "helper_fqdn.sh"
+        "helper_net_fqdn.sh"
         "helper_greylist.sh"
         "helper_allowlist.sh"
         "helper_release_channel_manager.sh"
