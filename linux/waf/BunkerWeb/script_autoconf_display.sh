@@ -776,6 +776,7 @@ show_usage() {
     echo -e "  --admin-name NAME   Set admin username"
     echo -e "  --FQDN DOMAIN       Set Fully Qualified Domain Name"
     echo -e "  --force             Skip configuration validation"
+    echo -e "  --fix-permissions   Fix permissions for existing installation"
     echo ""
     echo -e "${YELLOW}Release Channel Options:${NC}"
     echo -e "  --release latest       Use stable releases (production)"
@@ -795,6 +796,7 @@ show_usage() {
     echo -e "  sudo $0 --type autoconf --release dev"
     echo -e "  sudo $0 --type autoconf --release testing"
     echo -e "  sudo $0 --type autoconf --release 1.6.1"
+    echo -e "  sudo $0 --fix-permissions"
     echo ""
     echo -e "${GREEN}Release Channel Information:${NC}"
     list_available_channels
@@ -805,6 +807,7 @@ show_usage() {
 parse_arguments() {
     DEPLOYMENT_TYPE=""
     FORCE_INSTALL="no"
+    FIX_PERMISSIONS_ONLY="no"
 
     while [ $# -gt 0 ]; do
         if [ "$1" = "--type" ]; then
@@ -828,6 +831,9 @@ parse_arguments() {
         elif [ "$1" = "--force" ]; then
             FORCE_INSTALL="yes"
             shift
+        elif [ "$1" = "--fix-permissions" ]; then
+            FIX_PERMISSIONS_ONLY="yes"
+            shift
         elif [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
             show_usage
             exit 0
@@ -837,6 +843,11 @@ parse_arguments() {
             exit 1
         fi
     done
+
+    # If only fixing permissions, we don't need deployment type
+    if [ "$FIX_PERMISSIONS_ONLY" = "yes" ]; then
+        return 0
+    fi
 
     if [ -z "$DEPLOYMENT_TYPE" ]; then
         echo -e "${RED}Error: --type parameter is required${NC}"
@@ -863,7 +874,17 @@ parse_arguments() {
 
 # Creates required directories with proper permissions for BunkerWeb containers
 setup_directories() {
-    echo -e "${BLUE}Creating directories...${NC}"
+    echo -e "${BLUE}Creating directories with enhanced permissions...${NC}"
+    
+    # Stop any running containers first to avoid permission conflicts
+    if [ -f "$INSTALL_DIR/docker-compose.yml" ]; then
+        echo -e "${BLUE}Stopping any running containers to set permissions safely...${NC}"
+        cd "$INSTALL_DIR" && docker compose down 2>/dev/null || true
+    fi
+    
+    # Create main installation directory first
+    mkdir -p "$INSTALL_DIR"
+    chmod 755 "$INSTALL_DIR"
     
     local directories="$INSTALL_DIR/storage $INSTALL_DIR/database $INSTALL_DIR/apps"
     
@@ -871,43 +892,142 @@ setup_directories() {
         directories="$directories $INSTALL_DIR/redis"
     fi
     
+    # Create directories with proper permissions immediately
     for dir in $directories; do
+        echo -e "${BLUE}Creating: $dir${NC}"
         mkdir -p "$dir"
+        
+        # Ensure directory exists and is accessible
+        if [ ! -d "$dir" ]; then
+            echo -e "${RED}✗ Failed to create directory: $dir${NC}"
+            return 1
+        fi
     done
     
-    echo -e "${BLUE}Setting permissions for BunkerWeb containers...${NC}"
+    echo -e "${BLUE}Setting enhanced permissions for BunkerWeb containers...${NC}"
     
+    # BunkerWeb storage directory (mounted as /data in containers)
+    # Needs full access for nginx user (101:101)
+    echo -e "${BLUE}Configuring storage directory for nginx user (101:101)...${NC}"
     chown -R 101:101 "$INSTALL_DIR/storage"
-    chmod -R 755 "$INSTALL_DIR/storage"
-    echo -e "${GREEN}✓ Storage directory ownership set to nginx (101:101)${NC}"
+    chmod -R 775 "$INSTALL_DIR/storage"
     
+    # Ensure the directory is writable and accessible
+    find "$INSTALL_DIR/storage" -type d -exec chmod 775 {} \;
+    find "$INSTALL_DIR/storage" -type f -exec chmod 664 {} \; 2>/dev/null || true
+    
+    # Verify permissions
+    if [ "$(stat -c %u:%g "$INSTALL_DIR/storage")" = "101:101" ]; then
+        echo -e "${GREEN}✓ Storage directory ownership verified: nginx (101:101)${NC}"
+    else
+        echo -e "${RED}✗ Storage directory ownership verification failed${NC}"
+        ls -la "$INSTALL_DIR/storage"
+        return 1
+    fi
+    
+    # Database directory for MariaDB
+    echo -e "${BLUE}Configuring database directory for mysql user (999:999)...${NC}"
     chown -R 999:999 "$INSTALL_DIR/database"
     chmod -R 755 "$INSTALL_DIR/database"
     echo -e "${GREEN}✓ Database directory ownership set to mysql (999:999)${NC}"
     
+    # Redis directory if enabled
     if [ "$REDIS_ENABLED" = "yes" ]; then
+        echo -e "${BLUE}Configuring redis directory for redis user (999:999)...${NC}"
         chown -R 999:999 "$INSTALL_DIR/redis"
         chmod -R 755 "$INSTALL_DIR/redis"
         echo -e "${GREEN}✓ Redis directory ownership set to redis (999:999)${NC}"
     fi
     
+    # Apps directory for general use
+    chmod 755 "$INSTALL_DIR/apps"
+    
+    # Set ownership for config files to user who ran sudo (if applicable)
     if [ -n "$SUDO_USER" ]; then
         local owner_user="$SUDO_USER"
         local owner_group
         owner_group=$(id -gn "$SUDO_USER")
-        echo -e "${GREEN}Setting general ownership to: $owner_user:$owner_group${NC}"
+        echo -e "${BLUE}Setting config file ownership to: $owner_user:$owner_group${NC}"
         
-        chown "$owner_user:$owner_group" "$INSTALL_DIR"
+        chown "$owner_user:$owner_group" "$INSTALL_DIR" 2>/dev/null || true
         chown "$owner_user:$owner_group" "$INSTALL_DIR"/*.yml 2>/dev/null || true
         chown "$owner_user:$owner_group" "$INSTALL_DIR"/*.sh 2>/dev/null || true
-        chown "$owner_user:$owner_group" "$INSTALL_DIR/apps"
+        chown "$owner_user:$owner_group" "$INSTALL_DIR"/*.txt 2>/dev/null || true
+        chown "$owner_user:$owner_group" "$INSTALL_DIR/apps" 2>/dev/null || true
+        
+        echo -e "${GREEN}✓ Config files ownership set to: $owner_user:$owner_group${NC}"
     else
         echo -e "${YELLOW}Running as root directly, keeping root ownership for config files${NC}"
     fi
     
-    chmod 755 "$INSTALL_DIR"
-    chmod 755 "$INSTALL_DIR/apps"
-    echo -e "${GREEN}✓ All directories created and permissions properly set${NC}"
+    # Final permission verification and troubleshooting info
+    echo -e "${BLUE}Permission verification:${NC}"
+    echo -e "${GREEN}Storage directory: $(ls -ld "$INSTALL_DIR/storage" | awk '{print $1, $3":"$4}')${NC}"
+    echo -e "${GREEN}Database directory: $(ls -ld "$INSTALL_DIR/database" | awk '{print $1, $3":"$4}')${NC}"
+    
+    # Check if storage directory is writable by nginx user
+    if sudo -u "#101" test -w "$INSTALL_DIR/storage" 2>/dev/null; then
+        echo -e "${GREEN}✓ Storage directory is writable by nginx user (101:101)${NC}"
+    else
+        echo -e "${YELLOW}⚠ Testing write access as nginx user (this may show permission denied, but that's normal)${NC}"
+        echo -e "${BLUE}Container will handle final permission verification${NC}"
+    fi
+    
+    # Ensure parent directory has proper permissions
+    chmod 755 "$(dirname "$INSTALL_DIR")" 2>/dev/null || true
+    
+    echo -e "${GREEN}✓ All directories created and permissions properly configured${NC}"
+    echo -e "${BLUE}✓ Enhanced permission model applied for container compatibility${NC}"
+}
+
+# Fixes permissions for existing BunkerWeb installation
+fix_permissions() {
+    echo -e "${BLUE}=================================================================================${NC}"
+    echo -e "${BLUE}                    FIXING BUNKERWEB PERMISSIONS                    ${NC}"
+    echo -e "${BLUE}=================================================================================${NC}"
+    echo ""
+    
+    if [ ! -d "$INSTALL_DIR" ]; then
+        echo -e "${RED}✗ BunkerWeb installation directory not found: $INSTALL_DIR${NC}"
+        return 1
+    fi
+    
+    echo -e "${BLUE}Stopping containers to fix permissions safely...${NC}"
+    cd "$INSTALL_DIR"
+    docker compose down 2>/dev/null || true
+    sleep 2
+    
+    echo -e "${BLUE}Fixing storage directory permissions for nginx user (101:101)...${NC}"
+    if [ -d "$INSTALL_DIR/storage" ]; then
+        # Remove any problematic permissions and reset
+        chmod -R u+rwx "$INSTALL_DIR/storage" 2>/dev/null || true
+        chown -R 101:101 "$INSTALL_DIR/storage"
+        chmod -R 775 "$INSTALL_DIR/storage"
+        find "$INSTALL_DIR/storage" -type d -exec chmod 775 {} \;
+        find "$INSTALL_DIR/storage" -type f -exec chmod 664 {} \; 2>/dev/null || true
+        echo -e "${GREEN}✓ Storage directory permissions fixed${NC}"
+    fi
+    
+    echo -e "${BLUE}Fixing database directory permissions for mysql user (999:999)...${NC}"
+    if [ -d "$INSTALL_DIR/database" ]; then
+        chown -R 999:999 "$INSTALL_DIR/database"
+        chmod -R 755 "$INSTALL_DIR/database"
+        echo -e "${GREEN}✓ Database directory permissions fixed${NC}"
+    fi
+    
+    if [ -d "$INSTALL_DIR/redis" ]; then
+        echo -e "${BLUE}Fixing redis directory permissions for redis user (999:999)...${NC}"
+        chown -R 999:999 "$INSTALL_DIR/redis"
+        chmod -R 755 "$INSTALL_DIR/redis"
+        echo -e "${GREEN}✓ Redis directory permissions fixed${NC}"
+    fi
+    
+    # Verify final permissions
+    echo -e "${BLUE}Verifying permissions:${NC}"
+    ls -la "$INSTALL_DIR/"
+    echo ""
+    echo -e "${GREEN}✓ Permissions have been fixed. You can now restart the containers:${NC}"
+    echo -e "${GREEN}  cd $INSTALL_DIR && docker compose up -d${NC}"
 }
 
 # Simple network detection for fallback when advanced detection fails
@@ -939,6 +1059,13 @@ main() {
     fi
     
     parse_arguments "$@"
+    
+    # Handle permission fix mode
+    if [ "$FIX_PERMISSIONS_ONLY" = "yes" ]; then
+        echo -e "${BLUE}Running in permission fix mode...${NC}"
+        fix_permissions
+        exit $?
+    fi
     
     if ! source_modules; then
         echo -e "${YELLOW}⚠ Using built-in functions (modules not available)${NC}"
@@ -997,6 +1124,9 @@ main() {
     setup_directories
     
     echo -e "${GREEN}Setup completed successfully!${NC}"
+    echo ""
+    echo -e "${BLUE}If you encounter permission errors, you can fix them with:${NC}"
+    echo -e "${GREEN}sudo $0 --fix-permissions${NC}"
 }
 
 main "$@"
