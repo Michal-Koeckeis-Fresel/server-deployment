@@ -590,6 +590,7 @@ main() {
     echo ""
     echo "Next steps:"
     echo "  1. Edit configuration: nano /root/BunkerWeb.conf"
+    echo "  cd /data/BunkerWeb"
     echo "  2. Select template: sudo ./script_template_selector.sh"
     echo "  3. Run setup: sudo ./script_autoconf_display.sh --type autoconf"
     echo ""
