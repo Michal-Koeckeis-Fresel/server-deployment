@@ -590,11 +590,11 @@ main() {
     echo ""
     echo "Next steps:"
     echo "  1. Edit configuration: nano /root/BunkerWeb.conf"
-    echo "  cd /data/BunkerWeb"
-    echo "  2. Select template: sudo ./script_template_selector.sh"
-    echo "  3. Run setup: sudo ./script_autoconf_display.sh --type autoconf"
+    echo "  2. cd /data/BunkerWeb"
+    echo "  3. Select template: sudo ./script_template_selector.sh"
+    echo "  4. Run setup: sudo ./script_autoconf_display.sh --type autoconf"
     echo ""
-    log_info "Setup ready. Edit /root/BunkerWeb.conf if needed before running setup."
+    log_info "Setup ready. Edit /root/BunkerWeb.conf is needed before running setup."
 }
 
 # Run main function
