@@ -147,7 +147,8 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-# Generates secure admin password with strict requirements: at least one lowercase, one uppercase, one number, one special character
+# Generates secure admin password with strict requirements: at least one lowercase, one uppercase, 
+# one number, one special character
 generate_secure_admin_password() {
     local uppercase="ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     local lowercase="abcdefghijklmnopqrstuvwxyz"
@@ -216,13 +217,14 @@ generate_random_ui_path() {
     echo "$random_path"
 }
 
-# Loads and initializes modular helper scripts
+# Loads and initializes modular helper scripts including NAT detection and FQDN helpers
 source_modules() {
     local modules=(
         "helper_password_manager.sh"
         "helper_network_detection.sh" 
         "helper_template_processor.sh"
-        "helper_fqdn.sh"
+        "helper_net_fqdn.sh"
+        "helper_net_nat.sh"
         "helper_greylist.sh"
         "helper_allowlist.sh"
         "helper_release_channel_manager.sh"
@@ -306,7 +308,7 @@ configure_fqdn_detection() {
     echo -e "${GREEN}✓ FQDN detection configured with log level: $FQDN_LOG_LEVEL${NC}"
 }
 
-# Enhanced FQDN detection with comprehensive validation and SSL readiness check
+# Enhanced FQDN detection using helper_net_fqdn.sh with comprehensive validation and SSL readiness check
 detect_fqdn_enhanced() {
     local provided_fqdn="$1"
     
@@ -317,7 +319,7 @@ detect_fqdn_enhanced() {
     
     configure_fqdn_detection
     
-    echo -e "${BLUE}Starting advanced FQDN detection...${NC}"
+    echo -e "${BLUE}Starting advanced FQDN detection using helper modules...${NC}"
     
     local detected_fqdn=""
     if detected_fqdn=$(auto_detect_fqdn "$provided_fqdn" "$FQDN_REQUIRE_SSL" "$FQDN_CHECK_DNS"); then
@@ -382,24 +384,30 @@ detect_fqdn_enhanced() {
     fi
 }
 
-# Builds comprehensive API whitelist including Docker network ranges and existing networks
-build_comprehensive_api_whitelist() {
+# Performs comprehensive NAT detection using helper_net_nat.sh and builds whitelist accordingly
+detect_nat_and_build_whitelist() {
     local docker_subnet="$1"
+    
+    echo -e "${BLUE}=================================================================================${NC}"
+    echo -e "${BLUE}                    NAT DETECTION AND API WHITELIST                    ${NC}"
+    echo -e "${BLUE}=================================================================================${NC}"
+    echo ""
+    
+    echo -e "${BLUE}Starting NAT detection using helper modules...${NC}"
+    
+    # Use helper_net_nat.sh for comprehensive NAT detection
+    check_nat_status
+    
+    echo -e "${BLUE}Building comprehensive API whitelist for Docker networks...${NC}"
+    
     local api_whitelist="127.0.0.0/8"
-    
-    echo -e "${BLUE}=================================================================================${NC}" >&2
-    echo -e "${BLUE}                    API WHITELIST AUTO-DETECTION                    ${NC}" >&2
-    echo -e "${BLUE}=================================================================================${NC}" >&2
-    echo "" >&2
-    
-    echo -e "${BLUE}Building comprehensive API whitelist for Docker networks...${NC}" >&2
     
     if [[ -n "$docker_subnet" ]]; then
         api_whitelist="$api_whitelist $docker_subnet"
-        echo -e "${GREEN}• Added main subnet: $docker_subnet${NC}" >&2
+        echo -e "${GREEN}• Added main subnet: $docker_subnet${NC}"
     fi
     
-    echo -e "${BLUE}Adding Docker Compose network ranges...${NC}" >&2
+    echo -e "${BLUE}Adding Docker Compose network ranges...${NC}"
     
     local docker_ranges=(
         "172.16.0.0/12"
@@ -417,12 +425,12 @@ build_comprehensive_api_whitelist() {
     for range in "${docker_ranges[@]}"; do
         if [[ ! "$api_whitelist" =~ $range ]]; then
             api_whitelist="$api_whitelist $range"
-            echo -e "${GREEN}• Added Docker range: $range${NC}" >&2
+            echo -e "${GREEN}• Added Docker range: $range${NC}"
         fi
     done
     
     if command -v docker >/dev/null 2>&1; then
-        echo -e "${BLUE}Detecting existing Docker networks...${NC}" >&2
+        echo -e "${BLUE}Detecting existing Docker networks...${NC}"
         
         local existing_networks=()
         while IFS= read -r line; do
@@ -430,19 +438,21 @@ build_comprehensive_api_whitelist() {
                 local network="${BASH_REMATCH[1]}"
                 existing_networks+=("$network")
             fi
-        done < <(docker network ls -q 2>/dev/null | xargs -I {} docker network inspect {} 2>/dev/null | grep -E "\"Subnet\":" || true)
+        done < <(docker network ls -q 2>/dev/null | xargs -I {} docker network inspect {} 2>/dev/null | \
+                 grep -E "\"Subnet\":" || true)
         
         for network in "${existing_networks[@]}"; do
-            if [[ "$network" =~ ^10\. ]] || [[ "$network" =~ ^172\.(1[6-9]|2[0-9]|3[0-1])\. ]] || [[ "$network" =~ ^192\.168\. ]]; then
+            if [[ "$network" =~ ^10\. ]] || [[ "$network" =~ ^172\.(1[6-9]|2[0-9]|3[0-1])\. ]] || \
+               [[ "$network" =~ ^192\.168\. ]]; then
                 if [[ ! "$api_whitelist" =~ $network ]]; then
                     api_whitelist="$api_whitelist $network"
-                    echo -e "${GREEN}• Added existing Docker network: $network${NC}" >&2
+                    echo -e "${GREEN}• Added existing Docker network: $network${NC}"
                 fi
             fi
         done
     fi
     
-    echo -e "${BLUE}Adding broader private network ranges for safety...${NC}" >&2
+    echo -e "${BLUE}Adding broader private network ranges for safety...${NC}"
     local broad_ranges=(
         "10.0.0.0/8"
         "192.168.0.0/16"
@@ -451,14 +461,14 @@ build_comprehensive_api_whitelist() {
     for range in "${broad_ranges[@]}"; do
         if [[ ! "$api_whitelist" =~ $range ]]; then
             api_whitelist="$api_whitelist $range"
-            echo -e "${GREEN}• Added private range: $range${NC}" >&2
+            echo -e "${GREEN}• Added private range: $range${NC}"
         fi
     done
     
-    echo "" >&2
-    echo -e "${GREEN}Final comprehensive API whitelist:${NC}" >&2
-    echo -e "${GREEN}$api_whitelist${NC}" >&2
-    echo "" >&2
+    echo ""
+    echo -e "${GREEN}Final comprehensive API whitelist:${NC}"
+    echo -e "${GREEN}$api_whitelist${NC}"
+    echo ""
     
     echo "$api_whitelist"
 }
@@ -468,22 +478,22 @@ update_api_whitelist() {
     local compose_file="$1"
     local api_whitelist="$2"
     
-    echo -e "${BLUE}Updating API whitelist in docker-compose.yml...${NC}" >&2
+    echo -e "${BLUE}Updating API whitelist in docker-compose.yml...${NC}"
     
     local escaped_whitelist=$(printf '%s\n' "$api_whitelist" | sed 's/[[\.*^$()+?{|]/\\&/g')
     
     if sed -i "s|API_WHITELIST_IP: \".*\"|API_WHITELIST_IP: \"$escaped_whitelist\"|g" "$compose_file"; then
-        echo -e "${GREEN}✓ API whitelist updated successfully${NC}" >&2
+        echo -e "${GREEN}✓ API whitelist updated successfully${NC}"
         
         local updated_count=$(grep -c "API_WHITELIST_IP:" "$compose_file" || echo "0")
-        echo -e "${GREEN}✓ Updated $updated_count API_WHITELIST_IP entries${NC}" >&2
+        echo -e "${GREEN}✓ Updated $updated_count API_WHITELIST_IP entries${NC}"
         
-        echo -e "${BLUE}Verification - Updated API whitelist entries:${NC}" >&2
-        grep "API_WHITELIST_IP:" "$compose_file" | sed 's/^\s*/  /' | cut -c1-100 | sed 's/$/.../' >&2
+        echo -e "${BLUE}Verification - Updated API whitelist entries:${NC}"
+        grep "API_WHITELIST_IP:" "$compose_file" | sed 's/^\s*/  /' | cut -c1-100 | sed 's/$/.../'
         
         return 0
     else
-        echo -e "${RED}✗ Failed to update API whitelist${NC}" >&2
+        echo -e "${RED}✗ Failed to update API whitelist${NC}"
         return 1
     fi
 }
@@ -537,7 +547,8 @@ add_bw_ui_labels() {
         echo "# BunkerWeb UI Access Information" >> "${compose_file%/*}/credentials.txt"
         echo "UI Access Path: /$random_ui_path" >> "${compose_file%/*}/credentials.txt"
         echo "Full UI URL: http://$fqdn/$random_ui_path" >> "${compose_file%/*}/credentials.txt"
-        echo "Direct Access: http://$(hostname -I | awk '{print $1}')/$random_ui_path" >> "${compose_file%/*}/credentials.txt"
+        echo "Direct Access: http://$(hostname -I | awk '{print $1}')/$random_ui_path" >> \
+             "${compose_file%/*}/credentials.txt"
     fi
     
     return 0
@@ -558,9 +569,12 @@ configure_setup_mode() {
         
         sed -i 's|# OVERRIDE_ADMIN_CREDS: "no"|OVERRIDE_ADMIN_CREDS: "yes"|' "$compose_file"
         
-        sed -i "s|# ADMIN_USERNAME: \"REPLACEME_ADMIN_USERNAME\"|ADMIN_USERNAME: \"$admin_username\"|" "$compose_file"
-        sed -i "s|# ADMIN_PASSWORD: \"REPLACEME_ADMIN_PASSWORD\"|ADMIN_PASSWORD: \"$admin_password\"|" "$compose_file"
-        sed -i "s|# FLASK_SECRET: \"REPLACEME_FLASK_SECRET\"|FLASK_SECRET: \"$flask_secret\"|" "$compose_file"
+        sed -i "s|# ADMIN_USERNAME: \"REPLACEME_ADMIN_USERNAME\"|ADMIN_USERNAME: \"$admin_username\"|" \
+               "$compose_file"
+        sed -i "s|# ADMIN_PASSWORD: \"REPLACEME_ADMIN_PASSWORD\"|ADMIN_PASSWORD: \"$admin_password\"|" \
+               "$compose_file"
+        sed -i "s|# FLASK_SECRET: \"REPLACEME_FLASK_SECRET\"|FLASK_SECRET: \"$flask_secret\"|" \
+               "$compose_file"
         
         echo -e "${GREEN}✓ Automated setup configured and enabled${NC}"
         echo -e "${GREEN}✓ Admin credentials activated${NC}"
@@ -698,18 +712,21 @@ process_template_with_release_channel() {
     fi
     
     if [[ -n "$HTTP3_ALT_SVC_PORT" ]]; then
-        sed -i "s|HTTP3_ALT_SVC_PORT: \"443\"|HTTP3_ALT_SVC_PORT: \"$HTTP3_ALT_SVC_PORT\"|g" "$compose_file"
+        sed -i "s|HTTP3_ALT_SVC_PORT: \"443\"|HTTP3_ALT_SVC_PORT: \"$HTTP3_ALT_SVC_PORT\"|g" \
+               "$compose_file"
         echo -e "${GREEN}✓ HTTP3 alternate service port: $HTTP3_ALT_SVC_PORT${NC}"
     fi
     
     echo -e "${BLUE}6. Processing Let's Encrypt configuration...${NC}"
     if [[ -n "$LETS_ENCRYPT_CHALLENGE" ]]; then
-        sed -i "s|LETS_ENCRYPT_CHALLENGE: \"http\"|LETS_ENCRYPT_CHALLENGE: \"$LETS_ENCRYPT_CHALLENGE\"|g" "$compose_file"
+        sed -i "s|LETS_ENCRYPT_CHALLENGE: \"http\"|LETS_ENCRYPT_CHALLENGE: \"$LETS_ENCRYPT_CHALLENGE\"|g" \
+               "$compose_file"
         echo -e "${GREEN}✓ Let's Encrypt challenge type: $LETS_ENCRYPT_CHALLENGE${NC}"
     fi
     
     if [[ -n "$LETS_ENCRYPT_STAGING" ]]; then
-        sed -i "s|USE_LETS_ENCRYPT_STAGING: \"yes\"|USE_LETS_ENCRYPT_STAGING: \"$LETS_ENCRYPT_STAGING\"|g" "$compose_file"
+        sed -i "s|USE_LETS_ENCRYPT_STAGING: \"yes\"|USE_LETS_ENCRYPT_STAGING: \"$LETS_ENCRYPT_STAGING\"|g" \
+               "$compose_file"
         echo -e "${GREEN}✓ Let's Encrypt staging: $LETS_ENCRYPT_STAGING${NC}"
     fi
     
@@ -721,7 +738,8 @@ process_template_with_release_channel() {
     
     echo -e "${BLUE}8. Processing ModSecurity and SSL configuration...${NC}"
     if [[ -n "$USE_MODSECURITY_GLOBAL_CRS" ]]; then
-        sed -i "s|USE_MODSECURITY_GLOBAL_CRS: \"yes\"|USE_MODSECURITY_GLOBAL_CRS: \"$USE_MODSECURITY_GLOBAL_CRS\"|g" "$compose_file"
+        sed -i "s|USE_MODSECURITY_GLOBAL_CRS: \"yes\"|USE_MODSECURITY_GLOBAL_CRS: \"$USE_MODSECURITY_GLOBAL_CRS\"|g" \
+               "$compose_file"
         echo -e "${GREEN}✓ ModSecurity Global CRS: $USE_MODSECURITY_GLOBAL_CRS${NC}"
     fi
     
@@ -762,12 +780,14 @@ process_template_with_release_channel() {
         fi
         
         if [[ -n "$BLACKLIST_RDNS" ]]; then
-            sed -i "s|BLACKLIST_RDNS: \"\.shodan\.io \.censys\.io\"|BLACKLIST_RDNS: \"$BLACKLIST_RDNS\"|g" "$compose_file"
+            sed -i "s|BLACKLIST_RDNS: \"\.shodan\.io \.censys\.io\"|BLACKLIST_RDNS: \"$BLACKLIST_RDNS\"|g" \
+                   "$compose_file"
             echo -e "${GREEN}✓ Blacklist rDNS configured: $BLACKLIST_RDNS${NC}"
         fi
         
         if [[ -n "$BLACKLIST_RDNS_GLOBAL" ]]; then
-            sed -i "s|BLACKLIST_RDNS_GLOBAL: \"yes\"|BLACKLIST_RDNS_GLOBAL: \"$BLACKLIST_RDNS_GLOBAL\"|g" "$compose_file"
+            sed -i "s|BLACKLIST_RDNS_GLOBAL: \"yes\"|BLACKLIST_RDNS_GLOBAL: \"$BLACKLIST_RDNS_GLOBAL\"|g" \
+                   "$compose_file"
             echo -e "${GREEN}✓ Blacklist rDNS global mode: $BLACKLIST_RDNS_GLOBAL${NC}"
         fi
         
@@ -777,7 +797,8 @@ process_template_with_release_channel() {
         fi
         
         if [[ -n "$BLACKLIST_USER_AGENT" ]]; then
-            sed -i "s|BLACKLIST_USER_AGENT: \".*\"|BLACKLIST_USER_AGENT: \"$BLACKLIST_USER_AGENT\"|g" "$compose_file"
+            sed -i "s|BLACKLIST_USER_AGENT: \".*\"|BLACKLIST_USER_AGENT: \"$BLACKLIST_USER_AGENT\"|g" \
+                   "$compose_file"
             echo -e "${GREEN}✓ Blacklist User-Agent patterns: $BLACKLIST_USER_AGENT${NC}"
         fi
         
@@ -792,27 +813,32 @@ process_template_with_release_channel() {
         fi
         
         if [[ -n "$BLACKLIST_IGNORE_IP" ]]; then
-            sed -i "s|BLACKLIST_IGNORE_IP: \".*\"|BLACKLIST_IGNORE_IP: \"$BLACKLIST_IGNORE_IP\"|g" "$compose_file"
+            sed -i "s|BLACKLIST_IGNORE_IP: \".*\"|BLACKLIST_IGNORE_IP: \"$BLACKLIST_IGNORE_IP\"|g" \
+                   "$compose_file"
             echo -e "${GREEN}✓ Blacklist ignore IP addresses: $BLACKLIST_IGNORE_IP${NC}"
         fi
         
         if [[ -n "$BLACKLIST_IGNORE_RDNS" ]]; then
-            sed -i "s|BLACKLIST_IGNORE_RDNS: \".*\"|BLACKLIST_IGNORE_RDNS: \"$BLACKLIST_IGNORE_RDNS\"|g" "$compose_file"
+            sed -i "s|BLACKLIST_IGNORE_RDNS: \".*\"|BLACKLIST_IGNORE_RDNS: \"$BLACKLIST_IGNORE_RDNS\"|g" \
+                   "$compose_file"
             echo -e "${GREEN}✓ Blacklist ignore rDNS: $BLACKLIST_IGNORE_RDNS${NC}"
         fi
         
         if [[ -n "$BLACKLIST_IGNORE_ASN" ]]; then
-            sed -i "s|BLACKLIST_IGNORE_ASN: \".*\"|BLACKLIST_IGNORE_ASN: \"$BLACKLIST_IGNORE_ASN\"|g" "$compose_file"
+            sed -i "s|BLACKLIST_IGNORE_ASN: \".*\"|BLACKLIST_IGNORE_ASN: \"$BLACKLIST_IGNORE_ASN\"|g" \
+                   "$compose_file"
             echo -e "${GREEN}✓ Blacklist ignore ASN: $BLACKLIST_IGNORE_ASN${NC}"
         fi
         
         if [[ -n "$BLACKLIST_IGNORE_USER_AGENT" ]]; then
-            sed -i "s|BLACKLIST_IGNORE_USER_AGENT: \".*\"|BLACKLIST_IGNORE_USER_AGENT: \"$BLACKLIST_IGNORE_USER_AGENT\"|g" "$compose_file"
+            sed -i "s|BLACKLIST_IGNORE_USER_AGENT: \".*\"|BLACKLIST_IGNORE_USER_AGENT: \"$BLACKLIST_IGNORE_USER_AGENT\"|g" \
+                   "$compose_file"
             echo -e "${GREEN}✓ Blacklist ignore User-Agent: $BLACKLIST_IGNORE_USER_AGENT${NC}"
         fi
         
         if [[ -n "$BLACKLIST_IGNORE_URI" ]]; then
-            sed -i "s|BLACKLIST_IGNORE_URI: \".*\"|BLACKLIST_IGNORE_URI: \"$BLACKLIST_IGNORE_URI\"|g" "$compose_file"
+            sed -i "s|BLACKLIST_IGNORE_URI: \".*\"|BLACKLIST_IGNORE_URI: \"$BLACKLIST_IGNORE_URI\"|g" \
+                   "$compose_file"
             echo -e "${GREEN}✓ Blacklist ignore URI: $BLACKLIST_IGNORE_URI${NC}"
         fi
         
@@ -824,55 +850,69 @@ process_template_with_release_channel() {
         
         if [[ -n "$BLACKLIST_RDNS_URLS" ]]; then
             local escaped_rdns_urls=$(printf '%s\n' "$BLACKLIST_RDNS_URLS" | sed 's/[[\.*^$()+?{|]/\\&/g')
-            sed -i "s|BLACKLIST_RDNS_URLS: \".*\"|BLACKLIST_RDNS_URLS: \"$escaped_rdns_urls\"|g" "$compose_file"
+            sed -i "s|BLACKLIST_RDNS_URLS: \".*\"|BLACKLIST_RDNS_URLS: \"$escaped_rdns_urls\"|g" \
+                   "$compose_file"
             echo -e "${GREEN}✓ Blacklist rDNS URLs: $BLACKLIST_RDNS_URLS${NC}"
         fi
         
         if [[ -n "$BLACKLIST_ASN_URLS" ]]; then
             local escaped_asn_urls=$(printf '%s\n' "$BLACKLIST_ASN_URLS" | sed 's/[[\.*^$()+?{|]/\\&/g')
-            sed -i "s|BLACKLIST_ASN_URLS: \".*\"|BLACKLIST_ASN_URLS: \"$escaped_asn_urls\"|g" "$compose_file"
+            sed -i "s|BLACKLIST_ASN_URLS: \".*\"|BLACKLIST_ASN_URLS: \"$escaped_asn_urls\"|g" \
+                   "$compose_file"
             echo -e "${GREEN}✓ Blacklist ASN URLs: $BLACKLIST_ASN_URLS${NC}"
         fi
         
         if [[ -n "$BLACKLIST_USER_AGENT_URLS" ]]; then
             local escaped_ua_urls=$(printf '%s\n' "$BLACKLIST_USER_AGENT_URLS" | sed 's/[[\.*^$()+?{|]/\\&/g')
-            sed -i "s|BLACKLIST_USER_AGENT_URLS: \".*\"|BLACKLIST_USER_AGENT_URLS: \"$escaped_ua_urls\"|g" "$compose_file"
+            sed -i "s|BLACKLIST_USER_AGENT_URLS: \".*\"|BLACKLIST_USER_AGENT_URLS: \"$escaped_ua_urls\"|g" \
+                   "$compose_file"
             echo -e "${GREEN}✓ Blacklist User-Agent URLs: Bad bot blocker list${NC}"
         fi
         
         if [[ -n "$BLACKLIST_URI_URLS" ]]; then
             local escaped_uri_urls=$(printf '%s\n' "$BLACKLIST_URI_URLS" | sed 's/[[\.*^$()+?{|]/\\&/g')
-            sed -i "s|BLACKLIST_URI_URLS: \".*\"|BLACKLIST_URI_URLS: \"$escaped_uri_urls\"|g" "$compose_file"
+            sed -i "s|BLACKLIST_URI_URLS: \".*\"|BLACKLIST_URI_URLS: \"$escaped_uri_urls\"|g" \
+                   "$compose_file"
             echo -e "${GREEN}✓ Blacklist URI URLs: $BLACKLIST_URI_URLS${NC}"
         fi
         
         if [[ -n "$BLACKLIST_IGNORE_IP_URLS" ]]; then
-            local escaped_ignore_ip_urls=$(printf '%s\n' "$BLACKLIST_IGNORE_IP_URLS" | sed 's/[[\.*^$()+?{|]/\\&/g')
-            sed -i "s|BLACKLIST_IGNORE_IP_URLS: \".*\"|BLACKLIST_IGNORE_IP_URLS: \"$escaped_ignore_ip_urls\"|g" "$compose_file"
+            local escaped_ignore_ip_urls=$(printf '%s\n' "$BLACKLIST_IGNORE_IP_URLS" | \
+                                          sed 's/[[\.*^$()+?{|]/\\&/g')
+            sed -i "s|BLACKLIST_IGNORE_IP_URLS: \".*\"|BLACKLIST_IGNORE_IP_URLS: \"$escaped_ignore_ip_urls\"|g" \
+                   "$compose_file"
             echo -e "${GREEN}✓ Blacklist ignore IP URLs: $BLACKLIST_IGNORE_IP_URLS${NC}"
         fi
         
         if [[ -n "$BLACKLIST_IGNORE_RDNS_URLS" ]]; then
-            local escaped_ignore_rdns_urls=$(printf '%s\n' "$BLACKLIST_IGNORE_RDNS_URLS" | sed 's/[[\.*^$()+?{|]/\\&/g')
-            sed -i "s|BLACKLIST_IGNORE_RDNS_URLS: \".*\"|BLACKLIST_IGNORE_RDNS_URLS: \"$escaped_ignore_rdns_urls\"|g" "$compose_file"
+            local escaped_ignore_rdns_urls=$(printf '%s\n' "$BLACKLIST_IGNORE_RDNS_URLS" | \
+                                            sed 's/[[\.*^$()+?{|]/\\&/g')
+            sed -i "s|BLACKLIST_IGNORE_RDNS_URLS: \".*\"|BLACKLIST_IGNORE_RDNS_URLS: \"$escaped_ignore_rdns_urls\"|g" \
+                   "$compose_file"
             echo -e "${GREEN}✓ Blacklist ignore rDNS URLs: $BLACKLIST_IGNORE_RDNS_URLS${NC}"
         fi
         
         if [[ -n "$BLACKLIST_IGNORE_ASN_URLS" ]]; then
-            local escaped_ignore_asn_urls=$(printf '%s\n' "$BLACKLIST_IGNORE_ASN_URLS" | sed 's/[[\.*^$()+?{|]/\\&/g')
-            sed -i "s|BLACKLIST_IGNORE_ASN_URLS: \".*\"|BLACKLIST_IGNORE_ASN_URLS: \"$escaped_ignore_asn_urls\"|g" "$compose_file"
+            local escaped_ignore_asn_urls=$(printf '%s\n' "$BLACKLIST_IGNORE_ASN_URLS" | \
+                                           sed 's/[[\.*^$()+?{|]/\\&/g')
+            sed -i "s|BLACKLIST_IGNORE_ASN_URLS: \".*\"|BLACKLIST_IGNORE_ASN_URLS: \"$escaped_ignore_asn_urls\"|g" \
+                   "$compose_file"
             echo -e "${GREEN}✓ Blacklist ignore ASN URLs: $BLACKLIST_IGNORE_ASN_URLS${NC}"
         fi
         
         if [[ -n "$BLACKLIST_IGNORE_USER_AGENT_URLS" ]]; then
-            local escaped_ignore_ua_urls=$(printf '%s\n' "$BLACKLIST_IGNORE_USER_AGENT_URLS" | sed 's/[[\.*^$()+?{|]/\\&/g')
-            sed -i "s|BLACKLIST_IGNORE_USER_AGENT_URLS: \".*\"|BLACKLIST_IGNORE_USER_AGENT_URLS: \"$escaped_ignore_ua_urls\"|g" "$compose_file"
+            local escaped_ignore_ua_urls=$(printf '%s\n' "$BLACKLIST_IGNORE_USER_AGENT_URLS" | \
+                                          sed 's/[[\.*^$()+?{|]/\\&/g')
+            sed -i "s|BLACKLIST_IGNORE_USER_AGENT_URLS: \".*\"|BLACKLIST_IGNORE_USER_AGENT_URLS: \"$escaped_ignore_ua_urls\"|g" \
+                   "$compose_file"
             echo -e "${GREEN}✓ Blacklist ignore User-Agent URLs: $BLACKLIST_IGNORE_USER_AGENT_URLS${NC}"
         fi
         
         if [[ -n "$BLACKLIST_IGNORE_URI_URLS" ]]; then
-            local escaped_ignore_uri_urls=$(printf '%s\n' "$BLACKLIST_IGNORE_URI_URLS" | sed 's/[[\.*^$()+?{|]/\\&/g')
-            sed -i "s|BLACKLIST_IGNORE_URI_URLS: \".*\"|BLACKLIST_IGNORE_URI_URLS: \"$escaped_ignore_uri_urls\"|g" "$compose_file"
+            local escaped_ignore_uri_urls=$(printf '%s\n' "$BLACKLIST_IGNORE_URI_URLS" | \
+                                           sed 's/[[\.*^$()+?{|]/\\&/g')
+            sed -i "s|BLACKLIST_IGNORE_URI_URLS: \".*\"|BLACKLIST_IGNORE_URI_URLS: \"$escaped_ignore_uri_urls\"|g" \
+                   "$compose_file"
             echo -e "${GREEN}✓ Blacklist ignore URI URLs: $BLACKLIST_IGNORE_URI_URLS${NC}"
         fi
         
@@ -916,7 +956,8 @@ process_template_with_release_channel() {
         fi
         
         if [[ -n "$ALLOWLIST_STATUS_CODE" ]]; then
-            sed -i "s|ALLOWLIST_STATUS_CODE: \"403\"|ALLOWLIST_STATUS_CODE: \"$ALLOWLIST_STATUS_CODE\"|g" "$compose_file"
+            sed -i "s|ALLOWLIST_STATUS_CODE: \"403\"|ALLOWLIST_STATUS_CODE: \"$ALLOWLIST_STATUS_CODE\"|g" \
+                   "$compose_file"
             echo -e "${GREEN}✓ Allowlist status code: $ALLOWLIST_STATUS_CODE${NC}"
         fi
     else
@@ -967,7 +1008,8 @@ process_template_with_release_channel() {
     configure_setup_mode "$compose_file" "$setup_mode" "$admin_username" "$admin_password" "$flask_secret"
     
     echo -e "${BLUE}15. Validating placeholder replacement...${NC}"
-    local remaining_critical=$(grep -o "REPLACEME_MYSQL\|REPLACEME_DEFAULT\|REPLACEME_AUTO_LETS_ENCRYPT\|REPLACEME_EMAIL_LETS_ENCRYPT\|REPLACEME_TAG\|REPLACEME_DNS_RESOLVERS" "$compose_file" || true)
+    local remaining_critical=$(grep -o "REPLACEME_MYSQL\|REPLACEME_DEFAULT\|REPLACEME_AUTO_LETS_ENCRYPT\|REPLACEME_EMAIL_LETS_ENCRYPT\|REPLACEME_TAG\|REPLACEME_DNS_RESOLVERS" \
+                              "$compose_file" || true)
     if [[ -n "$remaining_critical" ]]; then
         echo -e "${RED}✗ Critical placeholders not replaced: $remaining_critical${NC}"
         return 1
@@ -1146,7 +1188,9 @@ load_configuration() {
         fi
         
         if [[ -n "$AUTO_CERT_TYPE" ]]; then
-            if [[ "$AUTO_CERT_CONTACT" == "me@example.com" ]] || [[ "$AUTO_CERT_CONTACT" == *"@example.com"* ]] || [[ "$AUTO_CERT_CONTACT" == *"@yourdomain.com"* ]]; then
+            if [[ "$AUTO_CERT_CONTACT" == "me@example.com" ]] || \
+               [[ "$AUTO_CERT_CONTACT" == *"@example.com"* ]] || \
+               [[ "$AUTO_CERT_CONTACT" == *"@yourdomain.com"* ]]; then
                 if [[ "$FORCE_INSTALL" != "yes" ]]; then
                     echo -e "${RED}=================================================================================${NC}"
                     echo -e "${RED}                    CONFIGURATION VALIDATION FAILED                    ${NC}"
@@ -1726,9 +1770,27 @@ show_setup_summary() {
     
     echo ""
     echo -e "${GREEN}Setup completed successfully!${NC}"
+    echo ""
+    echo -e "${BLUE}=================================================================================${NC}"
+    echo -e "${BLUE}                    QUICK ACCESS CREDENTIALS                    ${NC}"
+    echo -e "${BLUE}=================================================================================${NC}"
+    echo ""
+    
+    local creds_file="$INSTALL_DIR/credentials.txt"
+    if [[ -f "$creds_file" ]]; then
+        echo -e "${CYAN}Quick Access Information:${NC}"
+        cat "$creds_file" | grep "Full UI URL:" || echo -e "${YELLOW}Full UI URL: Not configured${NC}"
+        cat "$creds_file" | grep "Admin Username:" || echo -e "${YELLOW}Admin Username: Not found${NC}"
+        cat "$creds_file" | grep "Admin Password:" || echo -e "${YELLOW}Admin Password: Not found${NC}"
+        echo ""
+        echo -e "${GREEN}Complete credentials available in: $creds_file${NC}"
+    else
+        echo -e "${YELLOW}Credentials file not found: $creds_file${NC}"
+    fi
+    echo ""
 }
 
-# Main execution function coordinating all setup phases
+# Main execution function coordinating all setup phases using helper modules
 main() {
     echo -e "${BLUE}================================================${NC}"
     echo -e "${BLUE}      BunkerWeb Setup Script${NC}"
@@ -1792,7 +1854,6 @@ main() {
     echo -e "${GREEN}• Greylist Enabled: $USE_GREYLIST${NC}"
     echo -e "${GREEN}• Redis Enabled: $REDIS_ENABLED${NC}"
     echo -e "${GREEN}• Demo Site: $DEMOSITE${NC}"
-    echo -e "${GREEN}• Blacklist Enabled: $USE_BLACKLIST${NC}"
     echo -e "${GREEN}• Network Detection: $AUTO_DETECT_NETWORK_CONFLICTS${NC}"
     echo ""
     
@@ -1800,11 +1861,13 @@ main() {
     local docker_subnet=$(simple_network_detection)
     echo -e "${GREEN}✓ Using subnet: $docker_subnet${NC}"
     
-    echo -e "${BLUE}Step 2: API Whitelist Auto-Detection${NC}"
-    local api_whitelist=$(build_comprehensive_api_whitelist "$docker_subnet")
+    echo -e "${BLUE}Step 2: NAT Detection and API Whitelist Configuration${NC}"
+    local api_whitelist=$(detect_nat_and_build_whitelist "$docker_subnet")
     
     echo -e "${BLUE}Step 3: Enhanced Credential Management with Release Channel${NC}"
-    if ! manage_credentials "$creds_file" "$REDIS_ENABLED" "$DEPLOYMENT_NAME" "$TEMPLATE_FILE" "$SETUP_MODE" "$FQDN" "$SERVER_NAME" "$docker_subnet" "$PRIVATE_NETWORKS_ALREADY_IN_USE" "$RELEASE_CHANNEL"; then
+    if ! manage_credentials "$creds_file" "$REDIS_ENABLED" "$DEPLOYMENT_NAME" "$TEMPLATE_FILE" \
+                           "$SETUP_MODE" "$FQDN" "$SERVER_NAME" "$docker_subnet" \
+                           "$PRIVATE_NETWORKS_ALREADY_IN_USE" "$RELEASE_CHANNEL"; then
         echo -e "${RED}✗ Credential management failed${NC}"
         exit 1
     fi
@@ -1819,7 +1882,12 @@ main() {
     
     echo -e "${BLUE}Release channel: $RELEASE_CHANNEL → Docker image tag: $image_tag${NC}"
     
-    if ! process_template_with_release_channel "$template_path" "$compose_file" "$MYSQL_PASSWORD" "$REDIS_PASSWORD" "$TOTP_SECRET" "$ADMIN_PASSWORD" "$FLASK_SECRET" "$ADMIN_USERNAME" "$AUTO_CERT_TYPE" "$AUTO_CERT_CONTACT" "$FQDN" "$SERVER_NAME" "$docker_subnet" "$SETUP_MODE" "$REDIS_ENABLED" "$RELEASE_CHANNEL" "$image_tag"; then
+    if ! process_template_with_release_channel "$template_path" "$compose_file" "$MYSQL_PASSWORD" \
+                                              "$REDIS_PASSWORD" "$TOTP_SECRET" "$ADMIN_PASSWORD" \
+                                              "$FLASK_SECRET" "$ADMIN_USERNAME" "$AUTO_CERT_TYPE" \
+                                              "$AUTO_CERT_CONTACT" "$FQDN" "$SERVER_NAME" \
+                                              "$docker_subnet" "$SETUP_MODE" "$REDIS_ENABLED" \
+                                              "$RELEASE_CHANNEL" "$image_tag"; then
         echo -e "${RED}✗ Template processing failed${NC}"
         exit 1
     fi
@@ -1831,13 +1899,16 @@ main() {
     fi
     
     echo -e "${BLUE}Step 6: Allowlist Configuration${NC}"
-    if ! manage_allowlist_configuration "$ALLOWLIST_IP" "$ALLOWLIST_COUNTRY" "$BLACKLIST_COUNTRY" "$ALLOWLIST_DNS" "$USE_ALLOWLIST" "$ALLOWLIST_MODE" "$ALLOWLIST_STATUS_CODE" "$compose_file" "$creds_file" "$FQDN"; then
+    if ! manage_allowlist_configuration "$ALLOWLIST_IP" "$ALLOWLIST_COUNTRY" "$BLACKLIST_COUNTRY" \
+                                       "$ALLOWLIST_DNS" "$USE_ALLOWLIST" "$ALLOWLIST_MODE" \
+                                       "$ALLOWLIST_STATUS_CODE" "$compose_file" "$creds_file" "$FQDN"; then
         echo -e "${RED}✗ Allowlist configuration failed${NC}"
         exit 1
     fi
     
     echo -e "${BLUE}Step 7: Greylist Configuration${NC}"
-    if ! manage_greylist_configuration "$GREYLIST_IP" "$GREYLIST_DNS" "$USE_GREYLIST" "$compose_file" "$creds_file" "$FQDN"; then
+    if ! manage_greylist_configuration "$GREYLIST_IP" "$GREYLIST_DNS" "$USE_GREYLIST" \
+                                      "$compose_file" "$creds_file" "$FQDN"; then
         echo -e "${RED}✗ Greylist configuration failed${NC}"
         exit 1
     fi
