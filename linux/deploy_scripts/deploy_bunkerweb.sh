@@ -409,8 +409,9 @@ main() {
         echo -n "Processing $file... "
         
         # Use new download function with verification
-        result=$(download_with_verification "$BASE_URL/$file" "$file")
-        case $? in
+        download_with_verification "$BASE_URL/$file" "$file"
+        download_result=$?
+        case $download_result in
             0) # Downloaded successfully
                 downloaded_count=$((downloaded_count + 1))
                 ;;
@@ -424,43 +425,44 @@ main() {
     done
     
     # Download special files with custom URLs
-    echo "Downloading special files..."
+    echo "Downloading additional helper files..."
     
-    # Download helper_fqdn.sh
-    echo -n "Processing helper_fqdn.sh (special URL)... "
-    helper_fqdn_url="https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment"
-    helper_fqdn_url+="/refs/heads/main/linux/deploy_scripts/helper-scripts/helper_fqdn.sh"
-    
-    result=$(download_with_verification "$helper_fqdn_url" "helper_fqdn.sh")
-    case $? in
-        0) # Downloaded successfully
-            downloaded_count=$((downloaded_count + 1))
-            ;;
-        1) # Download failed
-            failed_count=$((failed_count + 1))
-            ;;
-        2) # File up to date
-            uptodate_count=$((uptodate_count + 1))
-            ;;
-    esac
-    
-    # Download helper_net_nat.sh
-    echo -n "Processing helper_net_nat.sh (special URL)... "
-    helper_net_nat_url="https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment"
-    helper_net_nat_url+="/refs/heads/main/linux/deploy_scripts/helper-scripts/helper_net_nat.sh"
-    
-    result=$(download_with_verification "$helper_net_nat_url" "helper_net_nat.sh")
-    case $? in
-        0) # Downloaded successfully
-            downloaded_count=$((downloaded_count + 1))
-            ;;
-        1) # Download failed
-            failed_count=$((failed_count + 1))
-            ;;
-        2) # File up to date
-            uptodate_count=$((uptodate_count + 1))
-            ;;
-    esac
+    # Process additional helper files one by one
+    for file in helper_fqdn.sh helper_net_nat.sh; do
+        echo -n "Processing $file (special URL)... "
+        
+        # Set URL based on filename
+        case "$file" in
+            "helper_fqdn.sh")
+                file_url="https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment"
+                file_url+="/refs/heads/main/linux/deploy_scripts/helper-scripts/helper_fqdn.sh"
+                ;;
+            "helper_net_nat.sh")
+                file_url="https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment"
+                file_url+="/refs/heads/main/linux/deploy_scripts/helper-scripts/helper_net_nat.sh"
+                ;;
+            *)
+                echo "FAILED (unknown file)"
+                failed_count=$((failed_count + 1))
+                continue
+                ;;
+        esac
+        
+        # Use new download function with verification
+        download_with_verification "$file_url" "$file"
+        download_result=$?
+        case $download_result in
+            0) # Downloaded successfully
+                downloaded_count=$((downloaded_count + 1))
+                ;;
+            1) # Download failed
+                failed_count=$((failed_count + 1))
+                ;;
+            2) # File up to date
+                uptodate_count=$((uptodate_count + 1))
+                ;;
+        esac
+    done
     
     # Report statistics
     log_step "Download Summary"
