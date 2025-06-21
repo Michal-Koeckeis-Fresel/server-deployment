@@ -9,7 +9,7 @@
 # SPDX-License-Identifier: MIT OR AGPL-3.0-or-later
 #
 
-# Deploy BunkerWeb - Download project files
+# Deploy BunkerWeb - Download project files to /data/BunkerWeb
 
 # Load debug configuration if available
 if [ -f "/root/BunkerWeb.conf" ]; then
