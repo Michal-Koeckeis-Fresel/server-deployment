@@ -426,34 +426,41 @@ main() {
     # Download special files with custom URLs
     echo "Downloading special files..."
     
-    # Define helper scripts with custom URLs
-    declare -A special_files=(
-        ["helper_fqdn.sh"]="https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment"
-        ["helper_net_nat.sh"]="https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment"
-    )
-    special_files["helper_fqdn.sh"]+="/refs/heads/main/linux/deploy_scripts/helper-scripts/helper_fqdn.sh"
-    special_files["helper_net_nat.sh"]+="/refs/heads/main/linux/deploy_scripts/helper-scripts/helper_net_nat.sh"
+    # Download helper_fqdn.sh
+    echo -n "Processing helper_fqdn.sh (special URL)... "
+    helper_fqdn_url="https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment"
+    helper_fqdn_url+="/refs/heads/main/linux/deploy_scripts/helper-scripts/helper_fqdn.sh"
     
-    # Download each special file
-    for file in "${!special_files[@]}"; do
-        url="${special_files[$file]}"
-        
-        echo -n "Processing $file (special URL)... "
-        
-        # Use new download function with verification
-        result=$(download_with_verification "$url" "$file")
-        case $? in
-            0) # Downloaded successfully
-                downloaded_count=$((downloaded_count + 1))
-                ;;
-            1) # Download failed
-                failed_count=$((failed_count + 1))
-                ;;
-            2) # File up to date
-                uptodate_count=$((uptodate_count + 1))
-                ;;
-        esac
-    done
+    result=$(download_with_verification "$helper_fqdn_url" "helper_fqdn.sh")
+    case $? in
+        0) # Downloaded successfully
+            downloaded_count=$((downloaded_count + 1))
+            ;;
+        1) # Download failed
+            failed_count=$((failed_count + 1))
+            ;;
+        2) # File up to date
+            uptodate_count=$((uptodate_count + 1))
+            ;;
+    esac
+    
+    # Download helper_net_nat.sh
+    echo -n "Processing helper_net_nat.sh (special URL)... "
+    helper_net_nat_url="https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment"
+    helper_net_nat_url+="/refs/heads/main/linux/deploy_scripts/helper-scripts/helper_net_nat.sh"
+    
+    result=$(download_with_verification "$helper_net_nat_url" "helper_net_nat.sh")
+    case $? in
+        0) # Downloaded successfully
+            downloaded_count=$((downloaded_count + 1))
+            ;;
+        1) # Download failed
+            failed_count=$((failed_count + 1))
+            ;;
+        2) # File up to date
+            uptodate_count=$((uptodate_count + 1))
+            ;;
+    esac
     
     # Report statistics
     log_step "Download Summary"
