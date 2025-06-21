@@ -454,7 +454,7 @@ main() {
         fi
     fi
     
-    # Show what was downloaded
+    # Show what was downloaded 
     log_step "Files in directory:"
     ls -la /data/BunkerWeb/ | grep -v "^total" | grep -v "^d" || true
     
