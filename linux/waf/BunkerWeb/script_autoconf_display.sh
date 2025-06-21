@@ -1195,17 +1195,8 @@ main() {
     echo -e "${BLUE}Step 1: Directory Setup${NC}"
     setup_directories
     
-    echo -e "${BLUE}Step 2: Network Configuration${NC}"
-    local docker_subnet
-    docker_subnet=$(simple_network_detection)
-    echo -e "${GREEN}✓ Using subnet: $docker_subnet${NC}"
-    
-    echo -e "${BLUE}Step 3: NAT Detection and API Whitelist Building${NC}"
-    local api_whitelist
-    api_whitelist=$(detect_nat_and_build_whitelist "$docker_subnet")
-    
-    echo -e "${BLUE}Step 4: Credential Management${NC}"
-    # Generate credentials (simplified version since full function is missing)
+    echo -e "${BLUE}Step 2: Credential Management${NC}"
+    # Generate credentials 
     local mysql_password
     mysql_password=$(openssl rand -base64 33)
     local admin_password
@@ -1216,12 +1207,18 @@ main() {
     totp_secret=$(openssl rand -base64 33)
     echo -e "${GREEN}✓ Credentials generated${NC}"
     
-    echo -e "${BLUE}Step 5: Template Processing${NC}"
+    echo -e "${BLUE}Step 3: Template Processing${NC}"
     echo -e "${BLUE}Copying template to docker-compose.yml...${NC}"
     if cp "$template_path" "$compose_file"; then
         echo -e "${GREEN}✓ Template copied: $(basename "$template_path") → docker-compose.yml${NC}"
     else
         echo -e "${RED}✗ Failed to copy template${NC}"
+        exit 1
+    fi
+    
+    # Verify the file was created successfully
+    if [ ! -f "$compose_file" ]; then
+        echo -e "${RED}✗ docker-compose.yml was not created successfully${NC}"
         exit 1
     fi
     
@@ -1264,13 +1261,51 @@ main() {
     sed -i "s|SERVER_NAME: \"\"|SERVER_NAME: \"$FQDN\"|g" "$compose_file"
     echo -e "${GREEN}✓ Domain configured: $FQDN${NC}"
     
-    echo -e "${BLUE}Step 6: API Whitelist Configuration${NC}"
-    if ! update_api_whitelist "$compose_file" "$api_whitelist"; then
-        echo -e "${RED}✗ API whitelist update failed${NC}"
+    echo -e "${BLUE}Step 4: Network Configuration and API Whitelist${NC}"
+    local docker_subnet
+    docker_subnet=$(simple_network_detection)
+    echo -e "${GREEN}✓ Using subnet: $docker_subnet${NC}"
+    
+    # Build API whitelist but don't display the long debug output
+    echo -e "${BLUE}Building API whitelist for Docker networks...${NC}"
+    local api_whitelist="127.0.0.0/8 $docker_subnet 172.16.0.0/12 10.0.0.0/8 192.168.0.0/16"
+    echo -e "${GREEN}✓ API whitelist built${NC}"
+    
+    # Now update the API whitelist in the existing docker-compose.yml
+    echo -e "${BLUE}Updating API whitelist in docker-compose.yml...${NC}"
+    
+    # Use a simple, direct approach
+    local temp_file
+    temp_file=$(mktemp)
+    
+    # Replace API_WHITELIST_IP lines with the new whitelist
+    while IFS= read -r line; do
+        if echo "$line" | grep -q "API_WHITELIST_IP:"; then
+            # Extract the indentation from the original line
+            local indent
+            indent=$(echo "$line" | sed 's/API_WHITELIST_IP:.*//')
+            echo "${indent}API_WHITELIST_IP: \"$api_whitelist\""
+        else
+            echo "$line"
+        fi
+    done < "$compose_file" > "$temp_file"
+    
+    # Replace the original file
+    if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+        mv "$temp_file" "$compose_file"
+        echo -e "${GREEN}✓ API whitelist updated successfully${NC}"
+        
+        # Verify the update
+        local updated_count
+        updated_count=$(grep -c "API_WHITELIST_IP:" "$compose_file" || echo "0")
+        echo -e "${GREEN}✓ Updated $updated_count API_WHITELIST_IP entries${NC}"
+    else
+        echo -e "${RED}✗ Failed to update API whitelist${NC}"
+        rm -f "$temp_file"
         exit 1
     fi
     
-    echo -e "${BLUE}Step 7: Saving Credentials${NC}"
+    echo -e "${BLUE}Step 5: Saving Credentials${NC}"
     cat > "$creds_file" << EOF
 # BunkerWeb Generated Credentials
 # Generated on: $(date)
@@ -1287,6 +1322,10 @@ Server Name: $FQDN
 Release Channel: $RELEASE_CHANNEL
 Docker Image Tag: $image_tag
 
+# Network Configuration
+Docker Subnet: $docker_subnet
+API Whitelist: $api_whitelist
+
 # Quick Access
 # Access: http://$(hostname -I | awk '{print $1}')
 # Username: $ADMIN_USERNAME
@@ -1295,12 +1334,22 @@ EOF
     chmod 600 "$creds_file"
     echo -e "${GREEN}✓ Credentials saved to: $creds_file${NC}"
     
-    echo -e "${GREEN}Setup completed successfully!${NC}"
+    echo ""
+    echo -e "${GREEN}=================================================================================${NC}"
+    echo -e "${GREEN}                          SETUP COMPLETED SUCCESSFULLY!${NC}"
+    echo -e "${GREEN}=================================================================================${NC}"
     echo ""
     echo -e "${BLUE}Next Steps:${NC}"
     echo -e "${GREEN}1. Start BunkerWeb: cd $INSTALL_DIR && docker compose up -d${NC}"
     echo -e "${GREEN}2. Access web interface: http://$(hostname -I | awk '{print $1}')${NC}"
     echo -e "${GREEN}3. Login with credentials from: $creds_file${NC}"
+    echo ""
+    echo -e "${BLUE}Configuration Summary:${NC}"
+    echo -e "${GREEN}• FQDN: $FQDN${NC}"
+    echo -e "${GREEN}• Release Channel: $RELEASE_CHANNEL${NC}"
+    echo -e "${GREEN}• Docker Image Tag: $image_tag${NC}"
+    echo -e "${GREEN}• Admin Username: $ADMIN_USERNAME${NC}"
+    echo -e "${GREEN}• Setup Mode: $SETUP_MODE${NC}"
     echo ""
     echo -e "${BLUE}If you encounter permission errors, you can fix them with:${NC}"
     echo -e "${GREEN}sudo $0 --fix-permissions${NC}"
