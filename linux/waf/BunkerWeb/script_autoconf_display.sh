@@ -458,24 +458,85 @@ update_api_whitelist() {
     
     echo -e "${BLUE}Updating API whitelist in docker-compose.yml...${NC}"
     
-    # Use pipe delimiter instead of forward slash to avoid conflicts with CIDR notation
-    local escaped_whitelist
-    escaped_whitelist=$(printf '%s\n' "$api_whitelist" | sed 's/[[\.*^$()+?{|]/\\&/g')
+    # Debug: Show exactly what we received
+    echo -e "${BLUE}Debug - Raw API whitelist received:${NC}"
+    printf "<%s>\n" "$api_whitelist"
     
-    if sed -i "s|API_WHITELIST_IP: \".*\"|API_WHITELIST_IP: \"$escaped_whitelist\"|g" "$compose_file"; then
-        echo -e "${GREEN}✓ API whitelist updated successfully${NC}"
+    # Clean the whitelist - remove any existing escaping and normalize
+    local clean_whitelist
+    clean_whitelist=$(echo "$api_whitelist" | sed 's/\\//g')
+    
+    echo -e "${BLUE}Debug - Cleaned API whitelist:${NC}"
+    printf "<%s>\n" "$clean_whitelist"
+    
+    # Try multiple methods for robust replacement
+    local success=0
+    
+    # Method 1: Try with awk
+    echo -e "${BLUE}Attempting update with awk...${NC}"
+    local temp_file
+    temp_file=$(mktemp)
+    
+    awk -v new_whitelist="$clean_whitelist" '
+    /API_WHITELIST_IP:/ {
+        gsub(/API_WHITELIST_IP: ".*"/, "API_WHITELIST_IP: \"" new_whitelist "\"")
+    }
+    { print }
+    ' "$compose_file" > "$temp_file"
+    
+    if [ -f "$temp_file" ] && [ -s "$temp_file" ] && grep -q "API_WHITELIST_IP:" "$temp_file"; then
+        mv "$temp_file" "$compose_file"
+        success=1
+        echo -e "${GREEN}✓ API whitelist updated with awk${NC}"
+    else
+        rm -f "$temp_file"
+        echo -e "${YELLOW}⚠ Awk method failed, trying Perl...${NC}"
         
+        # Method 2: Try with Perl (more robust string handling)
+        if command -v perl >/dev/null 2>&1; then
+            if perl -i -pe "s/API_WHITELIST_IP: \".*\"/API_WHITELIST_IP: \"$clean_whitelist\"/g" "$compose_file" 2>/dev/null; then
+                success=1
+                echo -e "${GREEN}✓ API whitelist updated with Perl${NC}"
+            else
+                echo -e "${YELLOW}⚠ Perl method failed, trying manual method...${NC}"
+            fi
+        fi
+        
+        # Method 3: Manual line-by-line replacement (most reliable)
+        if [ $success -eq 0 ]; then
+            echo -e "${BLUE}Using manual replacement method...${NC}"
+            temp_file=$(mktemp)
+            
+            while IFS= read -r line; do
+                if echo "$line" | grep -q "API_WHITELIST_IP:"; then
+                    echo "      API_WHITELIST_IP: \"$clean_whitelist\""
+                else
+                    echo "$line"
+                fi
+            done < "$compose_file" > "$temp_file"
+            
+            if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+                mv "$temp_file" "$compose_file"
+                success=1
+                echo -e "${GREEN}✓ API whitelist updated with manual method${NC}"
+            else
+                rm -f "$temp_file"
+            fi
+        fi
+    fi
+    
+    # Verify the update was successful
+    if [ $success -eq 1 ]; then
         local updated_count
         updated_count=$(grep -c "API_WHITELIST_IP:" "$compose_file" || echo "0")
         echo -e "${GREEN}✓ Updated $updated_count API_WHITELIST_IP entries${NC}"
         
         echo -e "${BLUE}Verification - Updated API whitelist entries:${NC}"
-        grep "API_WHITELIST_IP:" "$compose_file" | sed 's/^\s*/  /' | \
-        cut -c1-100 | sed 's/$/.../'
+        grep "API_WHITELIST_IP:" "$compose_file" | sed 's/^\s*/  /'
         
         return 0
     else
-        echo -e "${RED}✗ Failed to update API whitelist${NC}"
+        echo -e "${RED}✗ Failed to update API whitelist with all methods${NC}"
         return 1
     fi
 }
