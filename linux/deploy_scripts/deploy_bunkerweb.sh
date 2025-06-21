@@ -235,19 +235,22 @@ download_with_verification() {
     fi
     
     # Remove existing file if it exists
-    [ -f "$file" ] && rm -f "$file"
+    if [ -f "$file" ]; then
+        rm -f "$file"
+    fi
     
     # Download the file
     if download_file "$url" "$file"; then
         if [ -f "$file" ] && [ -s "$file" ]; then
             # Verify size after download
-            local remote_size=$(get_remote_file_size "$url")
-            local local_size=$(get_local_file_size "$file")
+            local remote_size
+            local local_size
+            remote_size=$(get_remote_file_size "$url")
+            local_size=$(get_local_file_size "$file")
             
-            if [ -n "$remote_size" ] && [ "$remote_size" != "0" ] && \
-               [ "$remote_size" != "$local_size" ]; then
+            if [ -n "$remote_size" ] && [ "$remote_size" != "0" ] && [ "$remote_size" != "$local_size" ]; then
                 echo "FAILED (size mismatch after download: expected $remote_size, got $local_size)"
-                rm -f "$file" 2>/dev/null || true
+                rm -f "$file" 2>/dev/null
                 return 1
             fi
             
@@ -255,7 +258,7 @@ download_with_verification() {
             return 0
         else
             echo "FAILED (empty file)"
-            rm -f "$file" 2>/dev/null || true
+            rm -f "$file" 2>/dev/null
             return 1
         fi
     else
@@ -499,7 +502,7 @@ main() {
                 helper_fqdn.sh template_autoconf_display.yml BunkerWeb.conf; do
         if [ -f "$file" ] || [ -L "$file" ]; then
             # Special validation for BunkerWeb.conf
-            if [[ "$file" == "BunkerWeb.conf" ]]; then
+            if echo "$file" | grep -q "BunkerWeb.conf"; then
                 local target_file="/root/BunkerWeb.conf"
                 if [ -L "$file" ]; then
                     target_file=$(readlink "$file")
@@ -586,7 +589,7 @@ needs_download() {
     local file="$2"
     
     # Special handling for BunkerWeb.conf - always check if it's valid
-    if [[ "$file" == *"BunkerWeb.conf"* ]]; then
+    if echo "$file" | grep -q "BunkerWeb.conf"; then
         if ! is_bunkerweb_conf_valid "$file"; then
             echo "[INVALID CONFIG] File is empty, corrupted, or contains no meaningful content"
             return 0
