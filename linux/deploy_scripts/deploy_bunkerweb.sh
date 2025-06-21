@@ -81,7 +81,8 @@ install_required_packages() {
     # Detect package manager and install packages
     if command_exists apt-get; then
         log_info "Using apt package manager"
-        apt-get update -qq >/dev/null 2>&1 || log_warning "Failed to update package list"
+        apt-get update -qq >/dev/null 2>&1 || \
+            log_warning "Failed to update package list"
         if apt-get install -y $packages_to_install >/dev/null 2>&1; then
             log_success "Successfully installed packages via apt"
         else
@@ -161,14 +162,16 @@ download_file() {
     
     # Try curl first (preferred)
     if command_exists curl; then
-        if curl -sSL --connect-timeout 10 --max-time 30 --retry 2 --fail "$url" -o "$output_file" 2>/dev/null; then
+        if curl -sSL --connect-timeout 10 --max-time 30 --retry 2 --fail "$url" \
+                -o "$output_file" 2>/dev/null; then
             return 0
         fi
     fi
     
     # Fallback to wget
     if command_exists wget; then
-        if timeout 30 wget -q --timeout=10 --tries=2 "$url" -O "$output_file" 2>/dev/null; then
+        if timeout 30 wget -q --timeout=10 --tries=2 "$url" \
+                -O "$output_file" 2>/dev/null; then
             return 0
         fi
     fi
@@ -202,7 +205,8 @@ main() {
     log_info "Working in directory: /data/BunkerWeb"
     
     # Base URL for the repository
-    BASE_URL="https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/refs/heads/main/linux/waf/BunkerWeb"
+    BASE_URL="https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment"
+    BASE_URL+="/refs/heads/main/linux/waf/BunkerWeb"
     
     # Handle BunkerWeb.conf separately
     log_step "Checking for BunkerWeb.conf..."
@@ -283,7 +287,8 @@ main() {
         
         # Backup existing file in /root/ if it exists
         if [ -f "/root/BunkerWeb-credentials.txt" ]; then
-            mv "/root/BunkerWeb-credentials.txt" "/root/BunkerWeb-credentials.txt.backup.$(date +%Y%m%d_%H%M%S)"
+            mv "/root/BunkerWeb-credentials.txt" \
+               "/root/BunkerWeb-credentials.txt.backup.$(date +%Y%m%d_%H%M%S)"
             log_info "Backed up existing /root/BunkerWeb-credentials.txt"
         fi
         
@@ -316,7 +321,12 @@ main() {
     echo "Downloading main repository files..."
     
     # Process files one by one to avoid array issues
-    for file in script_autoconf_display.sh script_password_reset_display.sh script_template_selector.sh template_autoconf_display.yml template_basic_display.yml template_ui_integrated_display.yml template_sample_app_display.yml uninstall_BunkerWeb.sh helper_password_manager.sh helper_network_detection.sh helper_template_processor.sh helper_greylist.sh helper_allowlist.sh helper_release_channel_manager.sh helper_directory_layout.sh helper_bunkerweb_config_checker.sh helper_fqdn_lookup.sh fluent-bit.conf fluent_bit_parsers.txt; do
+    for file in script_autoconf_display.sh script_password_reset_display.sh script_template_selector.sh \
+                template_autoconf_display.yml template_basic_display.yml template_ui_integrated_display.yml \
+                template_sample_app_display.yml uninstall_BunkerWeb.sh helper_password_manager.sh \
+                helper_network_detection.sh helper_template_processor.sh helper_greylist.sh \
+                helper_allowlist.sh helper_release_channel_manager.sh helper_directory_layout.sh \
+                helper_bunkerweb_config_checker.sh helper_fqdn_lookup.sh fluent-bit.conf fluent_bit_parsers.txt; do
         echo -n "Processing $file... "
         
         # Skip if file already exists and is not empty
@@ -345,32 +355,41 @@ main() {
     # Download special files with custom URLs
     echo "Downloading special files..."
     
-    # helper_fqdn.sh from different repository
-    file="helper_fqdn.sh"
-    url="https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment/refs/heads/main/linux/deploy_scripts/helper-scripts/helper_fqdn.sh"
+    # Define helper scripts with custom URLs
+    declare -A special_files=(
+        ["helper_fqdn.sh"]="https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment"
+        ["helper_net_nat.sh"]="https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment"
+    )
+    special_files["helper_fqdn.sh"]+="/refs/heads/main/linux/deploy_scripts/helper-scripts/helper_fqdn.sh"
+    special_files["helper_net_nat.sh"]+="/refs/heads/main/linux/deploy_scripts/helper-scripts/helper_net_nat.sh"
     
-    echo -n "Processing $file (special URL)... "
-    
-    # Skip if file already exists and is not empty
-    if [ -f "$file" ] && [ -s "$file" ]; then
-        echo "SKIPPED (exists)"
-        skipped_count=$((skipped_count + 1))
-    else
-        # Download the file
-        if download_file "$url" "$file"; then
-            if [ -f "$file" ] && [ -s "$file" ]; then
-                echo "SUCCESS"
-                downloaded_count=$((downloaded_count + 1))
+    # Download each special file
+    for file in "${!special_files[@]}"; do
+        url="${special_files[$file]}"
+        
+        echo -n "Processing $file (special URL)... "
+        
+        # Skip if file already exists and is not empty
+        if [ -f "$file" ] && [ -s "$file" ]; then
+            echo "SKIPPED (exists)"
+            skipped_count=$((skipped_count + 1))
+        else
+            # Download the file
+            if download_file "$url" "$file"; then
+                if [ -f "$file" ] && [ -s "$file" ]; then
+                    echo "SUCCESS"
+                    downloaded_count=$((downloaded_count + 1))
+                else
+                    echo "FAILED (empty file)"
+                    rm -f "$file" 2>/dev/null || true
+                    failed_count=$((failed_count + 1))
+                fi
             else
-                echo "FAILED (empty file)"
-                rm -f "$file" 2>/dev/null || true
+                echo "FAILED (download error)"
                 failed_count=$((failed_count + 1))
             fi
-        else
-            echo "FAILED (download error)"
-            failed_count=$((failed_count + 1))
         fi
-    fi
+    done
     
     # Report statistics
     log_step "Download Summary"
@@ -386,7 +405,11 @@ main() {
     log_step "Setting executable permissions..."
     local executable_count=0
     
-    for script in script_autoconf_display.sh script_password_reset_display.sh script_template_selector.sh uninstall_BunkerWeb.sh helper_password_manager.sh helper_network_detection.sh helper_template_processor.sh helper_greylist.sh helper_allowlist.sh helper_release_channel_manager.sh helper_directory_layout.sh helper_bunkerweb_config_checker.sh helper_fqdn_lookup.sh helper_fqdn.sh; do
+    for script in script_autoconf_display.sh script_password_reset_display.sh script_template_selector.sh \
+                  uninstall_BunkerWeb.sh helper_password_manager.sh helper_network_detection.sh \
+                  helper_template_processor.sh helper_greylist.sh helper_allowlist.sh \
+                  helper_release_channel_manager.sh helper_directory_layout.sh \
+                  helper_bunkerweb_config_checker.sh helper_fqdn_lookup.sh helper_fqdn.sh helper_net_nat.sh; do
         if [ -f "$script" ]; then
             chmod +x "$script" && executable_count=$((executable_count + 1))
         fi
@@ -398,7 +421,8 @@ main() {
     log_step "Verifying critical files..."
     local missing_critical=0
     
-    for file in script_autoconf_display.sh script_template_selector.sh helper_release_channel_manager.sh helper_fqdn.sh template_autoconf_display.yml BunkerWeb.conf; do
+    for file in script_autoconf_display.sh script_template_selector.sh helper_release_channel_manager.sh \
+                helper_fqdn.sh template_autoconf_display.yml BunkerWeb.conf; do
         if [ -f "$file" ] || [ -L "$file" ]; then
             echo "✓ $file"
         else
