@@ -465,13 +465,13 @@ main() {
     echo "Downloading additional helper files..."
     
     # Process additional helper files one by one
-    for file in helper_fqdn.sh helper_net_nat.sh; do
+    for file in helper_net_fqdn.sh helper_net_nat.sh; do
         echo -n "Processing $file (special URL)... "
         
         # Set URL based on filename
-        if [ "$file" = "helper_fqdn.sh" ]; then
+        if [ "$file" = "helper_net_fqdn.sh" ]; then
             file_url="https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment"
-            file_url="${file_url}/refs/heads/main/linux/deploy_scripts/helper-scripts/helper_fqdn.sh"
+            file_url="${file_url}/refs/heads/main/linux/deploy_scripts/helper-scripts/helper_net_fqdn.sh"
         elif [ "$file" = "helper_net_nat.sh" ]; then
             file_url="https://raw.githubusercontent.com/Michal-Koeckeis-Fresel/server-deployment"
             file_url="${file_url}/refs/heads/main/linux/deploy_scripts/helper-scripts/helper_net_nat.sh"
@@ -511,7 +511,7 @@ main() {
                   uninstall_BunkerWeb.sh helper_password_manager.sh helper_network_detection.sh \
                   helper_template_processor.sh helper_greylist.sh helper_allowlist.sh \
                   helper_release_channel_manager.sh helper_directory_layout.sh \
-                  helper_bunkerweb_config_checker.sh helper_fqdn_lookup.sh helper_fqdn.sh \
+                  helper_bunkerweb_config_checker.sh helper_fqdn_lookup.sh helper_net_fqdn.sh \
                   helper_net_nat.sh; do
         if [ -f "$script" ]; then
             chmod +x "$script" && executable_count=$((executable_count + 1))
@@ -525,7 +525,7 @@ main() {
     local missing_critical=0
     
     for file in script_autoconf_display.sh script_template_selector.sh helper_release_channel_manager.sh \
-                helper_fqdn.sh template_autoconf_display.yml BunkerWeb.conf; do
+                helper_net_fqdn.sh template_autoconf_display.yml BunkerWeb.conf; do
         if [ -f "$file" ] || [ -L "$file" ]; then
             # Special validation for BunkerWeb.conf
             if echo "$file" | grep -q "BunkerWeb.conf"; then
