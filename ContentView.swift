@@ -60,6 +60,28 @@ struct ContentView: View {
                     .padding(.horizontal, 20)
                     .padding(.top, 16)
 
+                // Thermal Warning
+                if let thermalMessage = viewModel.thermalWarningMessage {
+                    HStack(spacing: 12) {
+                        Image(systemName: "thermometer.sun.fill")
+                            .foregroundColor(.red)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Thermal Alert")
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.red)
+                            Text(thermalMessage)
+                                .font(.caption2)
+                                .foregroundColor(.red)
+                        }
+                        Spacer()
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(Color.red.opacity(0.1))
+                    .cornerRadius(8)
+                }
+
                 // Battery Warning
                 if batteryManager.shouldShowLowBatteryWarning {
                     HStack(spacing: 12) {

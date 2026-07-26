@@ -39,6 +39,9 @@ struct SettingsView: View {
                         // Battery Status
                         BatteryStatusView()
 
+                        // System Pressure Status
+                        SystemPressureView()
+
                         // Permissions Status
                         PermissionStatusView()
 

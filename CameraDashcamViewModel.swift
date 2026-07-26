@@ -38,11 +38,13 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
     private let fileProtectionManager = FileProtectionManager()
     private let crashDetectionManager = CrashDetectionManager()
     private let storageLocationManager = StorageLocationManager.shared
+    private let systemPressureMonitor = SystemPressureMonitor.shared
 
     @Published var crashDetected = false
     @Published var emergencyBrakeDetected = false
     @Published var showCrashAlert = false
     @Published var impactEventType: ImpactEventType = .collision
+    @Published var thermalWarningMessage: String?
 
     override init() {
         super.init()
@@ -152,6 +154,16 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
             return
         }
 
+        if systemPressureMonitor.shouldPauseRecording {
+            errorMessage = "⚠️ Device under critical thermal load. Pause recording and let device cool down."
+            thermalWarningMessage = "Critical thermal pressure detected"
+            return
+        }
+
+        if systemPressureMonitor.shouldReduceQuality {
+            thermalWarningMessage = "Device under thermal pressure - video quality reduced"
+        }
+
         guard let recordingsPath = storageLocationManager.getRecordingsURL() else {
             errorMessage = "Storage location not available. Check settings."
             return
@@ -200,7 +212,22 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         chunkTimer = nil
         crashDetectionManager.stopMonitoring()
         recordingTime = "00:00"
+        thermalWarningMessage = nil
         updateStorageInfo()
+    }
+
+    private func checkThermalPressure() {
+        if systemPressureMonitor.shouldPauseRecording && isRecording {
+            stopRecording()
+            thermalWarningMessage = "Critical thermal pressure - recording paused automatically"
+            errorMessage = "🌡️ Device cooling required. Recording paused."
+        } else if systemPressureMonitor.shouldReduceQuality && isRecording {
+            if thermalWarningMessage == nil {
+                thermalWarningMessage = "Device under thermal pressure - video quality reduced"
+            }
+        } else if thermalWarningMessage != nil && !systemPressureMonitor.shouldReduceQuality {
+            thermalWarningMessage = nil
+        }
     }
 
     private func startNewChunk() {
@@ -241,6 +268,9 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
 
     private func checkChunkDuration() {
         guard isRecording, let chunkStart = chunkStartTime else { return }
+
+        checkThermalPressure()
+
         let elapsed = Int(Date().timeIntervalSince(chunkStart))
         let maxSeconds = chunkDurationMinutes * 60
 
