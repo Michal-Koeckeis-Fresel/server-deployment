@@ -11,6 +11,7 @@ A SwiftUI-based dashcam application for iOS that records video continuously, eve
 ✅ **Smart Storage** - Auto-deletes oldest unprotected videos when storage limit is reached  
 ✅ **File Protection** - Lock important videos to prevent accidental deletion  
 ✅ **Storage Management** - Set max storage in GB (1-100 GB, configurable)  
+✅ **Persistent Storage** - iCloud Drive option preserves files even if app is uninstalled  
 ✅ **High-Quality Video** - Records at device camera quality from all cameras  
 ✅ **Audio Included** - Captures stereo audio during recording  
 ✅ **Camera Status** - Real-time display of all camera recording status  
@@ -182,9 +183,10 @@ DashcamApp/
 ├── ContentView.swift                   # Recording UI and navigation
 ├── CameraDashcamViewModel.swift        # Multi-camera recording & control
 ├── CameraInfo.swift                    # Camera configuration & recorder
-├── SettingsView.swift                  # Settings for video duration & storage
+├── SettingsView.swift                  # Settings for duration, storage, location
 ├── FilesView.swift                     # File browser, protection & deletion
 ├── StorageManager.swift                # Storage calculations & cleanup
+├── StorageLocationManager.swift        # iCloud & on-device location selection
 ├── FileProtectionManager.swift         # File protection metadata
 ├── CrashDetectionManager.swift         # Impact detection (collision + braking)
 ├── INFO_PLIST_CONFIG.md               # Required configuration
@@ -403,6 +405,127 @@ Videos are automatically split into smaller files to reduce individual file size
 - Reduced memory usage per file
 - Faster save times
 - Better organization
+
+---
+
+## Storage Location Selection
+
+Choose where to store your dashcam recordings - either on device or in iCloud Drive.
+
+### Storage Options
+
+#### On Device (Local)
+- **Storage:** Phone's internal storage
+- **Access:** Fast, always available
+- **Persistence:** ❌ **DELETED when app is uninstalled**
+- **Backup:** Not backed up to iCloud
+- **Use Case:** Temporary recordings, short trips
+- **Warning:** Critical limitation - uninstalling app permanently deletes all footage
+
+#### iCloud Drive (Recommended)
+- **Storage:** Apple iCloud account space
+- **Access:** Requires internet connection to access
+- **Persistence:** ✅ **Files stay in iCloud even if app is uninstalled**
+- **Backup:** Automatically synced and backed up
+- **Use Case:** Long-term storage, evidence preservation
+- **Benefit:** Recordings survive app reinstall, system crashes, device loss
+
+### Setting Storage Location
+
+1. Open **Settings** (gear icon)
+2. Scroll to **Storage Location** section
+3. Choose:
+   - **iCloud Drive** (recommended)
+   - **On Device** (caution: data lost on uninstall)
+4. For iCloud option, ensure:
+   - iCloud is enabled: Settings > [Your Name] > iCloud
+   - Dashcam app has iCloud access enabled
+   - Sufficient iCloud storage available
+
+### Important Warning
+
+⚠️ **On Device Storage is DANGEROUS**
+
+If you choose "On Device":
+- Uninstalling the app = all recordings deleted
+- Updating the app = may delete old files
+- Clearing app cache = recordings lost
+- Device replacement = videos gone
+
+**Recommendation:** Use iCloud Drive for any important recordings.
+
+### Storage Size Considerations
+
+**On Device:**
+- Uses phone's storage directly
+- Competes with photos, apps, etc.
+- Limited by phone capacity
+
+**iCloud Drive:**
+- Uses iCloud storage quota (5GB free, upgradeable)
+- Separate from phone storage
+- Synced across devices
+- Can access recordings from other devices
+
+### Migration Between Locations
+
+**Switching from On Device → iCloud:**
+- Existing files are automatically migrated
+- New recordings go to iCloud
+- Previous device copies deleted after migration
+
+**Switching from iCloud → On Device:**
+- ⚠️ iCloud copies NOT downloaded
+- Only new recordings stored on device
+- Consider downloading important files first
+
+### iCloud Setup
+
+1. **Enable iCloud:**
+   - Settings → [Your Name] → iCloud
+   - Toggle iCloud Drive ON
+   - Ensure Dashcam is in app list
+
+2. **Check iCloud Storage:**
+   - Settings → [Your Name] → iCloud → Manage Storage
+   - Ensure sufficient space available
+   - Upgrade plan if needed (50GB, 200GB, 2TB options)
+
+3. **Access from Computer:**
+   - Visit iCloud.com
+   - Navigate to Files app
+   - Find "Dashcam Recordings" folder
+
+### File Organization
+
+**On Device:**
+```
+App Documents Folder
+└── dashcam_*.mov files
+```
+
+**iCloud Drive:**
+```
+iCloud Drive
+└── Dashcam Recordings/
+    └── dashcam_*.mov files
+```
+
+### Troubleshooting iCloud
+
+**iCloud not showing in settings:**
+- Not signed into iCloud
+- Go to Settings > [Your Name], sign in
+
+**Files not syncing:**
+- Check internet connection
+- Enable WiFi (iCloud prefers WiFi)
+- Wait a few minutes for sync
+
+**Insufficient storage:**
+- Upgrade iCloud plan
+- Delete old files
+- Disable iCloud Photos if not needed
 
 ---
 
@@ -738,10 +861,24 @@ Monitors:
 
 ### StorageManager
 Handles:
-- Total storage calculation
+- Total storage calculation from selected location
 - File cleanup when limit reached
 - Unprotected file deletion (oldest first)
 - Protection checking
+- Works with StorageLocationManager for path resolution
+
+### StorageLocationManager
+Manages:
+- Storage location selection (On Device vs iCloud)
+- iCloud Drive folder creation and management
+- Recording directory URL resolution
+- File migration between locations
+- iCloud availability checking
+- Persistent location preference via UserDefaults
+
+**Storage Options:**
+- `.onDevice` - App Documents folder (deleted on uninstall)
+- `.iCloud` - iCloud Drive folder (persists after uninstall)
 
 ### FileProtectionManager
 Maintains:

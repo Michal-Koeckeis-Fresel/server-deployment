@@ -37,6 +37,7 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
     private let storageManager = StorageManager()
     private let fileProtectionManager = FileProtectionManager()
     private let crashDetectionManager = CrashDetectionManager()
+    private let storageLocationManager = StorageLocationManager.shared
 
     @Published var crashDetected = false
     @Published var emergencyBrakeDetected = false
@@ -111,7 +112,10 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
             return
         }
 
-        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        guard let recordingsPath = storageLocationManager.getRecordingsURL() else {
+            errorMessage = "Storage location not available. Check settings."
+            return
+        }
 
         chunkURLs.removeAll()
         for (position, var camera) in cameras {
@@ -122,7 +126,7 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
 
             let timestamp = DateFormatter.iso8601.string(from: Date())
             let fileName = "dashcam_\(timestamp)_\(position.filePrefix)_chunk_0001.mov"
-            let outputURL = documentsPath.appendingPathComponent(fileName)
+            let outputURL = recordingsPath.appendingPathComponent(fileName)
             chunkURLs[position] = outputURL
 
             camera.startRecording(to: outputURL, delegate: self)
@@ -160,7 +164,10 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
     }
 
     private func startNewChunk() {
-        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        guard let recordingsPath = storageLocationManager.getRecordingsURL() else {
+            return
+        }
+
         let timestamp = DateFormatter.iso8601.string(from: Date())
 
         chunkURLs.removeAll()
@@ -174,7 +181,7 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
             }
 
             let fileName = "dashcam_\(timestamp)_\(position.filePrefix)_chunk_\(String(format: "%04d", currentChunkNumber)).mov"
-            let outputURL = documentsPath.appendingPathComponent(fileName)
+            let outputURL = recordingsPath.appendingPathComponent(fileName)
             chunkURLs[position] = outputURL
 
             camera.startRecording(to: outputURL, delegate: self)
@@ -213,8 +220,11 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
     }
 
     private func updateStorageInfo() {
-        let docPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        currentStorageGB = storageManager.calculateUsedStorage(at: docPath)
+        guard let recordingsPath = storageLocationManager.getRecordingsURL() else {
+            currentStorageGB = 0.0
+            return
+        }
+        currentStorageGB = storageManager.calculateUsedStorage(at: recordingsPath)
     }
 
     private func startTimerUpdate() {
@@ -276,10 +286,14 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
     }
 
     func getRecordedFiles() -> [URL] {
-        let docPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        guard let recordingsPath = storageLocationManager.getRecordingsURL() else {
+            errorMessage = "Storage location not available"
+            return []
+        }
+
         do {
             let files = try FileManager.default.contentsOfDirectory(
-                at: docPath,
+                at: recordingsPath,
                 includingPropertiesForKeys: [.contentModificationDateKey]
             ).filter { $0.pathExtension == "mov" }
             return files.sorted {

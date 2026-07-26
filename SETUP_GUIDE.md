@@ -60,6 +60,7 @@ Repeat this process for each of the following files:
 - `SettingsView.swift`
 - `FilesView.swift`
 - `StorageManager.swift`
+- `StorageLocationManager.swift`
 - `FileProtectionManager.swift`
 - `CrashDetectionManager.swift`
 
@@ -72,7 +73,7 @@ For each file:
 6. Copy the entire provided code into the file
 7. Save (Cmd+S)
 
-**Your project should now have 9 Swift files:**
+**Your project should now have 10 Swift files:**
 ```
 DashcamApp/
 ├── DashcamApp.swift
@@ -82,6 +83,7 @@ DashcamApp/
 ├── CameraDashcamViewModel.swift
 ├── CameraInfo.swift
 ├── StorageManager.swift
+├── StorageLocationManager.swift
 ├── FileProtectionManager.swift
 ├── CrashDetectionManager.swift
 └── Assets.xcassets

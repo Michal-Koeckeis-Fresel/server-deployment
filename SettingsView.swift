@@ -3,6 +3,9 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject var viewModel: CameraDashcamViewModel
     @Environment(\.dismiss) var dismiss
+    @State private var selectedStorageLocation = StorageLocationManager.shared.selectedLocation
+    @State private var showMigrationAlert = false
+    @State private var migrationMessage = ""
 
     var body: some View {
         ZStack {
@@ -157,8 +160,97 @@ struct SettingsView: View {
                         Spacer()
                     }
                     .padding(20)
+
+                    // Storage Location
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Label("Storage Location", systemImage: "externaldrive.fill")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                            Spacer()
+                        }
+
+                        VStack(spacing: 10) {
+                            ForEach(StorageLocation.allCases, id: \.self) { location in
+                                Button(action: {
+                                    let oldLocation = selectedStorageLocation
+                                    selectedStorageLocation = location
+                                    StorageLocationManager.shared.selectedLocation = location
+
+                                    if oldLocation != location && location == .onDevice {
+                                        migrationMessage = "⚠️ Files stored on device will be deleted if the app is uninstalled!"
+                                        showMigrationAlert = true
+                                    } else if oldLocation != location && location == .iCloud {
+                                        migrationMessage = "Your existing recordings will be migrated to iCloud Drive.\n\nMake sure iCloud is enabled in Settings > [Your Name] > iCloud."
+                                        showMigrationAlert = true
+                                        StorageLocationManager.shared.migrateRecordings(from: oldLocation)
+                                    }
+                                }) {
+                                    HStack(spacing: 12) {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(location.displayName)
+                                                .font(.subheadline)
+                                                .foregroundColor(.white)
+                                            Text(location.description)
+                                                .font(.caption)
+                                                .foregroundColor(.gray)
+                                        }
+                                        Spacer()
+                                        if selectedStorageLocation == location {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .foregroundColor(.blue)
+                                        }
+                                    }
+                                    .padding(12)
+                                    .background(selectedStorageLocation == location ? Color.blue.opacity(0.1) : Color.gray.opacity(0.05))
+                                    .cornerRadius(8)
+                                }
+                                .foregroundColor(.primary)
+                            }
+
+                            if selectedStorageLocation == .onDevice {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .foregroundColor(.red)
+                                    Text("Files will be deleted when app is uninstalled!")
+                                        .font(.caption)
+                                        .foregroundColor(.red)
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color.red.opacity(0.1))
+                                .cornerRadius(6)
+                            } else {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundColor(.green)
+                                    Text("Files persist even if app is uninstalled")
+                                        .font(.caption)
+                                        .foregroundColor(.green)
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color.green.opacity(0.1))
+                                .cornerRadius(6)
+                            }
+                        }
+
+                        Text(StorageLocation.iCloud.rawValue == selectedStorageLocation.rawValue ? "Enable iCloud in Settings > [Your Name] > iCloud > Dashcam App" : "")
+                            .font(.caption2)
+                            .foregroundColor(.orange)
+                            .padding(.top, 4)
+                    }
+                    .padding(16)
+                    .background(Color.gray.opacity(0.1))
+                    .cornerRadius(12)
                 }
+                .padding(20)
             }
+        }
+        .alert("Storage Location Changed", isPresented: $showMigrationAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(migrationMessage)
         }
     }
 }
