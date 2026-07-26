@@ -1,5 +1,6 @@
 import AVFoundation
 import SwiftUI
+import AudioToolbox
 
 enum SystemPressureLevel: String, CaseIterable {
     case nominal = "Normal"
@@ -53,6 +54,8 @@ class SystemPressureMonitor: NSObject, ObservableObject {
     private var captureDevices: [AVCaptureDevice] = []
     private var pressureObservers: [NSObjectProtocol] = []
     private var thermalObservers: [NSObjectProtocol] = []
+    private var lastAlertedPressureLevel: SystemPressureLevel = .nominal
+    private var audioPlayer: AVAudioPlayer?
 
     override init() {
         super.init()
@@ -163,17 +166,48 @@ class SystemPressureMonitor: NSObject, ObservableObject {
             shouldReduceQuality = false
             shouldPauseRecording = false
             recommendedFrameRate = 30
+            if lastAlertedPressureLevel != .nominal {
+                logPressureState("Pressure returned to normal")
+            }
         case .elevated:
             shouldReduceQuality = true
             shouldPauseRecording = false
             recommendedFrameRate = max(15, Int32(Float(24) * (1.0 - thermalPressure)))
+            if lastAlertedPressureLevel == .nominal {
+                playPressureAlert()
+            }
         case .critical:
             shouldReduceQuality = true
             shouldPauseRecording = true
             recommendedFrameRate = 15
+            if lastAlertedPressureLevel != .critical {
+                playPressureAlert()
+            }
         }
 
+        lastAlertedPressureLevel = pressureLevel
         logPressureState("Pressure level: \(pressureLevel.rawValue), Thermal: \(String(format: "%.2f", thermalPressure)), FPS: \(recommendedFrameRate)")
+    }
+
+    private func playPressureAlert() {
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback, options: .defaultToSpeaker)
+            try AVAudioSession.sharedInstance().setActive(true)
+
+            guard let soundURL = Bundle.main.url(forResource: "alert", withExtension: "wav") else {
+                playSystemAlert()
+                return
+            }
+
+            audioPlayer = try AVAudioPlayer(contentsOf: soundURL)
+            audioPlayer?.play()
+        } catch {
+            playSystemAlert()
+        }
+    }
+
+    private func playSystemAlert() {
+        AudioServicesPlaySystemSound(1007)
     }
 
     private func logPressureState(_ message: String) {
