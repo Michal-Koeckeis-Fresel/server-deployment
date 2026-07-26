@@ -10,6 +10,7 @@ struct SettingsView: View {
     @State private var selectedCodec = VideoCodecManager.shared.selectedCodec
     @State private var showMigrationAlert = false
     @State private var migrationMessage = ""
+    private let storageManager = StorageManager()
 
     var body: some View {
         ZStack {
@@ -404,6 +405,72 @@ struct SettingsView: View {
                         .background(Color.gray.opacity(0.1))
                         .cornerRadius(12)
 
+                        // Reserved System Space
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Label("Reserved System Space", systemImage: "lock.fill")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                                Spacer()
+                                Text(String(format: "%.1f GB", viewModel.reservedSystemSpaceGB))
+                                    .font(.headline)
+                                    .foregroundColor(.blue)
+                            }
+
+                            VStack(spacing: 12) {
+                                HStack(spacing: 12) {
+                                    ForEach([1.0, 3.0, 5.0, 10.0], id: \.self) { gb in
+                                        Button(action: { viewModel.reservedSystemSpaceGB = gb }) {
+                                            Text(String(format: "%.0f GB", gb))
+                                                .font(.caption)
+                                                .frame(maxWidth: .infinity)
+                                                .padding(.vertical, 8)
+                                                .background(viewModel.reservedSystemSpaceGB == gb ? Color.blue : Color.gray.opacity(0.2))
+                                                .foregroundColor(viewModel.reservedSystemSpaceGB == gb ? .white : .gray)
+                                                .cornerRadius(8)
+                                        }
+                                    }
+                                }
+
+                                VStack(spacing: 6) {
+                                    HStack {
+                                        Text("Custom:")
+                                            .font(.caption)
+                                            .foregroundColor(.gray)
+                                        Spacer()
+                                        Text(String(format: "%.1f GB", viewModel.reservedSystemSpaceGB))
+                                            .font(.caption)
+                                            .foregroundColor(.white)
+                                    }
+                                    Slider(
+                                        value: $viewModel.reservedSystemSpaceGB,
+                                        in: 1...50,
+                                        step: 0.5
+                                    )
+                                    .tint(.blue)
+                                }
+                            }
+
+                            Text("Prevents the app from using all device storage, ensuring the system remains responsive. The app will not store more than (Device Storage - Reserved Space).")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+
+                            HStack(spacing: 8) {
+                                Image(systemName: "info.circle.fill")
+                                    .foregroundColor(.blue)
+                                Text("Device Storage: \(String(format: "%.1f GB", storageManager.getDeviceTotalStorage()))")
+                                    .font(.caption2)
+                                    .foregroundColor(.blue)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color.blue.opacity(0.1))
+                            .cornerRadius(6)
+                        }
+                        .padding(16)
+                        .background(Color.gray.opacity(0.1))
+                        .cornerRadius(12)
+
                         // Current Storage Info
                         VStack(alignment: .leading, spacing: 12) {
                             HStack {
@@ -414,7 +481,8 @@ struct SettingsView: View {
                             }
 
                             VStack(spacing: 12) {
-                                ProgressView(value: min(viewModel.currentStorageGB / viewModel.maxStorageGB, 1.0))
+                                let effectiveMax = storageManager.getEffectiveMaxStorage(userMax: viewModel.maxStorageGB, reservedGB: viewModel.reservedSystemSpaceGB)
+                                ProgressView(value: min(viewModel.currentStorageGB / effectiveMax, 1.0))
                                     .tint(.blue)
 
                                 HStack {
@@ -422,7 +490,7 @@ struct SettingsView: View {
                                         .font(.caption)
                                         .foregroundColor(.gray)
                                     Spacer()
-                                    Text(String(format: "%.2f GB available", max(0, viewModel.maxStorageGB - viewModel.currentStorageGB)))
+                                    Text(String(format: "%.2f GB available", max(0, effectiveMax - viewModel.currentStorageGB)))
                                         .font(.caption)
                                         .foregroundColor(.gray)
                                 }

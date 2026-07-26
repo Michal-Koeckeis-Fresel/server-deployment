@@ -19,12 +19,39 @@ class StorageManager {
         }
     }
 
-    func checkAndCleanupIfNeeded(maxStorageGB: Double, protectionManager: FileProtectionManager) async {
+    func getDeviceTotalStorage() -> Double {
+        do {
+            let attributes = try FileManager.default.attributesOfFileSystem(forPath: NSHomeDirectory())
+            let totalSize = (attributes[.systemSize] as? NSNumber)?.doubleValue ?? 0
+            return totalSize / (1024 * 1024 * 1024)
+        } catch {
+            return 0.0
+        }
+    }
+
+    func getDeviceFreeSpace() -> Double {
+        do {
+            let attributes = try FileManager.default.attributesOfFileSystem(forPath: NSHomeDirectory())
+            let freeSize = (attributes[.systemFreeSize] as? NSNumber)?.doubleValue ?? 0
+            return freeSize / (1024 * 1024 * 1024)
+        } catch {
+            return 0.0
+        }
+    }
+
+    func getEffectiveMaxStorage(userMax: Double, reservedGB: Double) -> Double {
+        let totalStorage = getDeviceTotalStorage()
+        let maxAllowedByDevice = max(0, totalStorage - reservedGB)
+        return min(userMax, maxAllowedByDevice)
+    }
+
+    func checkAndCleanupIfNeeded(maxStorageGB: Double, reservedSpaceGB: Double, protectionManager: FileProtectionManager) async {
         let docPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let currentUsage = calculateUsedStorage(at: docPath)
+        let effectiveMax = getEffectiveMaxStorage(userMax: maxStorageGB, reservedGB: reservedSpaceGB)
 
-        if currentUsage > maxStorageGB {
-            await deleteOldestUnprotectedFiles(at: docPath, protectionManager: protectionManager, maxStorageGB: maxStorageGB)
+        if currentUsage > effectiveMax {
+            await deleteOldestUnprotectedFiles(at: docPath, protectionManager: protectionManager, maxStorageGB: effectiveMax)
         }
     }
 

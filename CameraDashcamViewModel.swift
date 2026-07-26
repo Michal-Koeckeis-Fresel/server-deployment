@@ -15,6 +15,16 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
             checkStorageLimit()
         }
     }
+    @Published var reservedSystemSpaceGB: Double = UserDefaults.standard.double(forKey: "reservedSystemSpaceGB") {
+        didSet {
+            let clamped = max(1.0, min(50.0, reservedSystemSpaceGB))
+            if clamped != reservedSystemSpaceGB {
+                reservedSystemSpaceGB = clamped
+            }
+            UserDefaults.standard.set(reservedSystemSpaceGB, forKey: "reservedSystemSpaceGB")
+            checkStorageLimit()
+        }
+    }
     @Published var chunkDurationMinutes: Int = UserDefaults.standard.integer(forKey: "chunkDurationMinutes") {
         didSet {
             let clamped = max(1, min(15, chunkDurationMinutes))
@@ -65,6 +75,9 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         super.init()
         if UserDefaults.standard.double(forKey: "maxStorageGB") == 0 {
             maxStorageGB = 10.0
+        }
+        if UserDefaults.standard.double(forKey: "reservedSystemSpaceGB") == 0 {
+            reservedSystemSpaceGB = 5.0
         }
         if UserDefaults.standard.integer(forKey: "chunkDurationMinutes") == 0 {
             chunkDurationMinutes = 5
@@ -360,6 +373,7 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         Task {
             await storageManager.checkAndCleanupIfNeeded(
                 maxStorageGB: maxStorageGB,
+                reservedSpaceGB: reservedSystemSpaceGB,
                 protectionManager: fileProtectionManager
             )
             updateStorageInfo()
