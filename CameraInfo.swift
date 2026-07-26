@@ -39,7 +39,10 @@ struct CameraRecorder {
     let position: CameraPosition
     var captureSession: AVCaptureSession?
     var videoOutput: AVCaptureMovieFileOutput?
+    var videoDataOutput: AVCaptureVideoDataOutput?
     var videoInput: AVCaptureDeviceInput?
+    var realtimeVideoWriter: RealtimeVideoWriter?
+    var watermarkGenerator: WatermarkTextGenerator?
     var isRecording: Bool = false
     var currentURL: URL?
     var isAvailable: Bool = false
@@ -243,7 +246,7 @@ struct CameraRecorder {
         }
     }
 
-    mutating func startRecording(to url: URL, delegate: AVCaptureFileOutputRecordingDelegate) {
+    mutating func startRecording(to url: URL, delegate: AVCaptureFileOutputRecordingDelegate, withWatermark watermarkGenerator: WatermarkTextGenerator? = nil) {
         guard let videoOutput = videoOutput, captureSession?.isRunning == true else {
             print("Error: Camera not ready for recording")
             return
@@ -255,8 +258,40 @@ struct CameraRecorder {
             }
 
             self.currentURL = url
-            videoOutput.startRecording(to: url, recordingDelegate: delegate)
+
+            if let watermarkGenerator = watermarkGenerator {
+                self.setupWatermarkedRecording(to: url, delegate: delegate, watermarkGenerator: watermarkGenerator)
+            } else {
+                videoOutput.startRecording(to: url, recordingDelegate: delegate)
+            }
+
             self.isRecording = true
+        }
+    }
+
+    private mutating func setupWatermarkedRecording(to url: URL, delegate: AVCaptureFileOutputRecordingDelegate, watermarkGenerator: WatermarkTextGenerator) {
+        self.watermarkGenerator = watermarkGenerator
+
+        let writer = RealtimeVideoWriter()
+        self.realtimeVideoWriter = writer
+
+        let videoSettings: [String: Any] = [
+            AVVideoCodecKey: AVVideoCodecType.h264,
+            AVVideoWidthKey: 1920,
+            AVVideoHeightKey: 1080
+        ]
+
+        let audioSettings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatMPEG4AAC,
+            AVNumberOfChannelsKey: 2,
+            AVSampleRateKey: 44100
+        ]
+
+        do {
+            try writer.startRecording(to: url, videoSettings: videoSettings, audioSettings: audioSettings, sourceVideoTrack: videoInput)
+            print("Watermarked recording started for \(position.rawValue)")
+        } catch {
+            print("Failed to start watermarked recording: \(error)")
         }
     }
 
@@ -266,10 +301,20 @@ struct CameraRecorder {
         }
 
         sessionQueue.async {
-            if videoOutput.isRecording {
+            if let realtimeWriter = self.realtimeVideoWriter {
+                realtimeWriter.finishWriting { success, error in
+                    if success {
+                        print("Watermarked video saved successfully")
+                    } else if let error = error {
+                        print("Error saving watermarked video: \(error)")
+                    }
+                }
+                self.realtimeVideoWriter = nil
+                self.watermarkGenerator = nil
+            } else if videoOutput.isRecording {
                 videoOutput.stopRecording()
-                self.isRecording = false
             }
+            self.isRecording = false
         }
     }
 
