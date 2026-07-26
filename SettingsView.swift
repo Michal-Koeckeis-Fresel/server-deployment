@@ -38,6 +38,33 @@ struct SettingsView: View {
 
                 ScrollView {
                     VStack(spacing: 24) {
+                        // Performance Dashboard Quick Access
+                        NavigationLink(destination: PerformanceDashboardView()) {
+                            HStack(spacing: 12) {
+                                Image(systemName: "chart.line.uptrend.xyaxis")
+                                    .foregroundColor(.green)
+                                    .font(.system(size: 18))
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Performance Dashboard")
+                                        .font(.subheadline)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.white)
+                                    Text("View detailed metrics and analytics")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                }
+
+                                Spacer()
+
+                                Image(systemName: "chevron.right")
+                                    .foregroundColor(.gray)
+                            }
+                            .padding(16)
+                            .background(Color.gray.opacity(0.1))
+                            .cornerRadius(12)
+                        }
+
                         // Appearance Settings
                         AppearanceView()
 
