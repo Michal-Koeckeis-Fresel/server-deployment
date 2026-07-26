@@ -644,9 +644,89 @@ struct SettingsView: View {
                                         .labelsHidden()
                                 }
 
+                                // Manual/Automatic Mode Selection
+                                VStack(spacing: 10) {
+                                    HStack(spacing: 12) {
+                                        Button(action: { nightModeManager.isAutomatic = false }) {
+                                            HStack(spacing: 8) {
+                                                Image(systemName: nightModeManager.isAutomatic ? "circle" : "circle.fill")
+                                                Text("Manual")
+                                                    .font(.caption)
+                                                    .fontWeight(.semibold)
+                                            }
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 8)
+                                            .background(!nightModeManager.isAutomatic ? Color.blue.opacity(0.2) : Color.gray.opacity(0.1))
+                                            .foregroundColor(!nightModeManager.isAutomatic ? .blue : .gray)
+                                            .cornerRadius(8)
+                                        }
+
+                                        Button(action: { nightModeManager.isAutomatic = true }) {
+                                            HStack(spacing: 8) {
+                                                Image(systemName: nightModeManager.isAutomatic ? "circle.fill" : "circle")
+                                                Text("Automatic")
+                                                    .font(.caption)
+                                                    .fontWeight(.semibold)
+                                            }
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 8)
+                                            .background(nightModeManager.isAutomatic ? Color.blue.opacity(0.2) : Color.gray.opacity(0.1))
+                                            .foregroundColor(nightModeManager.isAutomatic ? .blue : .gray)
+                                            .cornerRadius(8)
+                                        }
+                                    }
+                                }
+
                                 Text(nightModeManager.getNightModeDescription())
                                     .font(.caption)
                                     .foregroundColor(.gray)
+
+                                // Automatic Mode Threshold Control
+                                if nightModeManager.isAutomatic {
+                                    VStack(spacing: 10) {
+                                        HStack {
+                                            Text("Brightness Threshold")
+                                                .font(.caption)
+                                                .foregroundColor(.gray)
+                                            Spacer()
+                                            Text(String(format: "%.1f EV", nightModeManager.brightnessThreshold))
+                                                .font(.caption)
+                                                .fontWeight(.semibold)
+                                                .foregroundColor(.white)
+                                        }
+
+                                        Slider(
+                                            value: $nightModeManager.brightnessThreshold,
+                                            in: -8.0...(-2.0),
+                                            step: 0.5
+                                        )
+                                        .tint(.blue)
+
+                                        HStack(spacing: 20) {
+                                            Text("Very Dark")
+                                                .font(.caption2)
+                                                .foregroundColor(.gray)
+                                            Spacer()
+                                            Text("Bright")
+                                                .font(.caption2)
+                                                .foregroundColor(.gray)
+                                        }
+
+                                        HStack {
+                                            Text("Current Brightness")
+                                                .font(.caption)
+                                                .foregroundColor(.gray)
+                                            Spacer()
+                                            Text(String(format: "%.1f EV", nightModeManager.currentBrightness))
+                                                .font(.caption)
+                                                .fontWeight(.semibold)
+                                                .foregroundColor(nightModeManager.currentBrightness < nightModeManager.brightnessThreshold ? .red : .green)
+                                        }
+                                    }
+                                    .padding(10)
+                                    .background(Color.orange.opacity(0.05))
+                                    .cornerRadius(6)
+                                }
 
                                 VStack(spacing: 6) {
                                     HStack(spacing: 8) {
@@ -657,9 +737,15 @@ struct SettingsView: View {
                                                 .font(.caption2)
                                                 .fontWeight(.semibold)
                                                 .foregroundColor(.blue)
-                                            Text("Automatically boosts video brightness and reduces noise in dark conditions")
-                                                .font(.caption2)
-                                                .foregroundColor(.blue)
+                                            if nightModeManager.isAutomatic {
+                                                Text("Automatically boosts brightness when scene gets darker than threshold")
+                                                    .font(.caption2)
+                                                    .foregroundColor(.blue)
+                                            } else {
+                                                Text("Boosts video brightness and reduces noise in dark conditions")
+                                                    .font(.caption2)
+                                                    .foregroundColor(.blue)
+                                            }
                                         }
                                     }
                                 }

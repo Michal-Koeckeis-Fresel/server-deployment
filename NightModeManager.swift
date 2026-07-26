@@ -10,12 +10,38 @@ class NightModeManager: NSObject, ObservableObject {
             UserDefaults.standard.set(isEnabled, forKey: "nightModeEnabled")
         }
     }
+    @Published var isAutomatic: Bool = UserDefaults.standard.bool(forKey: "nightModeAutomatic") {
+        didSet {
+            UserDefaults.standard.set(isAutomatic, forKey: "nightModeAutomatic")
+            if isAutomatic {
+                startBrightnessMonitoring()
+            } else {
+                stopBrightnessMonitoring()
+            }
+        }
+    }
+    @Published var brightnessThreshold: Double = UserDefaults.standard.double(forKey: "nightModeBrightnessThreshold") {
+        didSet {
+            let clamped = max(-8.0, min(-2.0, brightnessThreshold))
+            if clamped != brightnessThreshold {
+                brightnessThreshold = clamped
+            }
+            UserDefaults.standard.set(brightnessThreshold, forKey: "nightModeBrightnessThreshold")
+        }
+    }
     @Published var isSupported: Bool = false
     @Published var isActive: Bool = false
+    @Published var currentBrightness: Double = 0.0
+
+    private var brightnessMonitorTimer: Timer?
+    private var captureDevice: AVCaptureDevice?
 
     override init() {
         super.init()
         checkNightModeSupport()
+        if UserDefaults.standard.double(forKey: "nightModeBrightnessThreshold") == 0 {
+            brightnessThreshold = -5.0
+        }
     }
 
     private func checkNightModeSupport() {
@@ -23,7 +49,7 @@ class NightModeManager: NSObject, ObservableObject {
     }
 
     func enableNightMode(for device: AVCaptureDevice) {
-        guard isEnabled && isSupported else { return }
+        guard (isEnabled || isAutomatic) && isSupported else { return }
 
         do {
             try device.lockForConfiguration()
@@ -35,6 +61,11 @@ class NightModeManager: NSObject, ObservableObject {
             }
 
             device.unlockForConfiguration()
+            self.captureDevice = device
+
+            if isAutomatic {
+                startBrightnessMonitoring()
+            }
         } catch {
             print("Failed to enable Night Mode: \(error.localizedDescription)")
         }
@@ -50,6 +81,7 @@ class NightModeManager: NSObject, ObservableObject {
 
             device.unlockForConfiguration()
             isActive = false
+            stopBrightnessMonitoring()
         } catch {
             print("Failed to disable Night Mode: \(error.localizedDescription)")
         }
@@ -59,6 +91,48 @@ class NightModeManager: NSObject, ObservableObject {
         isActive = device.isLowLightBoostEnabled
     }
 
+    private func startBrightnessMonitoring() {
+        guard isAutomatic, brightnessMonitorTimer == nil else { return }
+
+        brightnessMonitorTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            self?.checkBrightnessAndToggleNightMode()
+        }
+    }
+
+    private func stopBrightnessMonitoring() {
+        brightnessMonitorTimer?.invalidate()
+        brightnessMonitorTimer = nil
+    }
+
+    private func checkBrightnessAndToggleNightMode() {
+        guard let device = captureDevice else { return }
+
+        let exposure = device.exposureTargetBias
+        currentBrightness = Double(exposure)
+
+        do {
+            try device.lockForConfiguration()
+
+            if device.isLowLightBoostSupported {
+                let shouldEnableLowLightBoost = exposure < Float(brightnessThreshold)
+
+                if shouldEnableLowLightBoost && !device.isLowLightBoostEnabled {
+                    device.automaticallyEnablesLowLightBoost = true
+                    isActive = true
+                    logNightMode("Auto Night Mode: Scene too dark (exposure: \(String(format: "%.2f", exposure)))")
+                } else if !shouldEnableLowLightBoost && device.isLowLightBoostEnabled && !isEnabled {
+                    device.automaticallyEnablesLowLightBoost = false
+                    isActive = false
+                    logNightMode("Auto Night Mode: Scene bright enough (exposure: \(String(format: "%.2f", exposure)))")
+                }
+            }
+
+            device.unlockForConfiguration()
+        } catch {
+            print("Failed to check brightness: \(error.localizedDescription)")
+        }
+    }
+
     private func logNightMode(_ message: String) {
         let timestamp = ISO8601DateFormatter().string(from: Date())
         print("[NightMode] [\(timestamp)] \(message)")
@@ -66,6 +140,13 @@ class NightModeManager: NSObject, ObservableObject {
 
     func getNightModeDescription() -> String {
         guard isSupported else { return "Night Mode not supported on this device" }
-        return "Automatically enhances video in low light conditions using Low Light Boost technology"
+        if isAutomatic {
+            return "Automatically enables Night Mode when brightness falls below threshold"
+        }
+        return "Manually enhanced video in low light conditions using Low Light Boost technology"
+    }
+
+    deinit {
+        stopBrightnessMonitoring()
     }
 }
