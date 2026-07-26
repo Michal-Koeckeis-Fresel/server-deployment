@@ -56,8 +56,11 @@ struct CameraRecorder {
             }
 
             let movieOutput = AVCaptureMovieFileOutput()
+
             if session.canAddOutput(movieOutput) {
                 session.addOutput(movieOutput)
+
+                configureVideoCodec(for: movieOutput)
             } else {
                 return false
             }
@@ -73,6 +76,21 @@ struct CameraRecorder {
         } catch {
             return false
         }
+    }
+
+    private func configureVideoCodec(for output: AVCaptureMovieFileOutput) {
+        let codecManager = VideoCodecManager.shared
+
+        if #available(iOS 17.0, *) {
+            for connection in output.connections {
+                if let videoConnection = connection as? AVCaptureVideoDataOutput {
+                    let settings = codecManager.getVideoSettings()
+                    videoConnection.videoSettings = settings
+                }
+            }
+        }
+
+        output.setOutputSettings(codecManager.getVideoSettings(), for: output.connections.first)
     }
 
     mutating func startRecording(to url: URL, delegate: AVCaptureFileOutputRecordingDelegate) {

@@ -59,6 +59,7 @@ Repeat this process for each of the following files:
 - `CameraDashcamViewModel.swift`
 - `SettingsView.swift`
 - `FilesView.swift`
+- `VideoCodecManager.swift`
 - `StorageManager.swift`
 - `StorageLocationManager.swift`
 - `FileProtectionManager.swift`
@@ -73,7 +74,7 @@ For each file:
 6. Copy the entire provided code into the file
 7. Save (Cmd+S)
 
-**Your project should now have 10 Swift files:**
+**Your project should now have 11 Swift files:**
 ```
 DashcamApp/
 ├── DashcamApp.swift
@@ -82,6 +83,7 @@ DashcamApp/
 ├── FilesView.swift
 ├── CameraDashcamViewModel.swift
 ├── CameraInfo.swift
+├── VideoCodecManager.swift
 ├── StorageManager.swift
 ├── StorageLocationManager.swift
 ├── FileProtectionManager.swift

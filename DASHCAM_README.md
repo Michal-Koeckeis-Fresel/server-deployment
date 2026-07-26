@@ -10,6 +10,7 @@ A SwiftUI-based dashcam application for iOS that records video continuously, eve
 ✅ **Impact Detection** - Detects collisions and emergency braking via accelerometer and auto-protects all files  
 ✅ **Smart Storage** - Auto-deletes oldest unprotected videos when storage limit is reached  
 ✅ **File Protection** - Lock important videos to prevent accidental deletion  
+✅ **Video Codec Selection** - Choose HEVC (40% smaller) or H.264 for compatibility  
 ✅ **Storage Management** - Set max storage in GB (1-100 GB, configurable)  
 ✅ **Persistent Storage** - iCloud Drive option preserves files even if app is uninstalled  
 ✅ **High-Quality Video** - Records at device camera quality from all cameras  
@@ -167,6 +168,32 @@ With 10 GB storage and 5-minute chunks:
 - ⚠️ Audio only from primary microphone
 - ⚠️ Some older devices may have thermal issues with sustained recording
 
+---
+
+## iOS 17+ Camera Enhancement
+
+The app uses **LockedCameraCapture** API on iOS 17+ for improved camera exclusivity and reliability.
+
+### LockedCameraCapture (iOS 17+)
+
+**Benefits:**
+- Exclusive camera access preventing interference from other apps
+- Enhanced recording reliability
+- Reduced risk of camera conflicts
+- Improved performance on iOS 17+
+
+**Fallback:**
+- iOS 14-16 use standard AVCaptureSession
+- Graceful degradation without LockedCameraCapture
+- Full functionality on all supported iOS versions
+
+**Automatic Detection:**
+- System automatically uses LockedCameraCapture if available
+- No user configuration needed
+- Transparent to end user
+
+This enhancement ensures dashcam recording won't be interrupted by other camera apps (FaceTime, Zoom, etc.) on newer devices.
+
 ### Future Enhancements
 
 - User toggle to disable specific cameras
@@ -183,8 +210,9 @@ DashcamApp/
 ├── ContentView.swift                   # Recording UI and navigation
 ├── CameraDashcamViewModel.swift        # Multi-camera recording & control
 ├── CameraInfo.swift                    # Camera configuration & recorder
-├── SettingsView.swift                  # Settings for duration, storage, location
+├── SettingsView.swift                  # Settings: duration, codec, storage, location
 ├── FilesView.swift                     # File browser, protection & deletion
+├── VideoCodecManager.swift             # HEVC/H.264 codec selection & settings
 ├── StorageManager.swift                # Storage calculations & cleanup
 ├── StorageLocationManager.swift        # iCloud & on-device location selection
 ├── FileProtectionManager.swift         # File protection metadata
@@ -529,6 +557,86 @@ iCloud Drive
 
 ---
 
+## Video Codec Selection
+
+Choose your video codec to balance quality, compatibility, and storage efficiency.
+
+### Codec Options
+
+#### HEVC (Recommended)
+- **Compression:** Best compression ratio (~40% smaller files)
+- **Quality:** Same quality as H.264 with smaller size
+- **Storage Savings:** ~700-800 MB/min vs ~1.2-1.4 GB with H.264
+- **Compatibility:** iOS 11+, all modern iPhones
+- **File Size:** 5-minute chunk = ~3.5-4 GB (vs 6-7 GB H.264)
+
+#### H.264 (Compatibility)
+- **Compression:** Standard compression
+- **Quality:** Good quality, proven codec
+- **Storage:** ~1.2-1.4 GB per minute
+- **Compatibility:** Maximum compatibility (older devices)
+- **File Size:** 5-minute chunk = ~6-7 GB (vs 3.5-4 GB HEVC)
+
+### Setting Video Codec
+
+1. Open **Settings** (gear icon)
+2. Scroll to **Video Codec** section
+3. Choose:
+   - **HEVC** (saves 40% storage) - Recommended
+   - **H.264** (maximum compatibility)
+4. Selection takes effect on next recording
+
+### Storage Impact
+
+With 10 GB iCloud storage:
+
+**HEVC:**
+- Per 5-min chunk: ~3.5-4 GB
+- Total capacity: ~2.5 chunk sets = ~12.5 minutes
+- Recommendation: 50 GB plan for longer recordings
+
+**H.264:**
+- Per 5-min chunk: ~6-7 GB
+- Total capacity: ~1.5 chunk sets = ~7.5 minutes
+- Recommendation: 100+ GB for daily use
+
+### Device Support
+
+**HEVC Support:**
+- All iOS 11+ devices
+- iPhone 6s and newer
+- iPad Air 2 and newer
+
+**H.264 Support:**
+- All iOS devices
+- Universal fallback option
+- For absolute maximum compatibility
+
+### Technical Details
+
+**HEVC Advantages:**
+- 40-50% better compression than H.264
+- Same visual quality
+- Industry standard for modern devices
+- Future-proofing
+
+**H.264 Advantages:**
+- Near-universal compatibility
+- Proven, stable codec
+- Playback on any device
+- Slower devices may handle better
+
+### Recommendation
+
+Use **HEVC** unless you have specific compatibility needs. The storage savings are substantial:
+
+- **HEVC:** $0.99/month for 50 GB = ~12.5 hours monthly
+- **H.264:** $2.99/month for 200 GB = ~19 hours monthly
+
+HEVC provides significantly better value.
+
+---
+
 ## Storage Management
 
 Automatic storage management keeps your device from filling up while protecting important videos.
@@ -866,6 +974,24 @@ Handles:
 - Unprotected file deletion (oldest first)
 - Protection checking
 - Works with StorageLocationManager for path resolution
+
+### VideoCodecManager
+Manages:
+- Video codec selection (HEVC vs H.264)
+- Codec settings configuration
+- Storage efficiency calculations
+- Compatibility information
+- Persistent codec preference via UserDefaults
+
+**Codec Options:**
+- `.hevc` - Modern codec, 40% compression (default)
+- `.h264` - Compatible codec, larger files
+
+**Features:**
+- Automatic device capability detection
+- Video settings generation for recording
+- Storage estimate calculations
+- File size comparisons
 
 ### StorageLocationManager
 Manages:

@@ -37,10 +37,11 @@ Get your iOS dashcam running in 5 minutes.
 |------|---------|
 | `DashcamApp.swift` | App entry point |
 | `ContentView.swift` | Recording UI & navigation |
-| `SettingsView.swift` | Video duration, storage, and location settings |
+| `SettingsView.swift` | Video duration, codec, storage, and location settings |
 | `FilesView.swift` | File browser, protection & deletion |
 | `CameraDashcamViewModel.swift` | Multi-camera recording & chunking |
 | `CameraInfo.swift` | Camera configuration & recorder |
+| `VideoCodecManager.swift` | HEVC/H.264 codec selection |
 | `StorageManager.swift` | Storage calculations & cleanup |
 | `StorageLocationManager.swift` | iCloud & on-device storage selection |
 | `FileProtectionManager.swift` | File protection metadata |

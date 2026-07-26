@@ -4,6 +4,7 @@ struct SettingsView: View {
     @EnvironmentObject var viewModel: CameraDashcamViewModel
     @Environment(\.dismiss) var dismiss
     @State private var selectedStorageLocation = StorageLocationManager.shared.selectedLocation
+    @State private var selectedCodec = VideoCodecManager.shared.selectedCodec
     @State private var showMigrationAlert = false
     @State private var migrationMessage = ""
 
@@ -152,6 +153,69 @@ struct SettingsView: View {
                                         .foregroundColor(.gray)
                                 }
                             }
+                        }
+                        .padding(16)
+                        .background(Color.gray.opacity(0.1))
+                        .cornerRadius(12)
+
+                        // Video Codec Selection
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Label("Video Codec", systemImage: "video.fill")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                                Spacer()
+                                Text(selectedCodec.rawValue)
+                                    .font(.headline)
+                                    .foregroundColor(.blue)
+                            }
+
+                            VStack(spacing: 10) {
+                                ForEach(VideoCodec.allCases, id: \.self) { codec in
+                                    Button(action: {
+                                        selectedCodec = codec
+                                        VideoCodecManager.shared.selectedCodec = codec
+                                    }) {
+                                        HStack(spacing: 12) {
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                Text(codec.displayName)
+                                                    .font(.subheadline)
+                                                    .foregroundColor(.white)
+                                                Text(codec.description)
+                                                    .font(.caption)
+                                                    .foregroundColor(.gray)
+                                                Text(codec.storageEstimate)
+                                                    .font(.caption2)
+                                                    .foregroundColor(.gray)
+                                                    .italic()
+                                            }
+                                            Spacer()
+                                            if selectedCodec == codec {
+                                                Image(systemName: "checkmark.circle.fill")
+                                                    .foregroundColor(.blue)
+                                            }
+                                        }
+                                        .padding(12)
+                                        .background(selectedCodec == codec ? Color.blue.opacity(0.1) : Color.gray.opacity(0.05))
+                                        .cornerRadius(8)
+                                    }
+                                    .foregroundColor(.primary)
+                                }
+                            }
+
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "info.circle.fill")
+                                        .foregroundColor(.blue)
+                                    Text("HEVC saves ~40% storage vs H.264")
+                                        .font(.caption)
+                                        .foregroundColor(.blue)
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color.blue.opacity(0.1))
+                            .cornerRadius(6)
                         }
                         .padding(16)
                         .background(Color.gray.opacity(0.1))
