@@ -1,0 +1,1641 @@
+# iOS Dashcam App
+
+A SwiftUI-based dashcam application for iOS that records video continuously, even when the app is backgrounded. Perfect for recording while driving.
+
+## Features
+
+✅ **Multi-Camera Recording** - Simultaneously records from front cameras (wide angle & telephoto)  
+✅ **Background Recording** - App continues recording when locked or switched away  
+✅ **Picture-in-Picture Mode** - Floating camera preview window while using other apps (like navigation)  
+✅ **Video Chunking** - Automatically splits recordings into smaller files (1-15 min, configurable)  
+✅ **Impact Detection** - Detects collisions and emergency braking via accelerometer and auto-protects all files  
+✅ **Smart Storage** - Auto-deletes oldest unprotected videos when storage limit is reached  
+✅ **File Protection** - Lock important videos manually or automatically on crash/braking  
+✅ **Video Quality Modes** - Standard, Enhanced (HDR), or High Quality settings
+✅ **Video Codec Selection** - Choose HEVC (40% smaller) or H.264 for compatibility
+✅ **Cinematic Stabilization** - Advanced optical + software stabilization for smoother video
+✅ **HDR Video** - Enhanced dynamic range for better detail in varied lighting
+✅ **Low-Light Boost** - Automatic enhancement for night and low-light recording  
+✅ **Storage Management** - Set max storage in GB (1-100 GB, configurable)  
+✅ **Persistent Storage** - iCloud Drive option preserves files even if app is uninstalled  
+✅ **High-Quality Video** - Records at device camera quality from all cameras  
+✅ **Audio Included** - Captures stereo audio during recording  
+✅ **Camera Status** - Real-time display of all camera recording status  
+✅ **Synchronized Chunks** - All cameras chunk at the same time  
+✅ **Simple Controls** - One-tap start/stop recording for all cameras  
+✅ **File Management** - Browse, protect, and delete recordings in-app
+✅ **Battery Monitoring** - Real-time battery level with alerts below 20%
+✅ **Low Battery Alerts** - Audio beep warning when battery low and not charging
+✅ **Critical Battery Protection** - Warning when battery below 10%  
+
+## Requirements
+
+- iOS 14.0 or later
+- iPhone with rear camera and microphone
+- Xcode 13.0 or later
+
+## Multi-Camera Recording
+
+The app simultaneously records from all available device cameras, providing comprehensive coverage for accident investigation and pedestrian detection.
+
+### Available Cameras
+
+**Front Wide-Angle** (1x - Default)
+- Captures broad road view ahead
+- Pedestrian and obstacle detection
+- Lane markings and traffic visibility
+- Context and full scene documentation
+- Privacy-focused (no cabin recording)
+
+**Front Telephoto** (Zoom - if available)
+- Captures distant details ahead
+- License plate recognition at distance
+- Traffic sign reading and compliance
+- Focused perspective for fine details
+- Complements wide angle coverage
+
+### How Multi-Camera Works
+
+1. **Simultaneous Recording:**
+   - All available cameras record independently
+   - Each has its own AVCaptureSession
+   - Synchronized via single record/stop trigger
+
+2. **File Organization:**
+   ```
+   dashcam_2025_01_15_144230_front_wide_chunk_0001.mov
+   dashcam_2025_01_15_144230_front_zoom_chunk_0001.mov
+   ```
+
+3. **Synchronized Chunking:**
+   - All cameras chunk at the same time
+   - Chunk numbers stay in sync across cameras
+   - Easier to correlate footage
+
+4. **Unified Control:**
+   - Single Start button records all cameras
+   - Single Stop button stops all cameras
+   - Impact detection protects all concurrent files
+
+5. **Storage:**
+   - Each camera's footage counts toward total storage
+   - All files subject to same protection/deletion rules
+   - Protection applies to all related chunks
+
+### Camera Status Display
+
+Main screen shows real-time status for each camera:
+
+- 🟢 **Green:** Ready (not recording)
+- 🔴 **Red:** Recording actively
+- ⚪ **Gray:** Unavailable on device
+
+Examples:
+```
+Cameras
+  ● Front Wide      Recording
+  ● Front Zoom      Recording
+```
+
+### Coverage Benefits
+
+**Accident Investigation:**
+- Wide angle captures full incident scene ahead
+- Telephoto shows fine details (license plates, signs, vehicle markings)
+- Dual perspectives resolve disputes about distance and details
+
+**Liability Protection:**
+- Synchronized dual-camera view reduces disputes
+- Hard to argue with corroborated perspectives
+- Pedestrian detection and documentation (wide angle)
+- Vehicle identification and compliance verification (telephoto)
+
+**Evidence Quality:**
+- Wide + telephoto = comprehensive forward coverage
+- Impact detection protects all footage
+- Privacy-respecting (no interior/cabin recording)
+- Professional-grade dual-camera documentation
+
+### Storage Implications
+
+**Storage Calculation:**
+- Wide angle: ~350-400 MB per minute (HD)
+- Telephoto: ~350-400 MB per minute (HD)
+- **Total:** ~700-800 MB per minute for both cameras
+
+With 10 GB storage and 5-minute chunks:
+- Each chunk set: ~3.5-4 GB
+- ~2.5 complete chunk sets available
+- Older chunks auto-delete as limit approaches
+
+### Device Support
+
+**Both Front Cameras Available:**
+- iPhone 12 Pro and newer
+- iPhone 13, 14, 15, 16 Pro models
+- Provides wide angle + telephoto dual coverage
+
+**Front Wide-Angle Only:**
+- iPhone SE (any generation)
+- iPhone XR, 11, 11 Pro
+- iPhone 12, 13, 14, 15, 16 standard models
+- iPhone X, XS, 8, 7, 6s
+
+**App Behavior:**
+- Uses all available front cameras on device
+- Gracefully handles unavailable telephoto
+- Shows status for each available camera
+- Records with whatever is available
+- Always privacy-focused (front/road only, no interior)
+
+### Technical Implementation
+
+**Camera Initialization:**
+- Detects available cameras at startup
+- Creates separate AVCaptureSession per camera
+- Handles failures gracefully
+- Updates UI with availability status
+
+**Synchronized Recording:**
+- Single timer manages all sessions
+- Chunk transitions coordinated across cameras
+- Impact events protect all concurrent files
+- Storage calculations sum all footage
+
+**File Naming:**
+- Timestamp matches across cameras
+- Position indicator (front_wide, front_zoom)
+- Chunk number synchronized
+- Easy to identify related files
+
+### Best Practices (AVCam-Based)
+
+The implementation follows Apple's official **AVCam** camera app best practices:
+
+**Session Management:**
+- Dedicated session queue for thread-safe operations
+- Proper queue-based configuration (no main thread blocking)
+- Atomic input/output changes
+- Graceful error handling
+
+**Video Configuration:**
+- Automatic video stabilization (.auto mode)
+- Continuous auto-focus when available
+- Continuous auto-exposure for varying lighting
+- Continuous auto white-balance adjustment
+- Proper video orientation handling
+- Mirror correction for front cameras
+
+**Recording Stability:**
+- Video stabilization on all supported devices
+- Proper connection configuration
+- Codec optimization (HEVC/H.264)
+- Device orientation synchronization
+- Focus/exposure locking during recording
+
+### Limitations
+
+- ⚠️ Increases storage usage (dual cameras = ~2x single camera)
+- ⚠️ Not all iPhone models have telephoto
+- ⚠️ Battery drain greater with dual cameras
+- ⚠️ Audio only from primary microphone
+- ⚠️ Some older devices may have thermal issues with sustained recording
+
+---
+
+## iOS 17+ Camera Enhancement
+
+The app uses **LockedCameraCapture** API on iOS 17+ for improved camera exclusivity and reliability.
+
+### LockedCameraCapture (iOS 17+)
+
+**Benefits:**
+- Exclusive camera access preventing interference from other apps
+- Enhanced recording reliability
+- Reduced risk of camera conflicts
+- Improved performance on iOS 17+
+
+**Fallback:**
+- iOS 14-16 use standard AVCaptureSession
+- Graceful degradation without LockedCameraCapture
+- Full functionality on all supported iOS versions
+
+**Automatic Detection:**
+- System automatically uses LockedCameraCapture if available
+- No user configuration needed
+- Transparent to end user
+
+This enhancement ensures dashcam recording won't be interrupted by other camera apps (FaceTime, Zoom, etc.) on newer devices.
+
+### Future Enhancements
+
+- User toggle to disable specific cameras
+- Separate resolution settings per camera
+- Audio from multiple microphones
+- Synchronized playback viewer
+- Multi-angle incident replay
+
+---
+
+## Capture Session Implementation (Advanced)
+
+Comprehensive implementation following Apple's AVCaptureSession best practices.
+
+### Session Configuration
+
+**Thread Safety:**
+- Dedicated `sessionQueue` per camera with unique identifiers
+- All session operations dispatched to queue (no main thread blocking)
+- Configuration synchronized via semaphore for safety
+- Graceful 5-second timeout for setup operations
+
+**Session Lifecycle:**
+1. Create AVCaptureSession
+2. Begin configuration transaction
+3. Validate device and preset compatibility
+4. Add inputs (device) and outputs (recording)
+5. Configure connections and settings
+6. Commit configuration
+7. Start session running
+8. Begin recording
+
+**Error Handling:**
+- Comprehensive CameraSetupError enum for specific failures
+- Detailed error logging for debugging
+- Graceful degradation when features unavailable
+- Recovery mechanism for session failures
+- Status tracking (Ready, Recording, Setup Failed, Unavailable)
+
+### Device Capability Checking
+
+**Pre-Configuration Validation:**
+- Device availability and connectivity check
+- Session preset compatibility validation
+- HDR video support detection
+- Cinematic stabilization capability check
+- Low-light boost support verification
+- Frame rate capability analysis
+- Maximum resolution detection
+
+**Automatic Fallback:**
+- Attempts high preset, falls back to medium/low if needed
+- Disables features not supported by device
+- Graceful degradation for older iOS versions
+- Warnings logged (not errors) for unsupported features
+
+**Capability Report:**
+- Printable report of all camera capabilities
+- Helps diagnose device-specific issues
+- Lists supported frame rates and resolutions
+- Shows HDR and stabilization support status
+
+### Video Connection Configuration
+
+**Orientation & Mirroring:**
+- Portrait orientation set for dashcam use
+- Front camera automatically mirrored
+- Validated before use to prevent errors
+
+**Video Stabilization:**
+- Cinematic mode when available
+- Optical stabilization fallback
+- Verified compatibility before setting
+
+**Connection Validation:**
+- Verifies video connection exists before configuration
+- Confirms connection remains active after setup
+- Prevents silent configuration failures
+
+### Device Configuration
+
+**Focus & Exposure:**
+- Continuous auto-focus on center point (0.5, 0.5)
+- Continuous auto-exposure on center point
+- Continuous auto white-balance
+- Subject area change monitoring enabled
+- Sensor fusion auto-focus (iOS 16+)
+- Locked configuration prevents interruption
+
+**Low-Light Optimization:**
+- Automatic low-light boost when available
+- Enabled by default for better night footage
+- Graceful on devices without support
+- Improves image clarity in darkness
+
+**HDR Video:**
+- Enabled on iOS 17+ with capable devices
+- Improves dynamic range in mixed lighting
+- Better detail in bright and dark areas
+- Automatically disabled on unsupported devices
+
+### Resource Management
+
+**Proper Cleanup:**
+- Session stopped before cleanup
+- Input and output references cleared
+- Resources released to free memory
+- Prevents resource leaks in app lifecycle
+
+**Memory Efficiency:**
+- Unique queue labels prevent collisions
+- Autorelease frequency tuned for optimization
+- Semaphore-based synchronization for clean waits
+- No retain cycles between objects
+
+### Error Recovery
+
+**Automatic Recovery:**
+- Detects failed sessions on app launch
+- Attempts to restore camera functionality
+- Reports recovery status in UI
+- User can retry via Settings
+
+**User Feedback:**
+- Clear status messages (Ready, Recording, Unavailable)
+- Error descriptions in UI
+- Prompts to restart app if needed
+- Links to troubleshooting guides
+
+### Monitoring & Diagnostics
+
+**Camera Status Display:**
+- Real-time status for each camera
+- Shows device connectivity
+- Indicates recording state
+- Displays setup errors
+
+**Debug Logging:**
+- Capability report on app launch
+- Error logging with detailed context
+- Session state tracking
+- Configuration validation logging
+
+**Settings Link:**
+- Quick access to app permissions
+- Guide users to enable required permissions
+- Clear error messages with solutions
+
+---
+
+## Project Structure
+
+```
+DashcamApp/
+├── DashcamApp.swift                    # Main app entry point
+├── ContentView.swift                   # Recording UI and navigation
+├── CameraDashcamViewModel.swift        # Multi-camera recording & control
+├── CameraInfo.swift                    # Camera configuration & recorder
+├── SettingsView.swift                  # Settings: duration, codec, storage, location
+├── FilesView.swift                     # File browser, protection & deletion
+├── VideoCodecManager.swift             # HEVC/H.264 codec selection & settings
+├── StorageManager.swift                # Storage calculations & cleanup
+├── StorageLocationManager.swift        # iCloud & on-device location selection
+├── FileProtectionManager.swift         # File protection metadata
+├── CrashDetectionManager.swift         # Impact detection (collision + braking)
+├── INFO_PLIST_CONFIG.md               # Required configuration
+└── DASHCAM_README.md                  # This file
+```
+
+## Setup Instructions
+
+### 1. Create a New Xcode Project
+
+```bash
+# In Xcode:
+# File → New → Project
+# Select iOS → App template
+# Choose:
+#   Product Name: DashcamApp
+#   Interface: SwiftUI
+#   Language: Swift
+#   Storage: None
+```
+
+### 2. Replace Project Files
+
+1. **DashcamApp.swift**
+   - Delete the auto-generated main app file
+   - Replace with the provided `DashcamApp.swift`
+
+2. **ContentView.swift**
+   - Replace with the provided `ContentView.swift`
+
+3. **Add CameraDashcamViewModel.swift**
+   - Create new Swift file named `CameraDashcamViewModel.swift`
+   - Copy the provided content
+
+### 3. Configure Info.plist
+
+1. Select your Xcode project in the navigator
+2. Select the target "DashcamApp"
+3. Go to the **Info** tab
+4. Add the following keys:
+
+```
+🔐 Privacy - Camera Usage Description
+Value: "This app needs camera access to record video for dashcam functionality"
+
+🔐 Privacy - Microphone Usage Description  
+Value: "This app needs microphone access to record audio with video"
+
+Background Modes (check box)
+☑ Audio
+```
+
+**Alternative (XML Method):**
+- Right-click Info.plist → Open As → Source Code
+- Paste the configuration from `INFO_PLIST_CONFIG.md`
+
+### 4. Capabilities Configuration
+
+1. Select your target in Xcode
+2. Go to **Signing & Capabilities** tab
+3. Click **+ Capability**
+4. Add **Background Modes**
+5. Check the **Audio** checkbox
+
+### 5. Verify Build Settings
+
+1. Go to **Build Settings** (tab)
+2. Search for "Background Modes"
+3. Ensure `UIBackgroundModes` contains `audio`
+
+## Build & Run
+
+```bash
+# In Xcode:
+# Select a simulator or connected device
+# Press Cmd + R to build and run
+```
+
+### Testing on Real Device
+
+1. Connect your iPhone via USB
+2. Select your device in Xcode's device selector
+3. Click the Run button (▶️)
+4. Grant camera and microphone permissions when prompted
+5. Tap **Start Recording**
+6. Press home button - recording continues!
+7. Return to app to stop
+
+## Video Storage
+
+Recorded videos are saved to:
+```
+📁 App Documents Folder
+├── dashcam_2025_01_15_144230.mov
+├── dashcam_2025_01_15_150145.mov
+└── ...
+```
+
+Access via:
+- **Xcode:** Device Organizer → App Container → Documents
+- **Files App:** On-device under "On My iPhone" → DashcamApp
+- **Finder (macOS):** Connect device → Files tab → Navigate to app
+
+## Usage
+
+### Starting a Recording
+
+1. Tap **Start Recording** (red button)
+2. Grant permissions if first launch
+3. Recording indicator shows live timer and chunk number
+4. App continues in background even when locked
+
+### During Recording
+
+- **Chunk Indicator:** Shows current chunk number (e.g., "Recording Chunk 3")
+- **Timer:** Displays elapsed time for current chunk
+- **Status Bar:** Red dot indicates active recording
+- **Automatic Chunking:** New chunks start automatically at configured duration
+
+### Stopping a Recording
+
+1. Return to app or wake from lock screen
+2. Tap **Stop Recording** (orange button)
+3. Current chunk saves automatically
+4. Can start new recording immediately
+
+### Checking Status
+
+- **Main Screen:** Real-time storage usage and progress bar
+- **Recording Status:** Shows "Recording..." or "Ready"
+- **Chunk Counter:** Displays current chunk number when recording
+
+### Managing Settings
+
+1. Tap **Settings** (gear icon)
+2. Adjust:
+   - **Video Chunk Duration** (1-15 minutes)
+   - **Maximum Storage** (1-100 GB)
+3. Changes apply immediately
+4. Settings persist across sessions
+
+### Viewing & Managing Files
+
+1. Tap **Recordings** (film icon)
+2. See all recordings with:
+   - File size
+   - Date/time created
+   - Protection status
+3. Actions:
+   - **Lock Icon:** Toggle protection on/off
+   - **Trash Icon:** Delete file (only if unprotected)
+
+### Protecting Important Videos
+
+1. Open **Recordings** (Files View)
+2. Tap the **lock icon** next to a video
+3. Icon fills/highlights when protected
+4. Protected videos won't be auto-deleted
+5. Tap lock again to unprotect
+
+### Checking Storage
+
+**Main Screen:**
+- Progress bar shows usage
+- Text shows current/max storage (e.g., "2.45 GB / 10 GB")
+
+**Settings Screen:**
+- Detailed storage breakdown
+- "X GB used" and "X GB available"
+- Auto-cleanup indicator
+
+---
+
+## Permissions Management
+
+The app requires specific permissions to record video and audio. You can view and manage these permissions from the Settings screen.
+
+### Permission Status Display
+
+**Location:** Settings → Permissions Status (top of screen)
+
+Shows real-time status for each permission:
+
+**Camera Permission**
+- 🟢 **Granted** - App can access camera
+- 🔴 **Denied** - User rejected permission (need to enable in Settings)
+- 🟠 **Not Yet Requested** - Permission prompt hasn't been shown yet
+
+**Microphone Permission**
+- 🟢 **Granted** - App can record audio
+- 🔴 **Denied** - User rejected permission (need to enable in Settings)
+- 🟠 **Not Yet Requested** - Permission prompt hasn't been shown yet
+
+**Photos Permission** (Optional)
+- 🟢 **Granted** - Photos can be saved to Photos app
+- 🔴 **Denied** - User rejected permission
+- 🟠 **Not Yet Requested** - Only needed if using Photos storage option
+
+### Required vs Optional
+
+**Required:**
+- Camera (needed for recording)
+- Microphone (needed for audio)
+
+**Optional:**
+- Photos (only if saving videos to Photos library)
+
+### Granting Permissions
+
+**Method 1: In-App Requests**
+1. On first launch, you'll see permission request dialogs
+2. Tap **Allow** for Camera and Microphone
+3. Then tap **Allow** for Photos if using Photos storage
+
+**Method 2: Through App Settings**
+1. Open app Settings screen
+2. Click **Request** button for any "Not Yet Requested" permissions
+3. Tap **Allow** on system dialog
+
+**Method 3: Through iOS Settings**
+1. Go to iPhone Settings → **DashcamApp**
+2. Toggle **Camera** ON
+3. Toggle **Microphone** ON
+4. Toggle **Photos** ON (if using Photos storage)
+5. Restart the app
+
+### Permission Status Indicators
+
+**Main Recording Screen:**
+- Orange warning banner appears if Camera or Microphone denied
+- Shows "Permissions Required" with link to Settings
+- Recording will not work until permissions granted
+
+**Settings Screen:**
+- Shows status of each permission
+- "Request" button for permissions not yet requested
+- "Settings" button for denied permissions (opens iOS Settings)
+- Green checkmark when all required permissions granted
+
+### Fixing Permission Issues
+
+**Camera Permission Denied:**
+1. Settings → DashcamApp → Camera → Toggle ON
+2. Restart app
+3. Check if "Ready" status shows for cameras
+
+**Microphone Permission Denied:**
+1. Settings → DashcamApp → Microphone → Toggle ON
+2. Restart app
+3. Try recording - audio should now work
+
+**Photos Permission Denied:**
+1. Settings → DashcamApp → Photos → Toggle ON
+2. Change storage location to "Photos" in Settings
+3. Recordings will now save to Photos app
+
+---
+
+## Troubleshooting
+
+### App keeps stopping when backgrounded
+- ✓ Verify "Audio" is in Background Modes (Capabilities tab)
+- ✓ Check Info.plist has `NSMicrophoneUsageDescription`
+- ✓ Ensure user granted microphone permission
+
+### No video being saved
+- ✓ Check app has Documents folder write permission
+- ✓ Verify sufficient storage space available
+- ✓ Check console for error messages
+
+### Permission denied error
+- ✓ Go to Settings → DashcamApp
+- ✓ Enable Camera and Microphone
+- ✓ Restart app
+
+### Camera not initializing
+- ✓ Ensure device has working camera
+- ✓ Restart the app
+- ✓ Check Xcode console for specific errors
+
+## Video Chunking
+
+Videos are automatically split into smaller files to reduce individual file sizes and improve manageability.
+
+### Configuration
+- **Default:** 5 minutes per chunk
+- **Range:** 1-15 minutes (configurable in Settings)
+- **Naming:** Each chunk is numbered sequentially
+  - Example: `dashcam_2025_01_15_144230_chunk_0001.mov`
+
+### How It Works
+1. Recording starts with chunk 1
+2. Timer tracks elapsed time for current chunk
+3. When chunk duration is reached:
+   - Current video is automatically saved
+   - New chunk starts immediately
+   - Recording continues seamlessly
+4. No gap between chunks
+5. All chunks stored in Documents folder
+
+### Benefits
+- Smaller individual files (easier to share/backup)
+- Reduced memory usage per file
+- Faster save times
+- Better organization
+
+---
+
+## Storage Location Selection
+
+Choose where to store your dashcam recordings - on device, in iCloud Drive, or in Photos library.
+
+### Storage Options
+
+#### On Device (Local)
+- **Storage:** Phone's internal storage
+- **Access:** Fast, always available
+- **Persistence:** ❌ **DELETED when app is uninstalled**
+- **Backup:** Not backed up to iCloud
+- **Use Case:** Temporary recordings, short trips
+- **Warning:** Critical limitation - uninstalling app permanently deletes all footage
+
+#### iCloud Drive (Recommended for Backup)
+- **Storage:** Apple iCloud account space
+- **Access:** Requires internet connection to access
+- **Persistence:** ✅ **Files stay in iCloud even if app is uninstalled**
+- **Backup:** Automatically synced and backed up
+- **Use Case:** Long-term storage, evidence preservation
+- **Benefit:** Recordings survive app reinstall, system crashes, device loss
+
+#### Photos Library (Recommended for Access)
+- **Storage:** Device storage + automatic sync to Photos
+- **Access:** Visible in Photos app, easy viewing and sharing
+- **Persistence:** ✅ **Saved to Photos library with local backup**
+- **Backup:** Can be backed up via Photos backup settings
+- **Use Case:** Easy access, integration with iOS Photos ecosystem
+- **Benefit:** Videos accessible from Photos app, can share directly, organized with photo library
+
+### Setting Storage Location
+
+1. Open **Settings** (gear icon)
+2. Scroll to **Storage Location** section
+3. Choose:
+   - **Photos** (recommended - easiest access)
+   - **iCloud Drive** (recommended - best backup)
+   - **On Device** (caution: data lost on uninstall)
+4. For Photos option, ensure:
+   - Photos permission is enabled in app
+   - Sufficient device storage available
+5. For iCloud option, ensure:
+   - iCloud is enabled: Settings > [Your Name] > iCloud
+   - Dashcam app has iCloud access enabled
+   - Sufficient iCloud storage available
+
+### Important Warning
+
+⚠️ **On Device Storage is DANGEROUS**
+
+If you choose "On Device":
+- Uninstalling the app = all recordings deleted
+- Updating the app = may delete old files
+- Clearing app cache = recordings lost
+- Device replacement = videos gone
+
+**Recommendation:** Use iCloud Drive for any important recordings.
+
+### Storage Size Considerations
+
+**On Device:**
+- Uses phone's storage directly
+- Competes with photos, apps, etc.
+- Limited by phone capacity
+
+**iCloud Drive:**
+- Uses iCloud storage quota (5GB free, upgradeable)
+- Separate from phone storage
+- Synced across devices
+- Can access recordings from other devices
+
+### Migration Between Locations
+
+**Switching from On Device → iCloud:**
+- Existing files are automatically migrated
+- New recordings go to iCloud
+- Previous device copies deleted after migration
+
+**Switching from iCloud → On Device:**
+- ⚠️ iCloud copies NOT downloaded
+- Only new recordings stored on device
+- Consider downloading important files first
+
+### iCloud Setup
+
+1. **Enable iCloud:**
+   - Settings → [Your Name] → iCloud
+   - Toggle iCloud Drive ON
+   - Ensure Dashcam is in app list
+
+2. **Check iCloud Storage:**
+   - Settings → [Your Name] → iCloud → Manage Storage
+   - Ensure sufficient space available
+   - Upgrade plan if needed (50GB, 200GB, 2TB options)
+
+3. **Access from Computer:**
+   - Visit iCloud.com
+   - Navigate to Files app
+   - Find "Dashcam Recordings" folder
+
+### File Organization
+
+**On Device:**
+```
+App Documents Folder
+└── dashcam_*.mov files
+```
+
+**iCloud Drive:**
+```
+iCloud Drive
+└── Dashcam Recordings/
+    └── dashcam_*.mov files
+```
+
+### Troubleshooting iCloud
+
+**iCloud not showing in settings:**
+- Not signed into iCloud
+- Go to Settings > [Your Name], sign in
+
+**Files not syncing:**
+- Check internet connection
+- Enable WiFi (iCloud prefers WiFi)
+- Wait a few minutes for sync
+
+**Insufficient storage:**
+- Upgrade iCloud plan
+- Delete old files
+- Disable iCloud Photos if not needed
+
+---
+
+## Video Quality Settings
+
+Control advanced recording features for optimal dashcam footage quality.
+
+### Quality Modes
+
+The app offers three quality profiles:
+
+#### 🎥 Standard Quality
+- **Best for:** Limited storage, basic needs
+- **Features:** Basic stabilization, standard codecs
+- **Stabilization:** Auto mode
+- **Low-Light:** Auto-enabled when needed
+- **HDR:** Disabled
+- **File Size:** Baseline (100%)
+- **Use Case:** Everyday recording, maximum storage efficiency
+
+#### 🎬 Enhanced Quality (Recommended)
+- **Best for:** Most dashcam users
+- **Features:** HDR video + cinematic stabilization
+- **Stabilization:** Cinematic mode (advanced optical + software)
+- **Low-Light:** Automatic boost in dark conditions
+- **HDR:** Enabled for better dynamic range
+- **File Size:** ~15% larger than standard
+- **Use Case:** Balanced quality and storage, excellent low-light performance
+
+#### 📹 High Quality (Professional)
+- **Best for:** Evidence documentation, legal protection
+- **Features:** Maximum clarity, optimal stabilization
+- **Stabilization:** Best cinematic + optical modes combined
+- **Low-Light:** Maximum sensitivity boost
+- **HDR:** Full HDR video recording
+- **File Size:** ~25% larger than standard
+- **Use Case:** Critical incidents, accident documentation
+
+### Advanced Features
+
+**Cinematic Stabilization**
+- Advanced video stabilization beyond standard modes
+- Combines optical and software stabilization
+- Reduces jitter and vibration from road movement
+- Better than traditional stabilization for moving vehicles
+- Works at any speed (parking, highway driving)
+
+**HDR Video (High Dynamic Range)**
+- Captures more detail in bright and dark areas simultaneously
+- Better visibility of road details and distant traffic
+- Improved color accuracy in varied lighting
+- Helps with license plate visibility
+- Especially useful for:
+  - Sunny days (bright sky + dark road)
+  - Shadowy areas
+  - Night driving with street lights
+
+**Low-Light Boost**
+- Automatic sensitivity enhancement in dark conditions
+- Better night driving footage
+- Clearer details in tunnels and underpasses
+- Toggle on/off in Settings
+- Minimal quality loss when enabled
+
+### Setting Video Quality
+
+1. Open **Settings** (gear icon)
+2. Scroll to **Video Quality** section
+3. Select your preferred mode:
+   - Standard (compact files)
+   - Enhanced (recommended)
+   - High Quality (maximum clarity)
+4. Toggle **Low Light Boost** (recommended: ON)
+5. Changes take effect on next recording
+
+### Storage Impact Comparison
+
+**Dual Front Cameras (5-minute chunks with HEVC):**
+
+| Mode | Per Chunk | 10 GB | 50 GB |
+|------|-----------|-------|-------|
+| Standard | ~3.5-4 GB | 2.5 sets | 12 sets |
+| Enhanced | ~4-4.6 GB | 2 sets | 10 sets |
+| High Quality | ~4.4-5.5 GB | 2 sets | 9 sets |
+
+---
+
+## Video Codec Selection
+
+Choose your video codec to balance quality, compatibility, and storage efficiency.
+
+### Codec Options
+
+#### HEVC (Recommended)
+- **Compression:** Best compression ratio (~40% smaller files)
+- **Quality:** Same quality as H.264 with smaller size
+- **Storage Savings:** ~700-800 MB/min vs ~1.2-1.4 GB with H.264
+- **Compatibility:** iOS 11+, all modern iPhones
+- **File Size:** 5-minute chunk = ~3.5-4 GB (vs 6-7 GB H.264)
+
+#### H.264 (Compatibility)
+- **Compression:** Standard compression
+- **Quality:** Good quality, proven codec
+- **Storage:** ~1.2-1.4 GB per minute
+- **Compatibility:** Maximum compatibility (older devices)
+- **File Size:** 5-minute chunk = ~6-7 GB (vs 3.5-4 GB HEVC)
+
+### Setting Video Codec
+
+1. Open **Settings** (gear icon)
+2. Scroll to **Video Codec** section
+3. Choose:
+   - **HEVC** (saves 40% storage) - Recommended
+   - **H.264** (maximum compatibility)
+4. Selection takes effect on next recording
+
+### Storage Impact
+
+With 10 GB iCloud storage:
+
+**HEVC:**
+- Per 5-min chunk: ~3.5-4 GB
+- Total capacity: ~2.5 chunk sets = ~12.5 minutes
+- Recommendation: 50 GB plan for longer recordings
+
+**H.264:**
+- Per 5-min chunk: ~6-7 GB
+- Total capacity: ~1.5 chunk sets = ~7.5 minutes
+- Recommendation: 100+ GB for daily use
+
+### Device Support
+
+**HEVC Support:**
+- All iOS 11+ devices
+- iPhone 6s and newer
+- iPad Air 2 and newer
+
+**H.264 Support:**
+- All iOS devices
+- Universal fallback option
+- For absolute maximum compatibility
+
+### Technical Details
+
+**HEVC Advantages:**
+- 40-50% better compression than H.264
+- Same visual quality
+- Industry standard for modern devices
+- Future-proofing
+
+**H.264 Advantages:**
+- Near-universal compatibility
+- Proven, stable codec
+- Playback on any device
+- Slower devices may handle better
+
+### Recommendation
+
+Use **HEVC** unless you have specific compatibility needs. The storage savings are substantial:
+
+- **HEVC:** $0.99/month for 50 GB = ~12.5 hours monthly
+- **H.264:** $2.99/month for 200 GB = ~19 hours monthly
+
+HEVC provides significantly better value.
+
+---
+
+## Storage Management
+
+Automatic storage management keeps your device from filling up while protecting important videos.
+
+### How It Works
+1. **Track Usage:** App monitors total video storage used
+2. **Set Limit:** Configure maximum storage (1-100 GB, default 10 GB)
+3. **Auto-Cleanup:** When limit is reached:
+   - Oldest unprotected videos are automatically deleted
+   - Protected videos are preserved
+   - New recordings can continue
+4. **Protection:** Mark important videos as protected to prevent deletion
+
+### Configuration (Settings)
+- **Maximum Storage:** 1-100 GB in 0.5 GB increments
+- Quick presets: 5 GB, 10 GB, 20 GB, 50 GB
+- Custom slider for precise control
+
+### Storage Display
+- **Main Screen:** Real-time storage usage with progress bar
+- **Settings:** Detailed breakdown (used / available)
+- **Files View:** Individual file sizes for each recording
+
+---
+
+## Battery Monitoring
+
+Real-time battery level monitoring with intelligent alerts to keep you informed during recording.
+
+### Battery Status Display
+
+**Location:** Settings screen (top) and Main screen (warning banner)
+
+Shows current battery status with visual indicators:
+- 🟢 **Good** - Above 50% battery
+- 🟡 **Moderate** - 20-50% battery
+- 🟠 **Low** - Below 20% battery (alert starts)
+- 🔴 **Critical** - Below 10% battery (urgent warning)
+- 🔌 **Charging** - Device plugged in
+
+### Battery Alerts
+
+**Low Battery Alert (20%)**
+- 🔊 Audio beep alert plays
+- Orange warning banner appears on main screen
+- Shows "Low Battery - Consider Charging"
+- Only triggers when NOT charging
+- Message appears on Settings screen
+
+**Critical Battery Alert (10%)**
+- 🔴 Red warning banner appears
+- "Critical Battery - Please charge immediately!"
+- Indicates urgent charging needed
+- Recording can continue but should stop soon
+
+### Alert Features
+
+**Smart Alerting:**
+- Only alerts if NOT plugged in
+- Prevents duplicate alerts (debounced by 5% intervals)
+- Alerts dismissed after 5 seconds
+- Automatic recovery when charging begins
+
+**Audio Beep:**
+- Two system beeps when threshold reached
+- Works even with volume muted
+- Fallback to system sound if custom unavailable
+- Plays through speaker even in quiet mode
+
+**Visual Indicators:**
+- Real-time battery percentage display
+- Battery icon changes with charge level
+- Color coding: Green → Yellow → Orange → Red
+- Charging indicator when plugged in
+
+### Battery Monitoring Location
+
+**Main Screen:**
+- Orange/red warning banners when low
+- Easy to see while recording
+- Quick action: Go to Settings to view battery details
+
+**Settings Screen (Top):**
+- Dedicated battery status section
+- Current percentage and remaining
+- Charging status
+- Full status breakdown:
+  - Battery Level: X%
+  - State: Charging/Full/Unplugged
+  - Charging: Yes/No
+
+**PiP Floating Window:**
+- Battery icon in header
+- Shows battery percentage
+- Color-coded status (green/orange)
+- Always visible while recording with navigation
+
+### Battery Management Tips
+
+**Best Practices:**
+
+1. **Check Battery Before Recording**
+   - Open Settings to see battery status
+   - Plan recording duration based on charge
+   - Full charge = 8+ hours typical recording
+
+2. **Monitor During Recording**
+   - Watch for low battery warnings
+   - Use PiP mode to keep battery visible
+   - Charge if below 50% for long trips
+
+3. **While Recording**
+   - App continues recording below 20%
+   - Audio alert warns you to charge
+   - Critical warning at 10%
+   - Graceful shutdown prevents data loss
+
+4. **Power Saving**
+   - Disable unnecessary features
+   - Reduce video quality if needed
+   - Turn off PiP to save battery
+   - Keep device in cooler environment
+
+5. **Long Recordings**
+   - Use car charger for extended trips
+   - Monitor battery during drive
+   - Plan breaks to charge
+   - Reduce screen brightness
+
+### Battery Usage During Recording
+
+**Typical Battery Drain:**
+- Average: ~5-10% per hour of recording
+- High Quality mode: ~10-15% per hour
+- Dual front cameras: Higher drain
+- PiP mode active: +2-3% per hour
+- With navigation app: +5-10% per hour
+
+**Factors Affecting Battery:**
+- Video quality setting (Standard/Enhanced/High)
+- Dual camera recording (2x drain)
+- Screen brightness
+- Ambient temperature
+- App running in foreground vs background
+
+### What Happens at Critical Battery
+
+At 10% battery (critical threshold):
+1. Red warning appears on screen
+2. Urgent charging message shown
+3. Recording continues but shouldn't persist
+4. System may force stop apps if battery dies
+5. Data is safe (chunks already saved to storage)
+
+**Important:** App does NOT auto-stop at critical battery because:
+- Users may be in emergency driving situation
+- Recording should continue for evidence
+- Users can manually stop recording
+- Data is continuously saved to files
+- Device gracefully handles shutdown
+
+---
+
+## File Protection
+
+Protect important recordings from accidental deletion or auto-cleanup. Protection can be applied manually or automatically.
+
+### Manual Protection
+
+**While Recording:**
+1. Tap **Protect Recording** button (blue lock icon)
+   - Current recording chunk is immediately protected
+   - Works on main screen and PiP floating window
+   - Useful for: interesting traffic, near-misses, scenic routes
+   - Status confirmation appears briefly
+
+**After Recording:**
+1. Open **Recordings** (Files View)
+2. Tap the **lock icon** next to a recording
+   - Lock becomes **filled/yellow** = Protected
+   - Lock is **open/gray** = Unprotected
+
+### Automatic Protection
+
+**Crash/Impact Events:**
+- Collision detected → All current chunks automatically protected
+- Emergency brake detected → All current chunks automatically protected
+- No action needed - protection happens instantly
+
+### Protected File Behavior
+- ✅ Cannot be deleted (delete button is disabled)
+- ✅ Preserved during storage cleanup
+- ✅ Only removed when manually unlocked
+- ✅ Sync across app restarts
+
+### Storage Cleanup Priority
+When storage limit is reached:
+1. Unprotected files are deleted first (oldest first)
+2. Protected files are never auto-deleted
+3. If only protected files remain and limit exceeded:
+   - No cleanup occurs
+   - User must manually delete protected files
+
+---
+
+## Impact Detection
+
+Automatic detection of accidents and emergency situations using device accelerometer. When an impact event is detected, the current recording is automatically protected.
+
+### Event Types
+
+#### Collision Detection
+Detects sudden high-impact collisions from various angles:
+
+**Triggers:**
+- Frontal impacts
+- Rear-end collisions
+- Side-impact crashes
+- Pothole/road hazard impacts
+
+**Detection Criteria:**
+- High sustained acceleration (>2.5G)
+- Rapid change in acceleration (>1G variation)
+- Typical for car crashes and severe impacts
+
+#### Emergency Brake Detection
+Detects hard, sustained braking (emergency stops):
+
+**Triggers:**
+- Rapid deceleration >1.5G
+- Sustained for 3+ measurements (0.15+ seconds)
+- Typical for emergency braking situations
+
+**Detection Criteria:**
+- Strong negative Z-axis acceleration (>1.5G)
+- Sustained deceleration pattern
+- Indicates driver hit brakes hard to avoid incident
+
+### How It Works
+1. **Monitoring:** Once recording starts, accelerometer continuously monitors acceleration
+2. **Dual Detection:**
+   - **Collision:** Analyzes magnitude and sudden changes
+   - **Emergency Brake:** Analyzes sustained deceleration on Z-axis
+3. **Debouncing:** 2-second cooldown between detections to prevent false duplicates
+4. **Auto-Protection:** When either event is detected:
+   - Current video chunk is automatically write-protected
+   - Appropriate alert notification appears
+   - Recording continues normally
+   - File cannot be deleted until manually unlocked
+
+### Detection Sensitivity
+
+**Collision:**
+- **Threshold:** 2.5G sustained acceleration
+- **Analysis Window:** Last 5 measurements (0.25 seconds)
+- **Buffer Size:** 10 recent measurements
+
+**Emergency Brake:**
+- **Threshold:** 1.5G deceleration
+- **Minimum Duration:** 3 consecutive measurements (~0.15 seconds)
+- **Focus:** Z-axis (vertical/braking axis)
+
+### What Triggers Detection
+
+**Collisions:**
+✓ Frontal crashes  
+✓ Rear-end collisions  
+✓ Side impacts  
+✓ Severe road hazards (deep potholes)  
+✓ Hard object impacts  
+
+**Emergency Braking:**
+✓ Hard emergency stops  
+✓ Sudden obstacle avoidance  
+✓ Panic braking  
+✓ Collision prevention maneuvers  
+
+### What Doesn't Trigger Detection
+
+**Generally Safe (No Detection):**
+✗ Normal acceleration/braking  
+✗ Turning and cornering  
+✗ Gentle lane changes  
+✗ Speed bumps (low impact)  
+✗ Highway bumps (distributed impact)  
+✗ Normal driving variations  
+
+### Status Indicators
+
+**Normal Recording:**
+- Green dot: "Impact Detection Active"
+
+**Collision Detected:**
+- Red warning: "Crash Detected - Recording Protected"
+- ⚠️ icon on main screen
+
+**Emergency Brake Detected:**
+- Orange alert: "Emergency Brake - Recording Protected"
+- 🛑 icon on main screen
+
+### After Event Detection
+1. **Alert:** User sees notification with event type
+2. **Protection:** Current chunk automatically locked
+3. **Indicator:** Visual status on main screen
+4. **Message:** In-app notification explains what happened
+5. **Continuation:** Recording continues normally
+6. **Unlocking:** User can manually unlock if false positive
+
+### Debouncing
+- **Cooldown Period:** 2 seconds between detections
+- **Purpose:** Prevent duplicate alerts for same incident
+- **Behavior:** Only one alert per event sequence
+
+### Limitations
+- ⚠️ Detection is heuristic-based (not 100% accurate)
+- ⚠️ Sensitivity varies by device accelerometer quality
+- ⚠️ False positives possible with severe road conditions
+- ⚠️ Requires motion/movement to detect (parked vehicle won't detect)
+- ⚠️ Accelerometer must be enabled on device
+- ⚠️ Accuracy depends on device orientation
+
+### Enabling/Disabling
+- **Always Active:** Impact detection runs automatically when recording
+- **No User Control:** Cannot be disabled (always on for safety)
+- **Accelerometer:** Must be available (all modern iPhones have this)
+
+### Typical Thresholds (Gravity Units)
+- Normal car acceleration: 0.3-0.5G
+- Emergency braking: 0.8-1.2G ← **Emergency Brake Threshold: 1.5G**
+- Collision impact: 2.5-8G ← **Collision Threshold: 2.5G**
+- Severe crash: 10G+
+
+---
+
+## Technical Details
+
+### Video Recording
+- **Format:** MOV (H.264 video codec)
+- **Resolution:** Device camera native resolution
+- **Frame Rate:** 30 FPS (device standard)
+- **Quality:** AVCaptureSession preset: `.high`
+- **Chunking:** Automatic via `AVCaptureMovieFileOutput`
+
+### Audio Recording
+- **Input:** Device microphone
+- **Format:** AAC (stereo)
+- **Session Settings:** 
+  - Category: `.record`
+  - Options: `.duckOthers`
+
+### Background Recording
+- Uses `UIBackgroundModes` with `audio` mode
+- Keeps audio session active in background
+- System prevents audio interruption
+- Recording continues until explicitly stopped
+
+### Picture-in-Picture (PiP) Mode
+
+**Use Case:** Monitor recording while using navigation or other apps.
+
+**How It Works:**
+1. Tap the **PiP** button (floating window icon) in the header
+2. A floating camera preview window appears on screen
+3. Shows live preview of front wide-angle camera
+4. Displays recording time and status for both cameras
+5. Draggable window - move it around by dragging the header
+6. Tap the minimize arrow to hide camera preview (keeps status bar)
+7. Control recording from the floating window:
+   - **Record button:** Start/stop recording
+   - **Minimize arrow:** Collapse to status bar only
+   - **Drag handle:** Move window around
+
+**Features:**
+- ✅ Live camera preview while using TomTom, Maps, or other apps
+- ✅ Draggable floating window - position anywhere
+- ✅ Minimizable - collapse to just show recording timer
+- ✅ Quick start/stop controls
+- ✅ Real-time status for all cameras
+- ✅ Continues recording even when minimized
+
+**Perfect For:**
+- Driving with navigation app in foreground
+- Monitoring recording without switching apps
+- Quick access to stop recording
+- Visibility confirmation while using other apps
+
+### Storage Management
+- **Calculation:** Sums all `.mov` files in Documents folder
+- **Unit:** Gigabytes (GB) with 2 decimal precision
+- **Cleanup:** Async task, doesn't block recording
+- **Protection:** Stored in UserDefaults as file name set
+
+### File Protection
+- **Storage:** UserDefaults (persistent across sessions)
+- **Key:** Last path component (filename)
+- **Scope:** Per-app only (not accessible to other apps)
+
+### Camera Recording (AVCam-Based)
+
+**Session Management:**
+- Dedicated `sessionQueue` for all session operations
+- Thread-safe configuration via queue dispatch
+- Proper lifecycle management (start/stop/cleanup)
+- No main thread blocking during setup
+
+**Video Configuration:**
+- Video stabilization (.auto) when available
+- Continuous auto-focus for subject tracking
+- Continuous auto-exposure for lighting changes
+- Continuous white-balance adjustment
+- Portrait orientation with proper mirroring
+- Video connection validation
+
+**Focus & Exposure:**
+- Continuous auto-focus mode
+- Continuous auto-exposure mode  
+- Continuous auto white-balance
+- Configuration locked during recording
+- Graceful fallback if modes unsupported
+
+**Video Stabilization:**
+- Automatic stabilization on all cameras
+- Improves video quality during vehicle movement
+- Reduced jitter and vibration
+- Works with both HEVC and H.264
+
+### Impact Detection
+- **Sensor:** Device accelerometer (CMMotionManager)
+- **Sample Rate:** 20 Hz (0.05s intervals)
+- **Buffer:** 10 measurements (0.5 second history)
+- **Analysis:** Dual algorithm (collision + brake)
+- **Debounce:** 2 second cooldown between events
+- **Callback:** Notifies ViewModel with event type
+- **Thread:** Main thread for UI updates
+
+**Collision Detection:**
+- Analyzes magnitude (all axes)
+- Requires >2.5G sustained acceleration
+- Needs >1.0G variation in 5-measurement window
+- Stops monitoring after detection
+
+**Emergency Brake Detection:**
+- Analyzes Z-axis deceleration
+- Requires >1.5G sustained deceleration
+- Needs 3+ consecutive high-decel measurements
+- Detects hard braking events
+
+## Limitations
+
+- ⚠️ Requires valid developer signing certificate for real device
+- ⚠️ Videos stored on-device only (implement iCloud/cloud sync if needed)
+- ⚠️ Recording stops if app is force-closed or device restarts
+- ⚠️ Battery drain during continuous recording (normal for video)
+- ⚠️ Storage cleanup is best-effort (if all files are protected, no deletion occurs)
+- ⚠️ File protection only prevents accidental deletion within the app
+
+## Future Enhancements
+
+Potential additions:
+- Video playback/preview in app
+- iCloud Drive or cloud sync
+- Time-based auto-cleanup (delete after X days)
+- GPS/location tagging for recordings
+- Metadata editing (driver name, trip info)
+- Video quality/bitrate settings
+- Batch file operations (multi-select delete/protect)
+- Export to cloud services
+- Video compression to save space
+- Incident flagging/tagging
+
+## Code Architecture
+
+### CameraDashcamViewModel
+Manages:
+- Multi-camera setup and coordination
+- Video recording lifecycle & chunking for all cameras
+- Recording timer updates
+- Impact detection integration (collisions + braking)
+- Storage management (all cameras)
+- File protection across all cameras
+- Error state management
+- Audio session configuration
+
+**Published Properties:**
+- `isRecording` - Recording state for all cameras
+- `cameraStatus` - Per-camera status (Ready/Recording/Unavailable/Error)
+- `crashDetected` - Collision event detected
+- `emergencyBrakeDetected` - Emergency braking detected
+- `showCrashAlert` - Show impact alert to user
+- `currentChunkNumber` - Synchronized chunk across all cameras
+- `currentStorageGB` - Total storage from all cameras
+
+**Key Methods:**
+- `setupCameras()` - Initialize all available cameras
+- `startRecording()` - Begin recording all active cameras
+- `stopRecording()` - Stop recording all cameras
+- `startNewChunk()` - Synchronized chunk transition for all cameras
+- `handleImpactEventDetected()` - Auto-protect all active recordings
+- `setupCrashDetection()` - Initialize accelerometer monitoring
+- `toggleFileProtection()` - Lock/unlock files
+- `getRecordedFiles()` - List all recordings from all cameras
+
+### CameraInfo
+Defines:
+- `CameraPosition` enum (frontWide, frontTelephoto)
+- Front camera device type and position mapping
+- File naming conventions per camera
+- `CameraRecorder` struct for individual camera management
+
+**AVCam-Based Implementation:**
+- Dedicated session queue for thread-safe operations
+- Queue-based session configuration (no main thread blocking)
+- Atomic input/output management
+- Proper focus/exposure/white-balance auto configuration
+- Video stabilization support
+- Video connection configuration
+
+**Camera Positions:**
+- Front Wide: Broad road view ahead (all devices)
+- Front Telephoto: Distant detail capture ahead (Pro models +)
+
+**Privacy Focus:**
+- Only front-facing cameras
+- No interior/cabin recording
+- Driver privacy protected
+- Road and environment documentation only
+
+**Features:**
+- Automatic video stabilization
+- Continuous auto-focus
+- Continuous auto-exposure
+- Continuous auto white-balance
+- Proper orientation handling
+- Video mirroring for front cameras
+
+**File Prefix Examples:**
+- `front_wide_chunk_0001.mov`
+- `front_zoom_chunk_0001.mov`
+
+### CrashDetectionManager
+Monitors:
+- Device accelerometer data
+- Acceleration magnitude and changes
+- Collision pattern detection
+- Emergency braking patterns
+- Debouncing between events
+- Running buffer of recent measurements
+
+**Event Types:**
+- `.collision` - High-impact collision detected
+- `.emergencyBrake` - Hard braking detected
+
+**Key Methods:**
+- `startMonitoring()` - Begin accelerometer updates with event callback
+- `stopMonitoring()` - Stop tracking
+- `isCrashDetected()` - Analyze sensor data for collisions
+- `isEmergencyBrakeDetected()` - Analyze deceleration for hard braking
+- `shouldDebounce()` - Check if event detection should be suppressed
+
+### StorageManager
+Handles:
+- Total storage calculation from selected location
+- File cleanup when limit reached
+- Unprotected file deletion (oldest first)
+- Protection checking
+- Works with StorageLocationManager for path resolution
+
+### VideoCodecManager
+Manages:
+- Video codec selection (HEVC vs H.264)
+- Codec settings configuration
+- Storage efficiency calculations
+- Compatibility information
+- Persistent codec preference via UserDefaults
+
+**Codec Options:**
+- `.hevc` - Modern codec, 40% compression (default)
+- `.h264` - Compatible codec, larger files
+
+**Features:**
+- Automatic device capability detection
+- Video settings generation for recording
+- Storage estimate calculations
+- File size comparisons
+
+### StorageLocationManager
+Manages:
+- Storage location selection (On Device vs iCloud)
+- iCloud Drive folder creation and management
+- Recording directory URL resolution
+- File migration between locations
+- iCloud availability checking
+- Persistent location preference via UserDefaults
+
+**Storage Options:**
+- `.onDevice` - App Documents folder (deleted on uninstall)
+- `.iCloud` - iCloud Drive folder (persists after uninstall)
+
+### FileProtectionManager
+Maintains:
+- Protected file list in UserDefaults
+- Toggle protection on/off
+- Query protection status
+
+### ContentView
+Displays:
+- Recording status with chunk number
+- Start/Stop button
+- Elapsed time counter
+- Storage usage progress
+- Crash detection status
+- Error messages & alerts
+- Navigation to Settings & Files
+- Clean dark-themed UI
+
+### SettingsView
+Allows configuration of:
+- Video chunk duration (1-15 minutes)
+- Maximum storage (1-100 GB)
+- Quick presets and custom slider
+- Current storage usage display
+
+### FilesView
+Shows:
+- List of all recordings
+- File size and date
+- Protection status for each file
+- Lock/unlock buttons
+- Delete buttons (disabled for protected files)
+
+## Legal & Privacy
+
+- Users should disclose dashcam recording per local laws
+- Implement privacy policy for production app
+- Consider adding audio consent disclosure
+- Some jurisdictions require dashboard display of recording indicator
+
+## Support
+
+For issues, check:
+1. Console output in Xcode for error messages
+2. Device Settings for permission status
+3. Available storage on device
+4. iOS version compatibility
