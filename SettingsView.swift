@@ -728,6 +728,75 @@ struct SettingsView: View {
                                     .cornerRadius(6)
                                 }
 
+                                // Extended Exposure Settings
+                                VStack(spacing: 10) {
+                                    HStack {
+                                        Text("Extended Exposure")
+                                            .font(.caption)
+                                            .foregroundColor(.gray)
+                                        Spacer()
+                                        Toggle("", isOn: $nightModeManager.useExtendedExposure)
+                                            .labelsHidden()
+                                    }
+
+                                    if nightModeManager.useExtendedExposure {
+                                        VStack(spacing: 8) {
+                                            HStack {
+                                                Text("Exposure Time")
+                                                    .font(.caption)
+                                                    .foregroundColor(.gray)
+                                                Spacer()
+                                                Text(String(format: "%.2f ms", nightModeManager.exposureDurationMs))
+                                                    .font(.caption)
+                                                    .fontWeight(.semibold)
+                                                    .foregroundColor(.white)
+                                            }
+
+                                            Slider(
+                                                value: $nightModeManager.exposureDurationMs,
+                                                in: 8.33...33.33,
+                                                step: 0.5
+                                            )
+                                            .tint(.green)
+
+                                            HStack(spacing: 20) {
+                                                VStack(alignment: .leading, spacing: 2) {
+                                                    Text("8.33ms")
+                                                        .font(.caption2)
+                                                        .foregroundColor(.gray)
+                                                    Text("1/120s")
+                                                        .font(.caption2)
+                                                        .foregroundColor(.gray)
+                                                }
+                                                Spacer()
+                                                VStack(alignment: .trailing, spacing: 2) {
+                                                    Text("33.33ms")
+                                                        .font(.caption2)
+                                                        .foregroundColor(.gray)
+                                                    Text("1/30s")
+                                                        .font(.caption2)
+                                                        .foregroundColor(.gray)
+                                                }
+                                            }
+
+                                            HStack(spacing: 8) {
+                                                Image(systemName: "exclamationmark.circle.fill")
+                                                    .foregroundColor(.orange)
+                                                    .font(.caption)
+                                                Text("Longer exposure captures more light but may cause motion blur at driving speeds")
+                                                    .font(.caption2)
+                                                    .foregroundColor(.orange)
+                                            }
+                                            .padding(8)
+                                            .background(Color.orange.opacity(0.1))
+                                            .cornerRadius(4)
+                                        }
+                                    }
+                                }
+                                .padding(10)
+                                .background(Color.green.opacity(0.05))
+                                .cornerRadius(6)
+
                                 VStack(spacing: 6) {
                                     HStack(spacing: 8) {
                                         Image(systemName: "info.circle.fill")

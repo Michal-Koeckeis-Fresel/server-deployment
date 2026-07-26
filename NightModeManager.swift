@@ -29,6 +29,21 @@ class NightModeManager: NSObject, ObservableObject {
             UserDefaults.standard.set(brightnessThreshold, forKey: "nightModeBrightnessThreshold")
         }
     }
+    @Published var useExtendedExposure: Bool = UserDefaults.standard.bool(forKey: "nightModeExtendedExposure") {
+        didSet {
+            UserDefaults.standard.set(useExtendedExposure, forKey: "nightModeExtendedExposure")
+        }
+    }
+    @Published var exposureDurationMs: Double = UserDefaults.standard.double(forKey: "nightModeExposureDuration") {
+        didSet {
+            let clamped = max(8.33, min(33.33, exposureDurationMs))
+            if clamped != exposureDurationMs {
+                exposureDurationMs = clamped
+            }
+            UserDefaults.standard.set(exposureDurationMs, forKey: "nightModeExposureDuration")
+            applyExposureSettings()
+        }
+    }
     @Published var isSupported: Bool = false
     @Published var isActive: Bool = false
     @Published var currentBrightness: Double = 0.0
@@ -41,6 +56,9 @@ class NightModeManager: NSObject, ObservableObject {
         checkNightModeSupport()
         if UserDefaults.standard.double(forKey: "nightModeBrightnessThreshold") == 0 {
             brightnessThreshold = -5.0
+        }
+        if UserDefaults.standard.double(forKey: "nightModeExposureDuration") == 0 {
+            exposureDurationMs = 16.67
         }
     }
 
@@ -119,10 +137,12 @@ class NightModeManager: NSObject, ObservableObject {
                 if shouldEnableLowLightBoost && !device.isLowLightBoostEnabled {
                     device.automaticallyEnablesLowLightBoost = true
                     isActive = true
+                    applyExposureSettings()
                     logNightMode("Auto Night Mode: Scene too dark (exposure: \(String(format: "%.2f", exposure)))")
                 } else if !shouldEnableLowLightBoost && device.isLowLightBoostEnabled && !isEnabled {
                     device.automaticallyEnablesLowLightBoost = false
                     isActive = false
+                    resetExposureSettings()
                     logNightMode("Auto Night Mode: Scene bright enough (exposure: \(String(format: "%.2f", exposure)))")
                 }
             }
@@ -130,6 +150,49 @@ class NightModeManager: NSObject, ObservableObject {
             device.unlockForConfiguration()
         } catch {
             print("Failed to check brightness: \(error.localizedDescription)")
+        }
+    }
+
+    private func applyExposureSettings() {
+        guard let device = captureDevice, useExtendedExposure else { return }
+
+        do {
+            try device.lockForConfiguration()
+
+            if device.isExposureModeSupported(.custom) {
+                let duration = CMTimeMakeWithSeconds(exposureDurationMs / 1000.0, preferredTimescale: 1000)
+
+                if duration >= device.activeFormat.minExposureDuration &&
+                   duration <= device.activeFormat.maxExposureDuration {
+                    device.setExposureModeCustom(
+                        duration: duration,
+                        iso: AVCaptureDevice.currentISO,
+                        completionHandler: nil
+                    )
+                    logNightMode("Extended exposure applied: \(String(format: "%.2f", exposureDurationMs)) ms")
+                }
+            }
+
+            device.unlockForConfiguration()
+        } catch {
+            print("Failed to apply exposure settings: \(error.localizedDescription)")
+        }
+    }
+
+    private func resetExposureSettings() {
+        guard let device = captureDevice else { return }
+
+        do {
+            try device.lockForConfiguration()
+
+            if device.isExposureModeSupported(.continuousAutoExposure) {
+                device.exposureMode = .continuousAutoExposure
+                logNightMode("Exposure reset to automatic")
+            }
+
+            device.unlockForConfiguration()
+        } catch {
+            print("Failed to reset exposure settings: \(error.localizedDescription)")
         }
     }
 
