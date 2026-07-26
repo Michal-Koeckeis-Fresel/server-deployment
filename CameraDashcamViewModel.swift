@@ -48,6 +48,8 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
     @Published var thermalWarningMessage: String?
     @Published var isSlowMotionActive: Bool = false
 
+    @Published var fpsCounter = FPSCounter()
+
     private var slowMotionTimer: Timer?
     private let slowMotionDuration: TimeInterval = 3.0
 
@@ -198,6 +200,7 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         currentChunkNumber = 0
         crashDetected = false
         emergencyBrakeDetected = false
+        fpsCounter.start()
         startTimerUpdate()
         setupChunkTimer()
         setupCrashDetection()
@@ -213,6 +216,8 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         }
 
         isRecording = false
+        fpsCounter.stop()
+        fpsCounter.printFPSReport()
         displayLink?.invalidate()
         displayLink = nil
         chunkTimer?.invalidate()

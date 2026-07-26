@@ -8,6 +8,7 @@ struct ContentView: View {
     @State private var showSettings = false
     @State private var showFiles = false
     @State private var showPiP = false
+    @State private var recordingStartTime = Date()
 
     var body: some View {
         NavigationStack {
@@ -438,9 +439,24 @@ struct ContentView: View {
                         .environmentObject(viewModel)
                         .transition(.scale)
                 }
+
+                // Watermark overlay with FPS and recording info
+                if viewModel.isRecording {
+                    WatermarkView(
+                        fpsCounter: viewModel.fpsCounter,
+                        batteryManager: batteryManager,
+                        timestamp: recordingStartTime
+                    )
+                    .transition(.fadeIn)
+                }
             }
         }
             .navigationBarHidden(true)
+            .onChange(of: viewModel.isRecording) { newValue in
+                if newValue {
+                    recordingStartTime = Date()
+                }
+            }
         }
         .alert(
             viewModel.crashDetected ? "⚠️ Crash Detected" : "🛑 Emergency Brake Detected",
