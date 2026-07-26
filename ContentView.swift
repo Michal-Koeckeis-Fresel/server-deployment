@@ -424,46 +424,56 @@ struct ContentView: View {
                                 .font(.subheadline)
                                 .foregroundColor(.gray)
                             Spacer()
+                            Toggle("", isOn: $gForceMonitor.isEnabled)
+                                .labelsHidden()
                         }
 
-                        VStack(spacing: 8) {
-                            HStack(spacing: 20) {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("Current")
-                                        .font(.caption)
-                                        .foregroundColor(.gray)
-                                    Text(gForceMonitor.getGForceString())
-                                        .font(.headline)
-                                        .foregroundColor(.white)
-                                        .fontWeight(.semibold)
-                                }
+                        if gForceMonitor.isEnabled {
+                            VStack(spacing: 8) {
+                                HStack(spacing: 20) {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Current")
+                                            .font(.caption)
+                                            .foregroundColor(.gray)
+                                        Text(gForceMonitor.getGForceString())
+                                            .font(.headline)
+                                            .foregroundColor(.white)
+                                            .fontWeight(.semibold)
+                                    }
 
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("Peak")
-                                        .font(.caption)
-                                        .foregroundColor(.gray)
-                                    Text(gForceMonitor.getPeakGForceString())
-                                        .font(.headline)
-                                        .foregroundColor(.orange)
-                                        .fontWeight(.semibold)
-                                }
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Peak")
+                                            .font(.caption)
+                                            .foregroundColor(.gray)
+                                        Text(gForceMonitor.getPeakGForceString())
+                                            .font(.headline)
+                                            .foregroundColor(.orange)
+                                            .fontWeight(.semibold)
+                                    }
 
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("Average")
-                                        .font(.caption)
-                                        .foregroundColor(.gray)
-                                    Text(gForceMonitor.getAverageGForceString())
-                                        .font(.headline)
-                                        .foregroundColor(.white)
-                                        .fontWeight(.semibold)
-                                }
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Average")
+                                            .font(.caption)
+                                            .foregroundColor(.gray)
+                                        Text(gForceMonitor.getAverageGForceString())
+                                            .font(.headline)
+                                            .foregroundColor(.white)
+                                            .fontWeight(.semibold)
+                                    }
 
-                                Spacer()
+                                    Spacer()
+                                }
                             }
+                            .padding(10)
+                            .background(Color.orange.opacity(0.05))
+                            .cornerRadius(6)
+                        } else {
+                            Text("Disabled")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                                .frame(maxWidth: .infinity, alignment: .center)
+                                .padding(20)
                         }
-                        .padding(10)
-                        .background(Color.orange.opacity(0.05))
-                        .cornerRadius(6)
                     }
                     .padding(12)
                     .background(Color.gray.opacity(0.1))

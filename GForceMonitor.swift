@@ -9,6 +9,11 @@ class GForceMonitor: NSObject, ObservableObject {
     @Published var peakGForce: Double = 0.0
     @Published var averageGForce: Double = 0.0
     @Published var accelerometerData: (x: Double, y: Double, z: Double) = (0, 0, 0)
+    @Published var isEnabled: Bool = UserDefaults.standard.bool(forKey: "gForceMonitoringEnabled") {
+        didSet {
+            UserDefaults.standard.set(isEnabled, forKey: "gForceMonitoringEnabled")
+        }
+    }
 
     private let motionManager = CMMotionManager()
     private var gForceHistory: [Double] = []
@@ -16,6 +21,8 @@ class GForceMonitor: NSObject, ObservableObject {
     private let gravityConstant: Double = 9.81
 
     override init() {
+        let savedEnabled = UserDefaults.standard.object(forKey: "gForceMonitoringEnabled")
+        self._isEnabled = Published(initialValue: savedEnabled as? Bool ?? true)
         super.init()
         setupMotionMonitoring()
     }
@@ -46,6 +53,8 @@ class GForceMonitor: NSObject, ObservableObject {
     }
 
     private func processAccelerometerData(_ data: CMAccelerometerData) {
+        guard isEnabled else { return }
+
         let x = data.acceleration.x
         let y = data.acceleration.y
         let z = data.acceleration.z - gravityConstant
