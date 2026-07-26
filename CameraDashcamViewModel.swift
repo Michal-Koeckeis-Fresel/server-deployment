@@ -94,13 +94,23 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
     }
 
     private func initializeCameras() {
+        let capabilityChecker = CameraCapabilityChecker.shared
+        capabilityChecker.printCapabilitiesReport()
+
         for position in CameraPosition.allCases {
+            let capabilities = capabilityChecker.checkCapabilities(for: position)
+
+            if !capabilities.isAvailable {
+                cameraStatus[position] = "Unavailable"
+                continue
+            }
+
             var camera = CameraRecorder(position: position)
             if camera.setupSession() {
                 cameras[position] = camera
-                cameraStatus[position] = "Ready"
+                cameraStatus[position] = camera.getSessionStatus()
             } else {
-                cameraStatus[position] = "Unavailable"
+                cameraStatus[position] = "Setup Failed"
             }
         }
     }
@@ -108,6 +118,32 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
     func setupCameras() {
         initializeCameras()
         errorMessage = nil
+        updateCameraStatus()
+    }
+
+    private func updateCameraStatus() {
+        for (position, camera) in cameras {
+            let status = camera.getSessionStatus()
+            cameraStatus[position] = status
+            if status == "Setup Failed" {
+                errorMessage = "Camera setup issue for \(position.rawValue). Try restarting the app."
+            }
+        }
+    }
+
+    func recoverCameraSession() {
+        for (position, camera) in cameras {
+            var mutableCamera = camera
+            if mutableCamera.captureSession?.isRunning == false {
+                if mutableCamera.setupSession() {
+                    cameras[position] = mutableCamera
+                    cameraStatus[position] = "Ready"
+                } else {
+                    cameraStatus[position] = "Recovery Failed"
+                }
+            }
+            cameras[position] = mutableCamera
+        }
     }
 
     func startRecording() {

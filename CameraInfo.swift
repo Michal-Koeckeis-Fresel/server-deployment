@@ -27,6 +27,14 @@ enum CameraPosition: String, CaseIterable {
     }
 }
 
+enum CameraSetupError: Error {
+    case deviceNotAvailable
+    case inputCreationFailed
+    case outputCreationFailed
+    case configurationFailed
+    case invalidSession
+}
+
 struct CameraRecorder {
     let position: CameraPosition
     var captureSession: AVCaptureSession?
@@ -34,90 +42,145 @@ struct CameraRecorder {
     var videoInput: AVCaptureDeviceInput?
     var isRecording: Bool = false
     var currentURL: URL?
-    private let sessionQueue = DispatchQueue(label: "session queue", attributes: [], autoreleaseFrequency: .workItem)
+    var isAvailable: Bool = false
+    private let sessionQueue = DispatchQueue(label: "com.dashcam.camera.\(UUID().uuidString)", attributes: [], autoreleaseFrequency: .workItem)
 
     mutating func setupSession() -> Bool {
         let session = AVCaptureSession()
 
+        var setupSuccess = false
+        let semaphore = DispatchSemaphore(value: 0)
+
         sessionQueue.async { [self] in
-            self.configureSession(session)
+            defer { semaphore.signal() }
+            do {
+                try self.configureSession(session)
+                setupSuccess = true
+            } catch {
+                print("Camera setup error for \(self.position.rawValue): \(error)")
+                setupSuccess = false
+            }
         }
 
+        _ = semaphore.wait(timeout: .now() + 5.0)
         self.captureSession = session
-        return true
+        self.isAvailable = setupSuccess
+        return setupSuccess
     }
 
-    private mutating func configureSession(_ session: AVCaptureSession) {
+    private mutating func configureSession(_ session: AVCaptureSession) throws {
+        session.beginConfiguration()
+        defer { session.commitConfiguration() }
+
+        try validatePreset()
         session.sessionPreset = .high
 
+        let videoDevice = try findAndConfigureVideoDevice()
+        try configureVideoInput(videoDevice, to: session)
+        try configureVideoOutput(to: session, with: videoDevice)
+
+        sessionQueue.asyncAfter(deadline: .now() + 0.1) {
+            session.startRunning()
+        }
+    }
+
+    private func validatePreset() throws {
+        let session = AVCaptureSession()
+        if !session.canSetSessionPreset(.high) {
+            throw CameraSetupError.configurationFailed
+        }
+    }
+
+    private func findAndConfigureVideoDevice() throws -> AVCaptureDevice {
         guard let videoDevice = AVCaptureDevice.default(
             position.deviceType,
             for: .video,
             position: position.position
         ) else {
-            return
+            throw CameraSetupError.deviceNotAvailable
         }
 
-        do {
-            let videoInput = try AVCaptureDeviceInput(device: videoDevice)
-            self.videoInput = videoInput
-
-            if session.canAddInput(videoInput) {
-                session.addInput(videoInput)
-            }
-
-            let movieOutput = AVCaptureMovieFileOutput()
-
-            if session.canAddOutput(movieOutput) {
-                session.addOutput(movieOutput)
-
-                configureVideoConnection(for: movieOutput)
-                configureVideoCodec(for: movieOutput)
-                configureVideoStabilization(for: movieOutput)
-                configureHDRVideo(for: movieOutput, device: videoDevice)
-            }
-
-            self.videoOutput = movieOutput
-
-            configureFocusAndExposure(device: videoDevice)
-
-            sessionQueue.async {
-                session.startRunning()
-            }
-        } catch {
-            print("Error setting up session: \(error)")
+        if !videoDevice.isConnected {
+            throw CameraSetupError.deviceNotAvailable
         }
+
+        return videoDevice
     }
 
-    private func configureVideoConnection(for output: AVCaptureMovieFileOutput) {
-        if let videoConnection = output.connection(with: .video) {
-            if videoConnection.isVideoStabilizationSupported {
-                videoConnection.preferredVideoStabilizationMode = .auto
-            }
+    private mutating func configureVideoInput(_ device: AVCaptureDevice, to session: AVCaptureSession) throws {
+        let videoInput = try AVCaptureDeviceInput(device: device)
+        self.videoInput = videoInput
 
+        guard session.canAddInput(videoInput) else {
+            throw CameraSetupError.inputCreationFailed
+        }
+
+        session.addInput(videoInput)
+    }
+
+    private mutating func configureVideoOutput(to session: AVCaptureSession, with device: AVCaptureDevice) throws {
+        let movieOutput = AVCaptureMovieFileOutput()
+
+        guard session.canAddOutput(movieOutput) else {
+            throw CameraSetupError.outputCreationFailed
+        }
+
+        session.addOutput(movieOutput)
+        self.videoOutput = movieOutput
+
+        try configureVideoConnection(for: movieOutput)
+        configureVideoCodec(for: movieOutput)
+        configureVideoStabilization(for: movieOutput)
+        configureHDRVideo(for: movieOutput, device: device)
+        configureFocusAndExposure(device: device)
+    }
+
+    private func configureVideoConnection(for output: AVCaptureMovieFileOutput) throws {
+        guard let videoConnection = output.connection(with: .video) else {
+            throw CameraSetupError.configurationFailed
+        }
+
+        if videoConnection.isVideoStabilizationSupported {
+            videoConnection.preferredVideoStabilizationMode = .cinematic
+        }
+
+        if videoConnection.isVideoOrientationSupported {
             videoConnection.videoOrientation = .portrait
-            videoConnection.isVideoMirrored = (position == .frontWide || position == .frontTelephoto)
+        }
+
+        videoConnection.isVideoMirrored = (position == .frontWide || position == .frontTelephoto)
+
+        if !videoConnection.isActive {
+            throw CameraSetupError.configurationFailed
         }
     }
 
     private func configureVideoCodec(for output: AVCaptureMovieFileOutput) {
-        let codecManager = VideoCodecManager.shared
-        output.setOutputSettings(codecManager.getVideoSettings(), for: output.connections.first)
+        do {
+            let codecManager = VideoCodecManager.shared
+            guard let videoSettings = codecManager.getVideoSettings() as? [String: Any] else {
+                return
+            }
+
+            if let audioSettings = codecManager.getAudioSettings() as? [String: Any] {
+                output.setOutputSettings([AVMediaType.audio: audioSettings], for: output.connections.first)
+            }
+
+            output.setOutputSettings(videoSettings, for: output.connections.first)
+        } catch {
+            print("Error configuring video codec: \(error)")
+        }
     }
 
     private func configureVideoStabilization(for output: AVCaptureMovieFileOutput) {
-        if let connection = output.connection(with: .video) {
-            if connection.isVideoStabilizationSupported {
-                connection.preferredVideoStabilizationMode = .cinematic
-            }
+        guard let connection = output.connection(with: .video) else { return }
 
-            if #available(iOS 17.0, *) {
-                if connection.isCinematicVideoStabilizationSupported {
-                    connection.preferredVideoStabilizationMode = .cinematic
-                }
-            }
+        if connection.isVideoStabilizationSupported {
+            connection.preferredVideoStabilizationMode = .cinematic
+        }
 
-            if connection.activeVideoStabilizationModes.contains(.optical) {
+        if #available(iOS 17.0, *) {
+            if connection.isCinematicVideoStabilizationSupported {
                 connection.preferredVideoStabilizationMode = .cinematic
             }
         }
@@ -125,16 +188,14 @@ struct CameraRecorder {
 
     private func configureHDRVideo(for output: AVCaptureMovieFileOutput, device: AVCaptureDevice) {
         if #available(iOS 17.0, *) {
-            if device.isHDRVideoSupported {
-                do {
-                    try device.lockForConfiguration()
-                    if device.isVideoHDREnabled {
-                        device.isVideoHDREnabled = true
-                    }
-                    device.unlockForConfiguration()
-                } catch {
-                    print("Error enabling HDR: \(error)")
-                }
+            guard device.isHDRVideoSupported else { return }
+
+            do {
+                try device.lockForConfiguration()
+                defer { device.unlockForConfiguration() }
+                device.isVideoHDREnabled = true
+            } catch {
+                print("Warning: Could not enable HDR video: \(error)")
             }
         }
     }
@@ -142,13 +203,22 @@ struct CameraRecorder {
     private func configureFocusAndExposure(device: AVCaptureDevice) {
         do {
             try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
 
             if device.isFocusModeSupported(.continuousAutoFocus) {
                 device.focusMode = .continuousAutoFocus
             }
 
+            if device.isFocusPointOfInterestSupported {
+                device.focusPointOfInterest = CGPoint(x: 0.5, y: 0.5)
+            }
+
             if device.isExposureModeSupported(.continuousAutoExposure) {
                 device.exposureMode = .continuousAutoExposure
+            }
+
+            if device.isExposurePointOfInterestSupported {
+                device.exposurePointOfInterest = CGPoint(x: 0.5, y: 0.5)
             }
 
             if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
@@ -161,23 +231,21 @@ struct CameraRecorder {
                 }
             }
 
-            if device.isExposureModeSupported(.continuousAutoExposure) {
-                device.exposureMode = .continuousAutoExposure
-                device.automaticallyEnablesLowLightBoostWhenAvailable = true
-            }
-
             if device.isLowLightBoostSupported {
                 device.automaticallyEnablesLowLightBoostWhenAvailable = true
             }
 
-            device.unlockForConfiguration()
+            if device.isSubjectAreaChangeMonitoringEnabled == false {
+                device.isSubjectAreaChangeMonitoringEnabled = true
+            }
         } catch {
-            print("Error configuring focus/exposure: \(error)")
+            print("Warning: Could not configure focus/exposure: \(error)")
         }
     }
 
     mutating func startRecording(to url: URL, delegate: AVCaptureFileOutputRecordingDelegate) {
-        guard let videoOutput = videoOutput else {
+        guard let videoOutput = videoOutput, captureSession?.isRunning == true else {
+            print("Error: Camera not ready for recording")
             return
         }
 
@@ -210,6 +278,23 @@ struct CameraRecorder {
             if let session = self.captureSession, session.isRunning {
                 session.stopRunning()
             }
+
+            self.videoInput = nil
+            self.videoOutput = nil
+            self.captureSession = nil
         }
+    }
+
+    func getSessionStatus() -> String {
+        if !isAvailable {
+            return "Unavailable"
+        }
+        if captureSession?.isRunning == false {
+            return "Setup Failed"
+        }
+        if isRecording {
+            return "Recording"
+        }
+        return "Ready"
     }
 }

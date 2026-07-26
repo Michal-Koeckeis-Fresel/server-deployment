@@ -232,6 +232,148 @@ This enhancement ensures dashcam recording won't be interrupted by other camera 
 - Synchronized playback viewer
 - Multi-angle incident replay
 
+---
+
+## Capture Session Implementation (Advanced)
+
+Comprehensive implementation following Apple's AVCaptureSession best practices.
+
+### Session Configuration
+
+**Thread Safety:**
+- Dedicated `sessionQueue` per camera with unique identifiers
+- All session operations dispatched to queue (no main thread blocking)
+- Configuration synchronized via semaphore for safety
+- Graceful 5-second timeout for setup operations
+
+**Session Lifecycle:**
+1. Create AVCaptureSession
+2. Begin configuration transaction
+3. Validate device and preset compatibility
+4. Add inputs (device) and outputs (recording)
+5. Configure connections and settings
+6. Commit configuration
+7. Start session running
+8. Begin recording
+
+**Error Handling:**
+- Comprehensive CameraSetupError enum for specific failures
+- Detailed error logging for debugging
+- Graceful degradation when features unavailable
+- Recovery mechanism for session failures
+- Status tracking (Ready, Recording, Setup Failed, Unavailable)
+
+### Device Capability Checking
+
+**Pre-Configuration Validation:**
+- Device availability and connectivity check
+- Session preset compatibility validation
+- HDR video support detection
+- Cinematic stabilization capability check
+- Low-light boost support verification
+- Frame rate capability analysis
+- Maximum resolution detection
+
+**Automatic Fallback:**
+- Attempts high preset, falls back to medium/low if needed
+- Disables features not supported by device
+- Graceful degradation for older iOS versions
+- Warnings logged (not errors) for unsupported features
+
+**Capability Report:**
+- Printable report of all camera capabilities
+- Helps diagnose device-specific issues
+- Lists supported frame rates and resolutions
+- Shows HDR and stabilization support status
+
+### Video Connection Configuration
+
+**Orientation & Mirroring:**
+- Portrait orientation set for dashcam use
+- Front camera automatically mirrored
+- Validated before use to prevent errors
+
+**Video Stabilization:**
+- Cinematic mode when available
+- Optical stabilization fallback
+- Verified compatibility before setting
+
+**Connection Validation:**
+- Verifies video connection exists before configuration
+- Confirms connection remains active after setup
+- Prevents silent configuration failures
+
+### Device Configuration
+
+**Focus & Exposure:**
+- Continuous auto-focus on center point (0.5, 0.5)
+- Continuous auto-exposure on center point
+- Continuous auto white-balance
+- Subject area change monitoring enabled
+- Sensor fusion auto-focus (iOS 16+)
+- Locked configuration prevents interruption
+
+**Low-Light Optimization:**
+- Automatic low-light boost when available
+- Enabled by default for better night footage
+- Graceful on devices without support
+- Improves image clarity in darkness
+
+**HDR Video:**
+- Enabled on iOS 17+ with capable devices
+- Improves dynamic range in mixed lighting
+- Better detail in bright and dark areas
+- Automatically disabled on unsupported devices
+
+### Resource Management
+
+**Proper Cleanup:**
+- Session stopped before cleanup
+- Input and output references cleared
+- Resources released to free memory
+- Prevents resource leaks in app lifecycle
+
+**Memory Efficiency:**
+- Unique queue labels prevent collisions
+- Autorelease frequency tuned for optimization
+- Semaphore-based synchronization for clean waits
+- No retain cycles between objects
+
+### Error Recovery
+
+**Automatic Recovery:**
+- Detects failed sessions on app launch
+- Attempts to restore camera functionality
+- Reports recovery status in UI
+- User can retry via Settings
+
+**User Feedback:**
+- Clear status messages (Ready, Recording, Unavailable)
+- Error descriptions in UI
+- Prompts to restart app if needed
+- Links to troubleshooting guides
+
+### Monitoring & Diagnostics
+
+**Camera Status Display:**
+- Real-time status for each camera
+- Shows device connectivity
+- Indicates recording state
+- Displays setup errors
+
+**Debug Logging:**
+- Capability report on app launch
+- Error logging with detailed context
+- Session state tracking
+- Configuration validation logging
+
+**Settings Link:**
+- Quick access to app permissions
+- Guide users to enable required permissions
+- Clear error messages with solutions
+
+---
+
 ## Project Structure
 
 ```
