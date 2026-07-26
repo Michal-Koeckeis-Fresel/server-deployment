@@ -5,6 +5,7 @@ struct ContentView: View {
     @State private var cameraSetup = false
     @State private var showSettings = false
     @State private var showFiles = false
+    @State private var showPiP = false
 
     var body: some View {
         NavigationStack {
@@ -26,6 +27,15 @@ struct ContentView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
 
                         VStack(spacing: 8) {
+                            Button(action: { showPiP.toggle() }) {
+                                Image(systemName: "pip.fill")
+                                    .font(.system(size: 18))
+                                    .frame(width: 44, height: 44)
+                                    .background(showPiP ? Color.blue.opacity(0.6) : Color.gray.opacity(0.3))
+                                    .foregroundColor(.white)
+                                    .cornerRadius(8)
+                            }
+
                             NavigationLink(destination: SettingsView()) {
                                 Image(systemName: "gear")
                                     .font(.system(size: 18))
@@ -262,6 +272,12 @@ struct ContentView: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 32)
+
+                if showPiP {
+                    PiPCameraView()
+                        .environmentObject(viewModel)
+                        .transition(.scale)
+                }
             }
         }
             .navigationBarHidden(true)

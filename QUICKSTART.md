@@ -31,6 +31,12 @@ Get your iOS dashcam running in 5 minutes.
    - Tap Start Recording
    - Press home button (app keeps recording!)
 
+6. **Use Picture-in-Picture (PiP)**
+   - Tap the PiP button (floating window icon)
+   - A floating preview appears - drag it around
+   - Switch to TomTom or any other app
+   - Dashcam continues recording in the PiP window
+
 ## Key Files
 
 | File | Purpose |

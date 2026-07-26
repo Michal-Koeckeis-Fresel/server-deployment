@@ -6,6 +6,7 @@ A SwiftUI-based dashcam application for iOS that records video continuously, eve
 
 ✅ **Multi-Camera Recording** - Simultaneously records from front cameras (wide angle & telephoto)  
 ✅ **Background Recording** - App continues recording when locked or switched away  
+✅ **Picture-in-Picture Mode** - Floating camera preview window while using other apps (like navigation)  
 ✅ **Video Chunking** - Automatically splits recordings into smaller files (1-15 min, configurable)  
 ✅ **Impact Detection** - Detects collisions and emergency braking via accelerometer and auto-protects all files  
 ✅ **Smart Storage** - Auto-deletes oldest unprotected videos when storage limit is reached  
@@ -875,6 +876,36 @@ Detects hard, sustained braking (emergency stops):
 - Keeps audio session active in background
 - System prevents audio interruption
 - Recording continues until explicitly stopped
+
+### Picture-in-Picture (PiP) Mode
+
+**Use Case:** Monitor recording while using navigation or other apps.
+
+**How It Works:**
+1. Tap the **PiP** button (floating window icon) in the header
+2. A floating camera preview window appears on screen
+3. Shows live preview of front wide-angle camera
+4. Displays recording time and status for both cameras
+5. Draggable window - move it around by dragging the header
+6. Tap the minimize arrow to hide camera preview (keeps status bar)
+7. Control recording from the floating window:
+   - **Record button:** Start/stop recording
+   - **Minimize arrow:** Collapse to status bar only
+   - **Drag handle:** Move window around
+
+**Features:**
+- ✅ Live camera preview while using TomTom, Maps, or other apps
+- ✅ Draggable floating window - position anywhere
+- ✅ Minimizable - collapse to just show recording timer
+- ✅ Quick start/stop controls
+- ✅ Real-time status for all cameras
+- ✅ Continues recording even when minimized
+
+**Perfect For:**
+- Driving with navigation app in foreground
+- Monitoring recording without switching apps
+- Quick access to stop recording
+- Visibility confirmation while using other apps
 
 ### Storage Management
 - **Calculation:** Sums all `.mov` files in Documents folder
