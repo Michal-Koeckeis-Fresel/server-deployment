@@ -239,7 +239,27 @@ struct ContentView: View {
 
                     // Impact Detection Status
                     if viewModel.isRecording {
-                        if viewModel.crashDetected || viewModel.emergencyBrakeDetected {
+                        if viewModel.isSlowMotionActive {
+                            HStack(spacing: 12) {
+                                Image(systemName: "slowmo")
+                                    .foregroundColor(.purple)
+                                    .animation(.easeInOut(duration: 0.3), value: viewModel.isSlowMotionActive)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Slow-Motion Recording")
+                                        .font(.caption)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.purple)
+                                    Text("Capturing at 60 fps for impact details")
+                                        .font(.caption2)
+                                        .foregroundColor(.purple)
+                                }
+                                Spacer()
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color.purple.opacity(0.1))
+                            .cornerRadius(6)
+                        } else if viewModel.crashDetected || viewModel.emergencyBrakeDetected {
                             VStack(spacing: 8) {
                                 if viewModel.crashDetected {
                                     HStack(spacing: 12) {

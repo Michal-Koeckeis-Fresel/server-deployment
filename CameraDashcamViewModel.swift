@@ -46,6 +46,10 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
     @Published var showCrashAlert = false
     @Published var impactEventType: ImpactEventType = .collision
     @Published var thermalWarningMessage: String?
+    @Published var isSlowMotionActive: Bool = false
+
+    private var slowMotionTimer: Timer?
+    private let slowMotionDuration: TimeInterval = 3.0
 
     override init() {
         super.init()
@@ -213,9 +217,12 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         displayLink = nil
         chunkTimer?.invalidate()
         chunkTimer = nil
+        slowMotionTimer?.invalidate()
+        slowMotionTimer = nil
         crashDetectionManager.stopMonitoring()
         recordingTime = "00:00"
         thermalWarningMessage = nil
+        isSlowMotionActive = false
         updateStorageInfo()
     }
 
@@ -363,10 +370,42 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         }
 
         showCrashAlert = true
+        activateSlowMotion()
 
         for (_, url) in chunkURLs {
             fileProtectionManager.setProtection(true, for: url)
         }
+    }
+
+    private func activateSlowMotion() {
+        isSlowMotionActive = true
+
+        for position in cameras.keys {
+            var camera = cameras[position]!
+            camera.setSlowMotionFrameRate(60)
+            cameras[position] = camera
+        }
+
+        slowMotionTimer?.invalidate()
+        slowMotionTimer = Timer.scheduledTimer(withTimeInterval: slowMotionDuration, repeats: false) { [weak self] _ in
+            self?.deactivateSlowMotion()
+        }
+
+        logImpactEvent("Slow-motion activated at 60 fps")
+    }
+
+    private func deactivateSlowMotion() {
+        isSlowMotionActive = false
+        slowMotionTimer?.invalidate()
+        slowMotionTimer = nil
+
+        adjustFrameRates()
+        logImpactEvent("Slow-motion deactivated, returning to normal frame rate")
+    }
+
+    private func logImpactEvent(_ message: String) {
+        let timestamp = ISO8601DateFormatter().string(from: Date())
+        print("[Impact] [\(timestamp)] \(message)")
     }
 
     func toggleFileProtection(for url: URL) {

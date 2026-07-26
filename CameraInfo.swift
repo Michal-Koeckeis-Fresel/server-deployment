@@ -304,6 +304,25 @@ struct CameraRecorder {
         }
     }
 
+    mutating func setSlowMotionFrameRate(_ fps: Int32 = 60) {
+        guard let videoInput = videoInput else { return }
+
+        let device = videoInput.device
+        let targetDuration = CMTime(value: 1, timescale: fps)
+
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+
+            device.activeVideoMinFrameDuration = targetDuration
+            device.activeVideoMaxFrameDuration = targetDuration
+
+            print("Slow-motion frame rate set to \(fps) fps for \(position.rawValue)")
+        } catch {
+            print("Error setting slow-motion frame rate for \(position.rawValue): \(error)")
+        }
+    }
+
     func getSessionStatus() -> String {
         if !isAvailable {
             return "Unavailable"

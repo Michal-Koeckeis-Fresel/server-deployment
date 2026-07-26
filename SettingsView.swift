@@ -36,6 +36,9 @@ struct SettingsView: View {
 
                 ScrollView {
                     VStack(spacing: 24) {
+                        // Appearance Settings
+                        AppearanceView()
+
                         // Battery Status
                         BatteryStatusView()
 
