@@ -87,6 +87,10 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
                 }
             }
         }
+
+        if storageLocationManager.selectedLocation == .photos {
+            storageLocationManager.requestPhotosPermission { _ in }
+        }
     }
 
     private func initializeCameras() {
@@ -328,6 +332,16 @@ extension CameraDashcamViewModel: AVCaptureFileOutputRecordingDelegate {
         } else {
             DispatchQueue.main.async {
                 self.updateStorageInfo()
+
+                if self.storageLocationManager.selectedLocation == .photos {
+                    self.storageLocationManager.saveVideoToPhotos(outputFileURL) { success in
+                        DispatchQueue.main.async {
+                            if success {
+                                print("Video saved to Photos: \(outputFileURL.lastPathComponent)")
+                            }
+                        }
+                    }
+                }
             }
         }
     }

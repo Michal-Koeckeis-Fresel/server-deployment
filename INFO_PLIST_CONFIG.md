@@ -12,7 +12,12 @@ Add these keys with appropriate descriptions:
 
 <key>NSMicrophoneUsageDescription</key>
 <string>This app needs microphone access to record audio with video</string>
+
+<key>NSPhotoLibraryAddUsageDescription</key>
+<string>This app needs access to save dashcam videos to your Photos library</string>
 ```
+
+**Note:** The `NSPhotoLibraryAddUsageDescription` is only required if you use the "Photos" storage location. It allows saving videos directly to the Photos app.
 
 ## Background Modes (Critical for Continuous Recording)
 

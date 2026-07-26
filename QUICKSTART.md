@@ -43,7 +43,7 @@ Get your iOS dashcam running in 5 minutes.
 | `CameraInfo.swift` | Camera configuration & recorder |
 | `VideoCodecManager.swift` | HEVC/H.264 codec selection |
 | `StorageManager.swift` | Storage calculations & cleanup |
-| `StorageLocationManager.swift` | iCloud & on-device storage selection |
+| `StorageLocationManager.swift` | iCloud, on-device, and Photos storage selection |
 | `FileProtectionManager.swift` | File protection metadata |
 | `CrashDetectionManager.swift` | Impact detection (collision + braking) |
 | `INFO_PLIST_CONFIG.md` | Detailed config reference |
@@ -59,8 +59,9 @@ Get your iOS dashcam running in 5 minutes.
 5. Tap Stop
 
 **Find videos:**
-- Xcode: Select target → Device Organizer → Documents folder
-- Device Files app: Files → On My iPhone → DashcamApp
+- **Photos storage:** Photos app → Recents or Albums
+- **iCloud/On Device:** Xcode Device Organizer → Documents folder
+- **Device Files app:** Files → On My iPhone → DashcamApp
 - All saved as: `dashcam_YYYY_MM_DD_HHMMSS.mov`
 
 ## Common Issues

@@ -1,8 +1,10 @@
 import Foundation
+import Photos
 
 enum StorageLocation: String, CaseIterable {
     case onDevice = "On Device (Local)"
     case iCloud = "iCloud Drive"
+    case photos = "Photos"
 
     var displayName: String {
         self.rawValue
@@ -14,6 +16,8 @@ enum StorageLocation: String, CaseIterable {
             return "Stores on device only. Deleted if app is uninstalled."
         case .iCloud:
             return "Stores in iCloud Drive. Persists even if app is uninstalled."
+        case .photos:
+            return "Saves to Photos library with automatic backup to device storage."
         }
     }
 
@@ -23,6 +27,8 @@ enum StorageLocation: String, CaseIterable {
             return "⚠️ Files will be deleted when app is uninstalled!"
         case .iCloud:
             return "✅ Files persist in iCloud even if app is uninstalled."
+        case .photos:
+            return "✅ Videos saved to Photos library with local backup."
         }
     }
 }
@@ -31,6 +37,7 @@ class StorageLocationManager {
     static let shared = StorageLocationManager()
     private let storageLocationKey = "selectedStorageLocation"
     private let fileManager = FileManager.default
+    private let photosQueue = DispatchQueue(label: "com.dashcam.photos", qos: .background)
 
     var selectedLocation: StorageLocation {
         get {
@@ -68,6 +75,23 @@ class StorageLocationManager {
                 return dashcamFolder
             } catch {
                 print("Failed to create iCloud directory: \(error)")
+                return nil
+            }
+
+        case .photos:
+            guard let cacheURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
+                return nil
+            }
+            let photoCacheFolder = cacheURL.appendingPathComponent("PhotoCache", isDirectory: true)
+            do {
+                try fileManager.createDirectory(
+                    at: photoCacheFolder,
+                    withIntermediateDirectories: true,
+                    attributes: nil
+                )
+                return photoCacheFolder
+            } catch {
+                print("Failed to create photo cache directory: \(error)")
                 return nil
             }
         }
@@ -137,6 +161,44 @@ class StorageLocationManager {
                 return nil
             }
             return iCloudContainerURL.appendingPathComponent("Dashcam Recordings", isDirectory: true)
+
+        case .photos:
+            return fileManager.urls(for: .documentDirectory, in: .userDomainMask).first
+                .map { $0.appendingPathComponent("PhotoCache", isDirectory: true) }
+        }
+    }
+
+    func saveVideoToPhotos(_ videoURL: URL, completion: @escaping (Bool) -> Void) {
+        photosQueue.async {
+            PHPhotoLibrary.requestAuthorization { status in
+                guard status == .authorized else {
+                    print("Photos permission denied")
+                    completion(false)
+                    return
+                }
+
+                PHPhotoLibrary.shared().performChanges({
+                    let request = PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: videoURL)
+                    request?.creationDate = Date()
+                }) { success, error in
+                    if let error = error {
+                        print("Failed to save video to Photos: \(error)")
+                        completion(false)
+                    } else {
+                        completion(success)
+                    }
+                }
+            }
+        }
+    }
+
+    func requestPhotosPermission(completion: @escaping (Bool) -> Void) {
+        photosQueue.async {
+            PHPhotoLibrary.requestAuthorization { status in
+                DispatchQueue.main.async {
+                    completion(status == .authorized)
+                }
+            }
         }
     }
 }

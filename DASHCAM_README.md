@@ -463,7 +463,7 @@ Videos are automatically split into smaller files to reduce individual file size
 
 ## Storage Location Selection
 
-Choose where to store your dashcam recordings - either on device or in iCloud Drive.
+Choose where to store your dashcam recordings - on device, in iCloud Drive, or in Photos library.
 
 ### Storage Options
 
@@ -475,7 +475,7 @@ Choose where to store your dashcam recordings - either on device or in iCloud Dr
 - **Use Case:** Temporary recordings, short trips
 - **Warning:** Critical limitation - uninstalling app permanently deletes all footage
 
-#### iCloud Drive (Recommended)
+#### iCloud Drive (Recommended for Backup)
 - **Storage:** Apple iCloud account space
 - **Access:** Requires internet connection to access
 - **Persistence:** ✅ **Files stay in iCloud even if app is uninstalled**
@@ -483,14 +483,26 @@ Choose where to store your dashcam recordings - either on device or in iCloud Dr
 - **Use Case:** Long-term storage, evidence preservation
 - **Benefit:** Recordings survive app reinstall, system crashes, device loss
 
+#### Photos Library (Recommended for Access)
+- **Storage:** Device storage + automatic sync to Photos
+- **Access:** Visible in Photos app, easy viewing and sharing
+- **Persistence:** ✅ **Saved to Photos library with local backup**
+- **Backup:** Can be backed up via Photos backup settings
+- **Use Case:** Easy access, integration with iOS Photos ecosystem
+- **Benefit:** Videos accessible from Photos app, can share directly, organized with photo library
+
 ### Setting Storage Location
 
 1. Open **Settings** (gear icon)
 2. Scroll to **Storage Location** section
 3. Choose:
-   - **iCloud Drive** (recommended)
+   - **Photos** (recommended - easiest access)
+   - **iCloud Drive** (recommended - best backup)
    - **On Device** (caution: data lost on uninstall)
-4. For iCloud option, ensure:
+4. For Photos option, ensure:
+   - Photos permission is enabled in app
+   - Sufficient device storage available
+5. For iCloud option, ensure:
    - iCloud is enabled: Settings > [Your Name] > iCloud
    - Dashcam app has iCloud access enabled
    - Sufficient iCloud storage available

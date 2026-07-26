@@ -248,6 +248,10 @@ struct SettingsView: View {
                                         migrationMessage = "Your existing recordings will be migrated to iCloud Drive.\n\nMake sure iCloud is enabled in Settings > [Your Name] > iCloud."
                                         showMigrationAlert = true
                                         StorageLocationManager.shared.migrateRecordings(from: oldLocation)
+                                    } else if oldLocation != location && location == .photos {
+                                        migrationMessage = "Videos will be saved to your Photos library and backed up locally.\n\nMake sure Photos permission is enabled."
+                                        showMigrationAlert = true
+                                        StorageLocationManager.shared.requestPhotosPermission { _ in }
                                     }
                                 }) {
                                     HStack(spacing: 12) {
