@@ -186,9 +186,14 @@ struct ContentView: View {
                                 .frame(width: 16, height: 16)
                                 .opacity(0.7)
 
-                            Text("Recording Chunk \(viewModel.currentChunkNumber)")
-                                .font(.headline)
-                                .foregroundColor(.white)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Recording Chunk \(viewModel.currentChunkNumber)")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                                Text("Tap lock to protect current recording")
+                                    .font(.caption2)
+                                    .foregroundColor(.gray)
+                            }
 
                             Spacer()
 
@@ -234,21 +239,40 @@ struct ContentView: View {
                             .cornerRadius(12)
                         }
                     } else {
-                        Button(action: {
-                            viewModel.stopRecording()
-                        }) {
-                            HStack(spacing: 12) {
-                                Image(systemName: "stop.circle.fill")
-                                    .font(.system(size: 24))
+                        VStack(spacing: 10) {
+                            Button(action: {
+                                viewModel.stopRecording()
+                            }) {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "stop.circle.fill")
+                                        .font(.system(size: 24))
 
-                                Text("Stop Recording")
-                                    .font(.headline)
+                                    Text("Stop Recording")
+                                        .font(.headline)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                                .foregroundColor(.white)
+                                .background(Color.orange)
+                                .cornerRadius(12)
                             }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .foregroundColor(.white)
-                            .background(Color.orange)
-                            .cornerRadius(12)
+
+                            Button(action: {
+                                viewModel.protectCurrentChunk()
+                            }) {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "lock.circle.fill")
+                                        .font(.system(size: 24))
+
+                                    Text("Protect Recording")
+                                        .font(.headline)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                                .foregroundColor(.white)
+                                .background(Color.blue)
+                                .cornerRadius(12)
+                            }
                         }
                     }
 

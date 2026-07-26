@@ -37,6 +37,16 @@ struct PiPCameraView: View {
                     }
                 }
 
+                if viewModel.isRecording {
+                    Button(action: {
+                        viewModel.protectCurrentChunk()
+                    }) {
+                        Image(systemName: "lock.circle.fill")
+                            .font(.caption)
+                            .foregroundColor(.blue)
+                    }
+                }
+
                 Button(action: {
                     if viewModel.isRecording {
                         viewModel.stopRecording()

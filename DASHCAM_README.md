@@ -10,7 +10,7 @@ A SwiftUI-based dashcam application for iOS that records video continuously, eve
 ✅ **Video Chunking** - Automatically splits recordings into smaller files (1-15 min, configurable)  
 ✅ **Impact Detection** - Detects collisions and emergency braking via accelerometer and auto-protects all files  
 ✅ **Smart Storage** - Auto-deletes oldest unprotected videos when storage limit is reached  
-✅ **File Protection** - Lock important videos to prevent accidental deletion  
+✅ **File Protection** - Lock important videos manually or automatically on crash/braking  
 ✅ **Video Codec Selection** - Choose HEVC (40% smaller) or H.264 for compatibility  
 ✅ **Storage Management** - Set max storage in GB (1-100 GB, configurable)  
 ✅ **Persistent Storage** - iCloud Drive option preserves files even if app is uninstalled  
@@ -702,13 +702,29 @@ Automatic storage management keeps your device from filling up while protecting 
 
 ## File Protection
 
-Protect important recordings from accidental deletion or auto-cleanup.
+Protect important recordings from accidental deletion or auto-cleanup. Protection can be applied manually or automatically.
 
-### How to Protect a File
+### Manual Protection
+
+**While Recording:**
+1. Tap **Protect Recording** button (blue lock icon)
+   - Current recording chunk is immediately protected
+   - Works on main screen and PiP floating window
+   - Useful for: interesting traffic, near-misses, scenic routes
+   - Status confirmation appears briefly
+
+**After Recording:**
 1. Open **Recordings** (Files View)
 2. Tap the **lock icon** next to a recording
    - Lock becomes **filled/yellow** = Protected
    - Lock is **open/gray** = Unprotected
+
+### Automatic Protection
+
+**Crash/Impact Events:**
+- Collision detected → All current chunks automatically protected
+- Emergency brake detected → All current chunks automatically protected
+- No action needed - protection happens instantly
 
 ### Protected File Behavior
 - ✅ Cannot be deleted (delete button is disabled)

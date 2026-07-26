@@ -64,6 +64,14 @@ Get your iOS dashcam running in 5 minutes.
 4. Open app again (timer has advanced)
 5. Tap Stop
 
+**Test protection:**
+1. Start recording
+2. Tap **Protect Recording** button (blue lock icon)
+3. See confirmation message
+4. Stop recording
+5. Go to Files → current recording now has a filled lock icon
+6. Try to delete - button is disabled (protected)
+
 **Find videos:**
 - **Photos storage:** Photos app → Recents or Albums
 - **iCloud/On Device:** Xcode Device Organizer → Documents folder

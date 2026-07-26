@@ -285,6 +285,16 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         fileProtectionManager.isProtected(url: url)
     }
 
+    func protectCurrentChunk() {
+        for (_, url) in chunkURLs {
+            fileProtectionManager.setProtection(true, for: url)
+        }
+        errorMessage = "✅ Current recording protected from deletion"
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+            self.errorMessage = nil
+        }
+    }
+
     func deleteFile(at url: URL) -> Bool {
         return storageManager.deleteFile(at: url)
     }
