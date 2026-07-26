@@ -36,8 +36,13 @@ Get your iOS dashcam running in 5 minutes.
 | File | Purpose |
 |------|---------|
 | `DashcamApp.swift` | App entry point |
-| `ContentView.swift` | Recording UI |
-| `CameraDashcamViewModel.swift` | Camera/recording logic |
+| `ContentView.swift` | Recording UI & navigation |
+| `SettingsView.swift` | Video duration & storage settings |
+| `FilesView.swift` | File browser, protection & deletion |
+| `CameraDashcamViewModel.swift` | Camera, recording, chunking logic |
+| `StorageManager.swift` | Storage calculations & cleanup |
+| `FileProtectionManager.swift` | File protection metadata |
+| `CrashDetectionManager.swift` | Accelerometer-based crash detection |
 | `INFO_PLIST_CONFIG.md` | Detailed config reference |
 | `DASHCAM_README.md` | Full documentation |
 

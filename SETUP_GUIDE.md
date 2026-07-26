@@ -52,24 +52,42 @@ Let Xcode finish initializing (usually 5-10 seconds)
 4. Copy entire contents from provided `ContentView.swift`
 5. Paste and save
 
-### Step 2.3: Create CameraDashcamViewModel.swift
+### Step 2.3: Create Additional Swift Files
 
+Repeat this process for each of the following files:
+- `CameraDashcamViewModel.swift`
+- `SettingsView.swift`
+- `FilesView.swift`
+- `StorageManager.swift`
+- `FileProtectionManager.swift`
+- `CrashDetectionManager.swift`
+
+For each file:
 1. Right-click the project folder in navigator
 2. Select **New File...**
 3. Choose **Swift File**
-4. Name it: `CameraDashcamViewModel`
+4. Name it appropriately
 5. Click **Create**
-6. Copy the entire provided code into this file
+6. Copy the entire provided code into the file
 7. Save (Cmd+S)
 
-**Your project should now have 3 Swift files:**
+**Your project should now have 8 Swift files:**
 ```
 DashcamApp/
 ├── DashcamApp.swift
 ├── ContentView.swift
+├── SettingsView.swift
+├── FilesView.swift
 ├── CameraDashcamViewModel.swift
+├── StorageManager.swift
+├── FileProtectionManager.swift
+├── CrashDetectionManager.swift
 └── Assets.xcassets
 ```
+
+**Verify in Xcode:**
+- All 7 files should appear in the file navigator
+- Each file should show "DashcamApp" under "Target Membership"
 
 ---
 

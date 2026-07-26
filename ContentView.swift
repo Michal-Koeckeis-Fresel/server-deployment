@@ -3,26 +3,91 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject var viewModel: CameraDashcamViewModel
     @State private var cameraSetup = false
+    @State private var showSettings = false
+    @State private var showFiles = false
 
     var body: some View {
-        ZStack {
-            // Background
-            Color.black.ignoresSafeArea()
+        NavigationStack {
+            ZStack {
+                Color.black.ignoresSafeArea()
 
-            VStack(spacing: 24) {
-                // Header
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Dashcam")
-                        .font(.system(size: 32, weight: .bold))
-                        .foregroundColor(.white)
+                VStack(spacing: 24) {
+                    // Header with buttons
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Dashcam")
+                                .font(.system(size: 32, weight: .bold))
+                                .foregroundColor(.white)
 
-                    Text(viewModel.isRecording ? "Recording..." : "Ready")
-                        .font(.subheadline)
-                        .foregroundColor(viewModel.isRecording ? .red : .gray)
+                            Text(viewModel.isRecording ? "Recording..." : "Ready")
+                                .font(.subheadline)
+                                .foregroundColor(viewModel.isRecording ? .red : .gray)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                        VStack(spacing: 8) {
+                            NavigationLink(destination: SettingsView()) {
+                                Image(systemName: "gear")
+                                    .font(.system(size: 18))
+                                    .frame(width: 44, height: 44)
+                                    .background(Color.gray.opacity(0.3))
+                                    .foregroundColor(.white)
+                                    .cornerRadius(8)
+                            }
+
+                            NavigationLink(destination: FilesView()) {
+                                Image(systemName: "film.stack")
+                                    .font(.system(size: 18))
+                                    .frame(width: 44, height: 44)
+                                    .background(Color.gray.opacity(0.3))
+                                    .foregroundColor(.white)
+                                    .cornerRadius(8)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 16)
+
+                // Storage & Crash Detection Display
+                VStack(spacing: 12) {
+                    // Storage Display
+                    VStack(spacing: 8) {
+                        HStack(spacing: 12) {
+                            Image(systemName: "internaldrive.fill")
+                                .foregroundColor(.blue)
+                            Text("Storage")
+                                .font(.subheadline)
+                                .foregroundColor(.gray)
+                            Spacer()
+                            Text(String(format: "%.2f GB / %.0f GB", viewModel.currentStorageGB, viewModel.maxStorageGB))
+                                .font(.subheadline)
+                                .foregroundColor(.white)
+                                .fontWeight(.semibold)
+                        }
+                        ProgressView(value: min(viewModel.currentStorageGB / viewModel.maxStorageGB, 1.0))
+                            .tint(.blue)
+                    }
+                    .padding(12)
+                    .background(Color.gray.opacity(0.1))
+                    .cornerRadius(8)
+
+                    // Crash Detection Status
+                    if viewModel.isRecording {
+                        HStack(spacing: 12) {
+                            Image(systemName: viewModel.crashDetected ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                                .foregroundColor(viewModel.crashDetected ? .red : .green)
+                                .animation(.easeInOut(duration: 0.5), value: viewModel.crashDetected)
+                            Text(viewModel.crashDetected ? "Crash Detected - Recording Protected" : "Crash Detection Active")
+                                .font(.caption)
+                                .foregroundColor(viewModel.crashDetected ? .red : .green)
+                            Spacer()
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background((viewModel.crashDetected ? Color.red : Color.green).opacity(0.1))
+                        .cornerRadius(6)
+                    }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 20)
-                .padding(.top, 16)
 
                 Spacer()
 
@@ -35,7 +100,7 @@ struct ContentView: View {
                                 .frame(width: 16, height: 16)
                                 .opacity(0.7)
 
-                            Text("Recording")
+                            Text("Recording Chunk \(viewModel.currentChunkNumber)")
                                 .font(.headline)
                                 .foregroundColor(.white)
 
@@ -122,6 +187,13 @@ struct ContentView: View {
                 .padding(.horizontal, 20)
                 .padding(.bottom, 32)
             }
+        }
+            .navigationBarHidden(true)
+        }
+        .alert("⚠️ Crash Detected", isPresented: $viewModel.showCrashAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("A potential accident was detected. The current recording has been automatically protected from deletion.")
         }
         .onAppear {
             if !cameraSetup {

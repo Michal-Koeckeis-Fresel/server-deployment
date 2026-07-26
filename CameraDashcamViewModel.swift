@@ -7,17 +7,50 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
     @Published var isRecording = false
     @Published var recordingTime: String = "00:00"
     @Published var errorMessage: String?
+    @Published var currentChunkNumber: Int = 0
+    @Published var currentStorageGB: Double = 0.0
+    @Published var maxStorageGB: Double = UserDefaults.standard.double(forKey: "maxStorageGB") {
+        didSet {
+            UserDefaults.standard.set(maxStorageGB, forKey: "maxStorageGB")
+            checkStorageLimit()
+        }
+    }
+    @Published var chunkDurationMinutes: Int = UserDefaults.standard.integer(forKey: "chunkDurationMinutes") {
+        didSet {
+            let clamped = max(1, min(15, chunkDurationMinutes))
+            if clamped != chunkDurationMinutes {
+                chunkDurationMinutes = clamped
+            }
+            UserDefaults.standard.set(chunkDurationMinutes, forKey: "chunkDurationMinutes")
+        }
+    }
 
     private var captureSession: AVCaptureSession?
     private var videoOutput: AVCaptureMovieFileOutput?
     private var displayLink: CADisplayLink?
     private var recordingStartTime: Date?
+    private var chunkStartTime: Date?
+    private var currentChunkURL: URL?
+    private var chunkTimer: Timer?
     private let audioSession = AVAudioSession.sharedInstance()
+    private let storageManager = StorageManager()
+    private let fileProtectionManager = FileProtectionManager()
+    private let crashDetectionManager = CrashDetectionManager()
+
+    @Published var crashDetected = false
+    @Published var showCrashAlert = false
 
     override init() {
         super.init()
+        if UserDefaults.standard.double(forKey: "maxStorageGB") == 0 {
+            maxStorageGB = 10.0
+        }
+        if UserDefaults.standard.integer(forKey: "chunkDurationMinutes") == 0 {
+            chunkDurationMinutes = 5
+        }
         setupAudioSession()
         requestPermissions()
+        updateStorageInfo()
     }
 
     private func setupAudioSession() {
@@ -96,17 +129,18 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
             return
         }
 
-        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let fileName = "dashcam_\(DateFormatter.iso8601.string(from: Date())).mov"
-        let outputURL = documentsPath.appendingPathComponent(fileName)
-
         if videoOutput.isRecording {
             videoOutput.stopRecording()
         }
 
         recordingStartTime = Date()
+        chunkStartTime = Date()
+        currentChunkNumber = 0
+        crashDetected = false
+        startNewChunk()
         startTimerUpdate()
-        videoOutput.startRecording(to: outputURL, recordingDelegate: self)
+        setupChunkTimer()
+        setupCrashDetection()
         isRecording = true
         errorMessage = nil
     }
@@ -118,7 +152,80 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         isRecording = false
         displayLink?.invalidate()
         displayLink = nil
+        chunkTimer?.invalidate()
+        chunkTimer = nil
+        crashDetectionManager.stopMonitoring()
         recordingTime = "00:00"
+        updateStorageInfo()
+    }
+
+    private func startNewChunk() {
+        guard let videoOutput = videoOutput, captureSession?.isRunning == true else { return }
+
+        if videoOutput.isRecording {
+            videoOutput.stopRecording()
+        }
+
+        currentChunkNumber += 1
+        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let timestamp = DateFormatter.iso8601.string(from: Date())
+        let fileName = "dashcam_\(timestamp)_chunk_\(String(format: "%04d", currentChunkNumber)).mov"
+        let outputURL = documentsPath.appendingPathComponent(fileName)
+        currentChunkURL = outputURL
+
+        chunkStartTime = Date()
+        checkStorageLimit()
+        videoOutput.startRecording(to: outputURL, recordingDelegate: self)
+    }
+
+    private func setupChunkTimer() {
+        chunkTimer?.invalidate()
+        chunkTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            self?.checkChunkDuration()
+        }
+    }
+
+    private func checkChunkDuration() {
+        guard isRecording, let chunkStart = chunkStartTime else { return }
+        let elapsed = Int(Date().timeIntervalSince(chunkStart))
+        let maxSeconds = chunkDurationMinutes * 60
+
+        if elapsed >= maxSeconds {
+            startNewChunk()
+        }
+    }
+
+    private func checkStorageLimit() {
+        Task {
+            await storageManager.checkAndCleanupIfNeeded(
+                maxStorageGB: maxStorageGB,
+                protectionManager: fileProtectionManager
+            )
+            updateStorageInfo()
+        }
+    }
+
+    private func updateStorageInfo() {
+        let docPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        currentStorageGB = storageManager.calculateUsedStorage(at: docPath)
+    }
+
+    private func setupCrashDetection() {
+        crashDetectionManager.startMonitoring { [weak self] in
+            DispatchQueue.main.async {
+                self?.handleCrashDetected()
+            }
+        }
+    }
+
+    private func handleCrashDetected() {
+        crashDetected = true
+        showCrashAlert = true
+
+        if let currentChunkURL = currentChunkURL {
+            fileProtectionManager.setProtection(true, for: currentChunkURL)
+            errorMessage = "⚠️ Crash Detected! Current recording protected."
+        }
     }
 
     private func startTimerUpdate() {
@@ -141,6 +248,37 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
     }
 }
 
+    func toggleFileProtection(for url: URL) {
+        fileProtectionManager.toggleProtection(for: url)
+    }
+
+    func isFileProtected(url: URL) -> Bool {
+        fileProtectionManager.isProtected(url: url)
+    }
+
+    func deleteFile(at url: URL) -> Bool {
+        return storageManager.deleteFile(at: url)
+    }
+
+    func getRecordedFiles() -> [URL] {
+        let docPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        do {
+            let files = try FileManager.default.contentsOfDirectory(
+                at: docPath,
+                includingPropertiesForKeys: [.contentModificationDateKey]
+            ).filter { $0.pathExtension == "mov" }
+            return files.sorted {
+                let date1 = try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate ?? Date()
+                let date2 = try? $1.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate ?? Date()
+                return (date1 ?? Date()) > (date2 ?? Date())
+            }
+        } catch {
+            errorMessage = "Failed to read files: \(error.localizedDescription)"
+            return []
+        }
+    }
+}
+
 extension CameraDashcamViewModel: AVCaptureFileOutputRecordingDelegate {
     nonisolated func fileOutput(
         _ output: AVCaptureFileOutput,
@@ -151,6 +289,10 @@ extension CameraDashcamViewModel: AVCaptureFileOutputRecordingDelegate {
         if let error = error {
             DispatchQueue.main.async {
                 self.errorMessage = "Recording error: \(error.localizedDescription)"
+            }
+        } else {
+            DispatchQueue.main.async {
+                self.updateStorageInfo()
             }
         }
     }
