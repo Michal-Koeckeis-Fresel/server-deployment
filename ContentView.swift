@@ -4,6 +4,7 @@ struct ContentView: View {
     @EnvironmentObject var viewModel: CameraDashcamViewModel
     @StateObject private var permissionManager = PermissionStatusManager()
     @StateObject private var batteryManager = BatteryMonitorManager.shared
+    @StateObject private var locationManager = LocationManager.shared
     @State private var cameraSetup = false
     @State private var showSettings = false
     @State private var showFiles = false
@@ -440,11 +441,12 @@ struct ContentView: View {
                         .transition(.scale)
                 }
 
-                // Watermark overlay with FPS and recording info
+                // Watermark overlay with FPS, GPS and recording info
                 if viewModel.isRecording {
                     WatermarkView(
                         fpsCounter: viewModel.fpsCounter,
                         batteryManager: batteryManager,
+                        locationManager: locationManager,
                         timestamp: recordingStartTime
                     )
                     .transition(.fadeIn)
@@ -476,6 +478,7 @@ struct ContentView: View {
                 cameraSetup = true
             }
             permissionManager.updatePermissionStatuses()
+            locationManager.requestLocationPermission()
         }
         .onReceive(
             NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification),

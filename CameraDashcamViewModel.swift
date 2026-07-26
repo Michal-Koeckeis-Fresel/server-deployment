@@ -40,6 +40,7 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
     private let storageLocationManager = StorageLocationManager.shared
     private let systemPressureMonitor = SystemPressureMonitor.shared
     private let lowPowerModeMonitor = LowPowerModeMonitor.shared
+    private let locationManager = LocationManager.shared
 
     @Published var crashDetected = false
     @Published var emergencyBrakeDetected = false
@@ -201,6 +202,7 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         crashDetected = false
         emergencyBrakeDetected = false
         fpsCounter.start()
+        locationManager.startLocationUpdates()
         startTimerUpdate()
         setupChunkTimer()
         setupCrashDetection()
@@ -218,6 +220,7 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         isRecording = false
         fpsCounter.stop()
         fpsCounter.printFPSReport()
+        locationManager.stopLocationUpdates()
         displayLink?.invalidate()
         displayLink = nil
         chunkTimer?.invalidate()
@@ -229,6 +232,49 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         thermalWarningMessage = nil
         isSlowMotionActive = false
         updateStorageInfo()
+
+        addWatermarksToRecordedVideos()
+    }
+
+    private func addWatermarksToRecordedVideos() {
+        guard let recordingsPath = storageLocationManager.getRecordingsURL() else { return }
+
+        Task {
+            do {
+                let files = try FileManager.default.contentsOfDirectory(
+                    at: recordingsPath,
+                    includingPropertiesForKeys: [.contentModificationDateKey]
+                ).filter { $0.pathExtension == "mov" }
+
+                for fileURL in files {
+                    let fileAttributes = try FileManager.default.attributesOfItem(atPath: fileURL.path)
+                    if let modificationDate = fileAttributes[.modificationDate] as? Date {
+                        let timeSinceModified = Date().timeIntervalSince(modificationDate)
+                        if timeSinceModified < 5.0 {
+                            let watermarkedURL = fileURL.deletingPathExtension().appendingPathExtension("watermarked.mov")
+                            let metadata = WatermarkMetadata(
+                                fps: fpsCounter.currentFPS,
+                                timestamp: recordingStartTime ?? Date(),
+                                batteryLevel: BatteryMonitorManager.shared.batteryLevel,
+                                location: locationManager.getLocationData()
+                            )
+
+                            VideoWatermarkProcessor.addWatermark(to: fileURL, output: watermarkedURL, metadata: metadata) { success, error in
+                                if success {
+                                    try? FileManager.default.removeItem(at: fileURL)
+                                    try? FileManager.default.moveItem(at: watermarkedURL, to: fileURL)
+                                    print("Watermark added to \(fileURL.lastPathComponent)")
+                                } else if let error = error {
+                                    print("Watermark error: \(error.localizedDescription)")
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch {
+                print("Error processing videos: \(error)")
+            }
+        }
     }
 
     private func checkThermalPressure() {

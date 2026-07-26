@@ -3,6 +3,7 @@ import SwiftUI
 struct WatermarkView: View {
     @ObservedObject var fpsCounter: FPSCounter
     @ObservedObject var batteryManager: BatteryMonitorManager
+    @ObservedObject var locationManager: LocationManager
     let timestamp: Date
 
     var formattedTime: String {
@@ -12,8 +13,8 @@ struct WatermarkView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            // Top left: FPS and recording info
+        VStack(alignment: .leading, spacing: 6) {
+            // Top row: FPS, Time, Battery
             HStack(spacing: 8) {
                 HStack(spacing: 4) {
                     Image(systemName: "hare.fill")
@@ -57,6 +58,51 @@ struct WatermarkView: View {
                 .padding(.vertical, 4)
                 .background(Color.black.opacity(0.6))
                 .cornerRadius(4)
+            }
+
+            // Bottom row: GPS, Speed, Heading
+            if locationManager.isLocationAvailable {
+                HStack(spacing: 8) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "location.fill")
+                            .font(.caption)
+                        Text(locationManager.locationString)
+                            .font(.caption2)
+                            .fontWeight(.semibold)
+                            .monospacedDigit()
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.black.opacity(0.6))
+                    .cornerRadius(4)
+
+                    HStack(spacing: 4) {
+                        Image(systemName: "speedometer")
+                            .font(.caption)
+                        Text(locationManager.speedString)
+                            .font(.caption2)
+                            .fontWeight(.semibold)
+                            .monospacedDigit()
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.black.opacity(0.6))
+                    .cornerRadius(4)
+
+                    HStack(spacing: 4) {
+                        Image(systemName: "location.north.line.fill")
+                            .font(.caption)
+                        Text(locationManager.headingString)
+                            .font(.caption2)
+                            .fontWeight(.semibold)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.black.opacity(0.6))
+                    .cornerRadius(4)
+
+                    Spacer()
+                }
             }
 
             Spacer()
