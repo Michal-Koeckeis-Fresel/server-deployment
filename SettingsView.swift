@@ -352,6 +352,78 @@ struct SettingsView: View {
                         .background(Color.gray.opacity(0.1))
                         .cornerRadius(12)
 
+                        // Recording Frame Rate
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Label("Recording Frame Rate", systemImage: "speedometer")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                                Spacer()
+                                Text("\(viewModel.preferredRecordingFPS) fps")
+                                    .font(.headline)
+                                    .foregroundColor(.blue)
+                            }
+
+                            VStack(spacing: 10) {
+                                ForEach([24, 30, 60], id: \.self) { fps in
+                                    Button(action: { viewModel.preferredRecordingFPS = Int32(fps) }) {
+                                        HStack(spacing: 12) {
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                Text("\(fps) FPS")
+                                                    .font(.subheadline)
+                                                    .foregroundColor(.white)
+                                                if fps == 24 {
+                                                    Text("Film-like quality, smallest files")
+                                                        .font(.caption)
+                                                        .foregroundColor(.gray)
+                                                } else if fps == 30 {
+                                                    Text("Balanced quality & file size (default)")
+                                                        .font(.caption)
+                                                        .foregroundColor(.gray)
+                                                } else {
+                                                    Text("Smooth motion, largest files")
+                                                        .font(.caption)
+                                                        .foregroundColor(.gray)
+                                                }
+                                            }
+                                            Spacer()
+                                            if viewModel.preferredRecordingFPS == Int32(fps) {
+                                                Image(systemName: "checkmark.circle.fill")
+                                                    .foregroundColor(.blue)
+                                            }
+                                        }
+                                        .padding(12)
+                                        .background(viewModel.preferredRecordingFPS == Int32(fps) ? Color.blue.opacity(0.1) : Color.gray.opacity(0.05))
+                                        .cornerRadius(8)
+                                    }
+                                    .foregroundColor(.primary)
+                                }
+                            }
+
+                            VStack(spacing: 8) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "info.circle.fill")
+                                        .foregroundColor(.blue)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Frame Rate Guide")
+                                            .font(.caption2)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.blue)
+                                        Text("Higher FPS = smoother video but larger files. Affects thermal load during recording.")
+                                            .font(.caption2)
+                                            .foregroundColor(.blue)
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color.blue.opacity(0.1))
+                            .cornerRadius(6)
+                        }
+                        .padding(16)
+                        .background(Color.gray.opacity(0.1))
+                        .cornerRadius(12)
+
                         // Maximum Storage
                         VStack(alignment: .leading, spacing: 12) {
                             HStack {

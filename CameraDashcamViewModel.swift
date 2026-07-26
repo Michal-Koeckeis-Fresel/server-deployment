@@ -34,6 +34,15 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
             UserDefaults.standard.set(chunkDurationMinutes, forKey: "chunkDurationMinutes")
         }
     }
+    @Published var preferredRecordingFPS: Int32 = Int32(UserDefaults.standard.integer(forKey: "preferredRecordingFPS")) {
+        didSet {
+            let validFPS: [Int32] = [24, 30, 60]
+            if !validFPS.contains(preferredRecordingFPS) {
+                preferredRecordingFPS = 30
+            }
+            UserDefaults.standard.set(Int(preferredRecordingFPS), forKey: "preferredRecordingFPS")
+        }
+    }
 
     @Published var cameraStatus: [CameraPosition: String] = [:]
 
@@ -82,6 +91,9 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         }
         if UserDefaults.standard.integer(forKey: "chunkDurationMinutes") == 0 {
             chunkDurationMinutes = 5
+        }
+        if UserDefaults.standard.integer(forKey: "preferredRecordingFPS") == 0 {
+            preferredRecordingFPS = 30
         }
         setupAudioSession()
         requestPermissions()
@@ -226,6 +238,7 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
                 locationManager: locationManager
             )
             camera.startRecording(to: outputURL, delegate: self, withWatermark: watermarkGenerator)
+            camera.setFrameRate(preferredRecordingFPS)
             cameras[position] = camera
             cameraStatus[position] = "Recording"
         }
@@ -319,7 +332,7 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
     private func restoreFrameRates() {
         for position in cameras.keys {
             var camera = cameras[position]!
-            camera.setFrameRate(30)
+            camera.setFrameRate(preferredRecordingFPS)
             cameras[position] = camera
         }
     }
