@@ -4,17 +4,18 @@ A SwiftUI-based dashcam application for iOS that records video continuously, eve
 
 ## Features
 
+✅ **Multi-Camera Recording** - Simultaneously records from all available cameras (wide, telephoto, rear)  
 ✅ **Background Recording** - App continues recording when locked or switched away  
 ✅ **Video Chunking** - Automatically splits recordings into smaller files (1-15 min, configurable)  
-✅ **Crash Detection** - Detects collisions and emergency braking via accelerometer and auto-protects current file  
+✅ **Impact Detection** - Detects collisions and emergency braking via accelerometer and auto-protects all files  
 ✅ **Smart Storage** - Auto-deletes oldest unprotected videos when storage limit is reached  
 ✅ **File Protection** - Lock important videos to prevent accidental deletion  
 ✅ **Storage Management** - Set max storage in GB (1-100 GB, configurable)  
-✅ **High-Quality Video** - Records at device camera quality  
+✅ **High-Quality Video** - Records at device camera quality from all cameras  
 ✅ **Audio Included** - Captures stereo audio during recording  
-✅ **Timer Display** - Shows recording duration and chunk number in real-time  
-✅ **Simple Controls** - One-tap start/stop recording  
-✅ **Error Handling** - Clear feedback for permission/setup issues  
+✅ **Camera Status** - Real-time display of all camera recording status  
+✅ **Synchronized Chunks** - All cameras chunk at the same time  
+✅ **Simple Controls** - One-tap start/stop recording for all cameras  
 ✅ **File Management** - Browse, protect, and delete recordings in-app  
 
 ## Requirements
@@ -23,18 +24,174 @@ A SwiftUI-based dashcam application for iOS that records video continuously, eve
 - iPhone with rear camera and microphone
 - Xcode 13.0 or later
 
+## Multi-Camera Recording
+
+The app simultaneously records from all available device cameras, providing comprehensive coverage for accident investigation and pedestrian detection.
+
+### Available Cameras
+
+**Front Wide-Angle** (Default 1x)
+- Captures broad road view
+- Pedestrian and obstacle detection
+- Lane and traffic visibility
+- Full dashboard view
+
+**Front Telephoto** (Zoom, if available)
+- Captures distant details
+- License plate recognition at distance
+- Traffic sign reading
+- Focused perspective ahead
+
+**Rear Camera** (if available)
+- Rear-end collision evidence
+- Tailgating documentation
+- Rear traffic monitoring
+- Backup perspective
+
+### How Multi-Camera Works
+
+1. **Simultaneous Recording:**
+   - All available cameras record independently
+   - Each has its own AVCaptureSession
+   - Synchronized via single record/stop trigger
+
+2. **File Organization:**
+   ```
+   dashcam_2025_01_15_144230_front_wide_chunk_0001.mov
+   dashcam_2025_01_15_144230_front_zoom_chunk_0001.mov
+   dashcam_2025_01_15_144230_rear_chunk_0001.mov
+   ```
+
+3. **Synchronized Chunking:**
+   - All cameras chunk at the same time
+   - Chunk numbers stay in sync across cameras
+   - Easier to correlate footage
+
+4. **Unified Control:**
+   - Single Start button records all cameras
+   - Single Stop button stops all cameras
+   - Impact detection protects all concurrent files
+
+5. **Storage:**
+   - Each camera's footage counts toward total storage
+   - All files subject to same protection/deletion rules
+   - Protection applies to all related chunks
+
+### Camera Status Display
+
+Main screen shows real-time status for each camera:
+
+- 🟢 **Green:** Ready (not recording)
+- 🔴 **Red:** Recording actively
+- ⚪ **Gray:** Unavailable on device
+
+Examples:
+```
+Cameras
+  ● Front Wide      Recording
+  ● Front Zoom      Recording
+  ● Rear            Unavailable
+```
+
+### Coverage Benefits
+
+**Accident Investigation:**
+- Wide angle captures full incident scene
+- Telephoto shows fine details (plate numbers, signs)
+- Rear shows following traffic
+
+**Liability Protection:**
+- Multiple angles reduce disputes
+- Hard to argue with 3 synchronized views
+- Pedestrian detection (wide angle)
+- Vehicle identification (telephoto)
+
+**Evidence Quality:**
+- Wide + zoom = comprehensive coverage
+- Rear prevents rear-end accident false claims
+- Impact detection protects all perspectives
+
+### Storage Implications
+
+**Storage Calculation:**
+- Wide angle: ~350-400 MB per minute (HD)
+- Telephoto: ~350-400 MB per minute (HD)
+- Rear: ~350-400 MB per minute (HD)
+- **Total:** ~1 GB per minute for all 3 cameras
+
+With 10 GB storage and 5-minute chunks:
+- Each chunk set: ~5 GB
+- ~2 complete chunk sets available
+- Older chunks auto-delete as limit approaches
+
+### Device Support
+
+**All Cameras Available:**
+- Most modern iPhones (iPhone 11+)
+- iPhone 12, 13, 14, 15, 16 Pro models
+- Wide angle always available
+- Telephoto on iPhone 12 Pro and newer
+
+**Limited Cameras:**
+- iPhone SE, XR, 11: Wide angle only
+- iPhone 12-15 standard: Wide angle + telephoto
+- iPhone 16: Wide angle + telephoto + ultra-wide option
+
+**App Behavior:**
+- Uses all available cameras on device
+- Gracefully handles unavailable cameras
+- Shows status for each camera
+- Records with whatever is available
+
+### Technical Implementation
+
+**Camera Initialization:**
+- Detects available cameras at startup
+- Creates separate AVCaptureSession per camera
+- Handles failures gracefully
+- Updates UI with availability status
+
+**Synchronized Recording:**
+- Single timer manages all sessions
+- Chunk transitions coordinated across cameras
+- Impact events protect all concurrent files
+- Storage calculations sum all footage
+
+**File Naming:**
+- Timestamp matches across cameras
+- Position indicator (front_wide, front_zoom, rear)
+- Chunk number synchronized
+- Easy to identify related files
+
+### Limitations
+
+- ⚠️ Significantly increases storage usage (3x typical)
+- ⚠️ Not all iPhone models have telephoto
+- ⚠️ Battery drain greater with multiple cameras
+- ⚠️ Audio only from primary microphone
+- ⚠️ Some older devices may have thermal issues
+
+### Future Enhancements
+
+- User toggle to disable specific cameras
+- Separate resolution settings per camera
+- Audio from multiple microphones
+- Synchronized playback viewer
+- Multi-angle incident replay
+
 ## Project Structure
 
 ```
 DashcamApp/
 ├── DashcamApp.swift                    # Main app entry point
 ├── ContentView.swift                   # Recording UI and navigation
-├── CameraDashcamViewModel.swift        # Recording, chunking, storage logic
+├── CameraDashcamViewModel.swift        # Multi-camera recording & control
+├── CameraInfo.swift                    # Camera configuration & recorder
 ├── SettingsView.swift                  # Settings for video duration & storage
 ├── FilesView.swift                     # File browser, protection & deletion
 ├── StorageManager.swift                # Storage calculations & cleanup
 ├── FileProtectionManager.swift         # File protection metadata
-├── CrashDetectionManager.swift         # Accelerometer-based crash detection
+├── CrashDetectionManager.swift         # Impact detection (collision + braking)
 ├── INFO_PLIST_CONFIG.md               # Required configuration
 └── DASHCAM_README.md                  # This file
 ```
@@ -515,30 +672,50 @@ Potential additions:
 
 ### CameraDashcamViewModel
 Manages:
-- AVCaptureSession setup (camera/mic input)
-- Video recording lifecycle & chunking
+- Multi-camera setup and coordination
+- Video recording lifecycle & chunking for all cameras
 - Recording timer updates
 - Impact detection integration (collisions + braking)
-- Storage management
-- File protection
+- Storage management (all cameras)
+- File protection across all cameras
 - Error state management
 - Audio session configuration
 
 **Published Properties:**
+- `isRecording` - Recording state for all cameras
+- `cameraStatus` - Per-camera status (Ready/Recording/Unavailable/Error)
 - `crashDetected` - Collision event detected
 - `emergencyBrakeDetected` - Emergency braking detected
 - `showCrashAlert` - Show impact alert to user
-- `impactEventType` - Current event type (.collision or .emergencyBrake)
+- `currentChunkNumber` - Synchronized chunk across all cameras
+- `currentStorageGB` - Total storage from all cameras
 
 **Key Methods:**
-- `setupCamera()` - Initialize capture session
-- `startRecording()` - Begin video capture
-- `stopRecording()` - End recording
-- `startNewChunk()` - Start next video chunk
-- `handleImpactEventDetected()` - Auto-protect on collision or emergency brake
+- `setupCameras()` - Initialize all available cameras
+- `startRecording()` - Begin recording all active cameras
+- `stopRecording()` - Stop recording all cameras
+- `startNewChunk()` - Synchronized chunk transition for all cameras
+- `handleImpactEventDetected()` - Auto-protect all active recordings
 - `setupCrashDetection()` - Initialize accelerometer monitoring
 - `toggleFileProtection()` - Lock/unlock files
-- `getRecordedFiles()` - List all videos
+- `getRecordedFiles()` - List all recordings from all cameras
+
+### CameraInfo
+Defines:
+- `CameraPosition` enum (frontWide, frontTelephoto, rear)
+- Device type and position mapping
+- File naming conventions per camera
+- `CameraRecorder` struct for individual camera management
+
+**Camera Positions:**
+- Front Wide: Broad road view (all devices)
+- Front Telephoto: Distant detail capture (Pro models)
+- Rear: Trailing traffic monitoring (if available)
+
+**File Prefix Examples:**
+- `front_wide_chunk_0001.mov`
+- `front_zoom_chunk_0001.mov`
+- `rear_chunk_0001.mov`
 
 ### CrashDetectionManager
 Monitors:

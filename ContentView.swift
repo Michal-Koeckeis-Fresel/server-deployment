@@ -48,28 +48,68 @@ struct ContentView: View {
                     .padding(.horizontal, 20)
                     .padding(.top, 16)
 
-                // Storage & Crash Detection Display
-                VStack(spacing: 12) {
-                    // Storage Display
-                    VStack(spacing: 8) {
-                        HStack(spacing: 12) {
-                            Image(systemName: "internaldrive.fill")
-                                .foregroundColor(.blue)
-                            Text("Storage")
-                                .font(.subheadline)
-                                .foregroundColor(.gray)
-                            Spacer()
-                            Text(String(format: "%.2f GB / %.0f GB", viewModel.currentStorageGB, viewModel.maxStorageGB))
-                                .font(.subheadline)
-                                .foregroundColor(.white)
-                                .fontWeight(.semibold)
+                // Camera Status Display
+                VStack(spacing: 8) {
+                    Text("Cameras")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    VStack(spacing: 6) {
+                        ForEach(CameraPosition.allCases, id: \.self) { position in
+                            HStack(spacing: 10) {
+                                let status = viewModel.cameraStatus[position] ?? "Unknown"
+                                let isRecording = status == "Recording"
+
+                                Circle()
+                                    .fill(
+                                        status == "Ready" ? Color.green :
+                                        status == "Recording" ? Color.red :
+                                        Color.gray
+                                    )
+                                    .frame(width: 8, height: 8)
+
+                                Text(position.rawValue)
+                                    .font(.caption)
+                                    .foregroundColor(.white)
+
+                                Spacer()
+
+                                Text(status)
+                                    .font(.caption2)
+                                    .foregroundColor(.gray)
+                            }
                         }
-                        ProgressView(value: min(viewModel.currentStorageGB / viewModel.maxStorageGB, 1.0))
-                            .tint(.blue)
                     }
-                    .padding(12)
-                    .background(Color.gray.opacity(0.1))
-                    .cornerRadius(8)
+                    .padding(10)
+                    .background(Color.gray.opacity(0.05))
+                    .cornerRadius(6)
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+                .background(Color.gray.opacity(0.1))
+                .cornerRadius(8)
+
+                // Storage Display
+                VStack(spacing: 8) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "internaldrive.fill")
+                            .foregroundColor(.blue)
+                        Text("Storage")
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                        Spacer()
+                        Text(String(format: "%.2f GB / %.0f GB", viewModel.currentStorageGB, viewModel.maxStorageGB))
+                            .font(.subheadline)
+                            .foregroundColor(.white)
+                            .fontWeight(.semibold)
+                    }
+                    ProgressView(value: min(viewModel.currentStorageGB / viewModel.maxStorageGB, 1.0))
+                        .tint(.blue)
+                }
+                .padding(12)
+                .background(Color.gray.opacity(0.1))
+                .cornerRadius(8)
 
                     // Impact Detection Status
                     if viewModel.isRecording {
@@ -240,7 +280,7 @@ struct ContentView: View {
         }
         .onAppear {
             if !cameraSetup {
-                viewModel.setupCamera()
+                viewModel.setupCameras()
                 cameraSetup = true
             }
         }

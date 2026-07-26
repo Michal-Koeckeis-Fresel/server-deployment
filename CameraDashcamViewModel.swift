@@ -25,12 +25,13 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         }
     }
 
-    private var captureSession: AVCaptureSession?
-    private var videoOutput: AVCaptureMovieFileOutput?
+    @Published var cameraStatus: [CameraPosition: String] = [:]
+
+    private var cameras: [CameraPosition: CameraRecorder] = [:]
     private var displayLink: CADisplayLink?
     private var recordingStartTime: Date?
     private var chunkStartTime: Date?
-    private var currentChunkURL: URL?
+    private var chunkURLs: [CameraPosition: URL] = [:]
     private var chunkTimer: Timer?
     private let audioSession = AVAudioSession.sharedInstance()
     private let storageManager = StorageManager()
@@ -53,6 +54,7 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         setupAudioSession()
         requestPermissions()
         updateStorageInfo()
+        initializeCameras()
     }
 
     private func setupAudioSession() {
@@ -86,53 +88,46 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         }
     }
 
-    func setupCamera() {
-        let session = AVCaptureSession()
-        session.sessionPreset = .high
-
-        guard let videoDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
-            errorMessage = "No camera available"
-            return
-        }
-
-        guard let audioDevice = AVCaptureDevice.default(for: .audio) else {
-            errorMessage = "No microphone available"
-            return
-        }
-
-        do {
-            let videoInput = try AVCaptureDeviceInput(device: videoDevice)
-            let audioInput = try AVCaptureDeviceInput(device: audioDevice)
-
-            if session.canAddInput(videoInput) && session.canAddInput(audioInput) {
-                session.addInput(videoInput)
-                session.addInput(audioInput)
+    private func initializeCameras() {
+        for position in CameraPosition.allCases {
+            var camera = CameraRecorder(position: position)
+            if camera.setupSession() {
+                cameras[position] = camera
+                cameraStatus[position] = "Ready"
+            } else {
+                cameraStatus[position] = "Unavailable"
             }
-
-            let movieOutput = AVCaptureMovieFileOutput()
-            if session.canAddOutput(movieOutput) {
-                session.addOutput(movieOutput)
-            }
-
-            self.captureSession = session
-            self.videoOutput = movieOutput
-
-            DispatchQueue.global(qos: .userInitiated).async {
-                session.startRunning()
-            }
-        } catch {
-            errorMessage = "Setup error: \(error.localizedDescription)"
         }
     }
 
+    func setupCameras() {
+        initializeCameras()
+        errorMessage = nil
+    }
+
     func startRecording() {
-        guard let videoOutput = videoOutput, captureSession?.isRunning == true else {
-            errorMessage = "Camera not ready"
+        guard !cameras.isEmpty else {
+            errorMessage = "No cameras available"
             return
         }
 
-        if videoOutput.isRecording {
-            videoOutput.stopRecording()
+        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+
+        chunkURLs.removeAll()
+        for (position, var camera) in cameras {
+            guard camera.captureSession?.isRunning == true else {
+                cameraStatus[position] = "Error"
+                continue
+            }
+
+            let timestamp = DateFormatter.iso8601.string(from: Date())
+            let fileName = "dashcam_\(timestamp)_\(position.filePrefix)_chunk_0001.mov"
+            let outputURL = documentsPath.appendingPathComponent(fileName)
+            chunkURLs[position] = outputURL
+
+            camera.startRecording(to: outputURL, delegate: self)
+            cameras[position] = camera
+            cameraStatus[position] = "Recording"
         }
 
         recordingStartTime = Date()
@@ -140,7 +135,6 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         currentChunkNumber = 0
         crashDetected = false
         emergencyBrakeDetected = false
-        startNewChunk()
         startTimerUpdate()
         setupChunkTimer()
         setupCrashDetection()
@@ -149,9 +143,12 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
     }
 
     func stopRecording() {
-        guard let videoOutput = videoOutput, videoOutput.isRecording else { return }
+        for (position, var camera) in cameras {
+            camera.stopRecording()
+            cameras[position] = camera
+            cameraStatus[position] = camera.captureSession?.isRunning == true ? "Ready" : "Error"
+        }
 
-        videoOutput.stopRecording()
         isRecording = false
         displayLink?.invalidate()
         displayLink = nil
@@ -163,22 +160,29 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
     }
 
     private func startNewChunk() {
-        guard let videoOutput = videoOutput, captureSession?.isRunning == true else { return }
-
-        if videoOutput.isRecording {
-            videoOutput.stopRecording()
-        }
-
-        currentChunkNumber += 1
         let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let timestamp = DateFormatter.iso8601.string(from: Date())
-        let fileName = "dashcam_\(timestamp)_chunk_\(String(format: "%04d", currentChunkNumber)).mov"
-        let outputURL = documentsPath.appendingPathComponent(fileName)
-        currentChunkURL = outputURL
+
+        chunkURLs.removeAll()
+        currentChunkNumber += 1
+
+        for (position, var camera) in cameras {
+            guard camera.captureSession?.isRunning == true else { continue }
+
+            if let videoOutput = camera.videoOutput, videoOutput.isRecording {
+                videoOutput.stopRecording()
+            }
+
+            let fileName = "dashcam_\(timestamp)_\(position.filePrefix)_chunk_\(String(format: "%04d", currentChunkNumber)).mov"
+            let outputURL = documentsPath.appendingPathComponent(fileName)
+            chunkURLs[position] = outputURL
+
+            camera.startRecording(to: outputURL, delegate: self)
+            cameras[position] = camera
+        }
 
         chunkStartTime = Date()
         checkStorageLimit()
-        videoOutput.startRecording(to: outputURL, recordingDelegate: self)
     }
 
     private func setupChunkTimer() {
@@ -213,33 +217,6 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         currentStorageGB = storageManager.calculateUsedStorage(at: docPath)
     }
 
-    private func setupCrashDetection() {
-        crashDetectionManager.startMonitoring { [weak self] eventType in
-            DispatchQueue.main.async {
-                self?.handleImpactEventDetected(eventType)
-            }
-        }
-    }
-
-    private func handleImpactEventDetected(_ eventType: ImpactEventType) {
-        impactEventType = eventType
-
-        switch eventType {
-        case .collision:
-            crashDetected = true
-            errorMessage = "⚠️ Crash Detected! Current recording protected."
-        case .emergencyBrake:
-            emergencyBrakeDetected = true
-            errorMessage = "🛑 Emergency Brake Detected! Current recording protected."
-        }
-
-        showCrashAlert = true
-
-        if let currentChunkURL = currentChunkURL {
-            fileProtectionManager.setProtection(true, for: currentChunkURL)
-        }
-    }
-
     private func startTimerUpdate() {
         displayLink = CADisplayLink(
             target: self,
@@ -258,7 +235,33 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
 
         recordingTime = String(format: "%02d:%02d:%02d", hours, minutes, seconds)
     }
-}
+
+    private func setupCrashDetection() {
+        crashDetectionManager.startMonitoring { [weak self] eventType in
+            DispatchQueue.main.async {
+                self?.handleImpactEventDetected(eventType)
+            }
+        }
+    }
+
+    private func handleImpactEventDetected(_ eventType: ImpactEventType) {
+        impactEventType = eventType
+
+        switch eventType {
+        case .collision:
+            crashDetected = true
+            errorMessage = "⚠️ Crash Detected! Recordings protected."
+        case .emergencyBrake:
+            emergencyBrakeDetected = true
+            errorMessage = "🛑 Emergency Brake Detected! Recordings protected."
+        }
+
+        showCrashAlert = true
+
+        for (_, url) in chunkURLs {
+            fileProtectionManager.setProtection(true, for: url)
+        }
+    }
 
     func toggleFileProtection(for url: URL) {
         fileProtectionManager.toggleProtection(for: url)
@@ -287,6 +290,12 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         } catch {
             errorMessage = "Failed to read files: \(error.localizedDescription)"
             return []
+        }
+    }
+
+    deinit {
+        for (_, camera) in cameras {
+            camera.cleanup()
         }
     }
 }

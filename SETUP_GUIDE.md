@@ -55,6 +55,7 @@ Let Xcode finish initializing (usually 5-10 seconds)
 ### Step 2.3: Create Additional Swift Files
 
 Repeat this process for each of the following files:
+- `CameraInfo.swift`
 - `CameraDashcamViewModel.swift`
 - `SettingsView.swift`
 - `FilesView.swift`
@@ -71,7 +72,7 @@ For each file:
 6. Copy the entire provided code into the file
 7. Save (Cmd+S)
 
-**Your project should now have 8 Swift files:**
+**Your project should now have 9 Swift files:**
 ```
 DashcamApp/
 ├── DashcamApp.swift
@@ -79,6 +80,7 @@ DashcamApp/
 ├── SettingsView.swift
 ├── FilesView.swift
 ├── CameraDashcamViewModel.swift
+├── CameraInfo.swift
 ├── StorageManager.swift
 ├── FileProtectionManager.swift
 ├── CrashDetectionManager.swift
