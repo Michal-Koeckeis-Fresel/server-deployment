@@ -38,7 +38,9 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
     private let crashDetectionManager = CrashDetectionManager()
 
     @Published var crashDetected = false
+    @Published var emergencyBrakeDetected = false
     @Published var showCrashAlert = false
+    @Published var impactEventType: ImpactEventType = .collision
 
     override init() {
         super.init()
@@ -137,6 +139,7 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         chunkStartTime = Date()
         currentChunkNumber = 0
         crashDetected = false
+        emergencyBrakeDetected = false
         startNewChunk()
         startTimerUpdate()
         setupChunkTimer()
@@ -211,20 +214,29 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
     }
 
     private func setupCrashDetection() {
-        crashDetectionManager.startMonitoring { [weak self] in
+        crashDetectionManager.startMonitoring { [weak self] eventType in
             DispatchQueue.main.async {
-                self?.handleCrashDetected()
+                self?.handleImpactEventDetected(eventType)
             }
         }
     }
 
-    private func handleCrashDetected() {
-        crashDetected = true
+    private func handleImpactEventDetected(_ eventType: ImpactEventType) {
+        impactEventType = eventType
+
+        switch eventType {
+        case .collision:
+            crashDetected = true
+            errorMessage = "⚠️ Crash Detected! Current recording protected."
+        case .emergencyBrake:
+            emergencyBrakeDetected = true
+            errorMessage = "🛑 Emergency Brake Detected! Current recording protected."
+        }
+
         showCrashAlert = true
 
         if let currentChunkURL = currentChunkURL {
             fileProtectionManager.setProtection(true, for: currentChunkURL)
-            errorMessage = "⚠️ Crash Detected! Current recording protected."
         }
     }
 

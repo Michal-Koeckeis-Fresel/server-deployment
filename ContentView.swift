@@ -71,21 +71,57 @@ struct ContentView: View {
                     .background(Color.gray.opacity(0.1))
                     .cornerRadius(8)
 
-                    // Crash Detection Status
+                    // Impact Detection Status
                     if viewModel.isRecording {
-                        HStack(spacing: 12) {
-                            Image(systemName: viewModel.crashDetected ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                                .foregroundColor(viewModel.crashDetected ? .red : .green)
-                                .animation(.easeInOut(duration: 0.5), value: viewModel.crashDetected)
-                            Text(viewModel.crashDetected ? "Crash Detected - Recording Protected" : "Crash Detection Active")
-                                .font(.caption)
-                                .foregroundColor(viewModel.crashDetected ? .red : .green)
-                            Spacer()
+                        if viewModel.crashDetected || viewModel.emergencyBrakeDetected {
+                            VStack(spacing: 8) {
+                                if viewModel.crashDetected {
+                                    HStack(spacing: 12) {
+                                        Image(systemName: "exclamationmark.triangle.fill")
+                                            .foregroundColor(.red)
+                                            .animation(.easeInOut(duration: 0.5), value: viewModel.crashDetected)
+                                        Text("Crash Detected - Recording Protected")
+                                            .font(.caption)
+                                            .foregroundColor(.red)
+                                        Spacer()
+                                    }
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(Color.red.opacity(0.1))
+                                    .cornerRadius(6)
+                                }
+
+                                if viewModel.emergencyBrakeDetected {
+                                    HStack(spacing: 12) {
+                                        Image(systemName: "bolt.fill")
+                                            .foregroundColor(.orange)
+                                            .animation(.easeInOut(duration: 0.5), value: viewModel.emergencyBrakeDetected)
+                                        Text("Emergency Brake - Recording Protected")
+                                            .font(.caption)
+                                            .foregroundColor(.orange)
+                                        Spacer()
+                                    }
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(Color.orange.opacity(0.1))
+                                    .cornerRadius(6)
+                                }
+                            }
+                        } else {
+                            HStack(spacing: 12) {
+                                Circle()
+                                    .fill(Color.green)
+                                    .frame(width: 8, height: 8)
+                                Text("Impact Detection Active")
+                                    .font(.caption)
+                                    .foregroundColor(.green)
+                                Spacer()
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color.green.opacity(0.1))
+                            .cornerRadius(6)
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background((viewModel.crashDetected ? Color.red : Color.green).opacity(0.1))
-                        .cornerRadius(6)
                     }
                 }
 
@@ -190,10 +226,17 @@ struct ContentView: View {
         }
             .navigationBarHidden(true)
         }
-        .alert("⚠️ Crash Detected", isPresented: $viewModel.showCrashAlert) {
+        .alert(
+            viewModel.crashDetected ? "⚠️ Crash Detected" : "🛑 Emergency Brake Detected",
+            isPresented: $viewModel.showCrashAlert
+        ) {
             Button("OK", role: .cancel) { }
         } message: {
-            Text("A potential accident was detected. The current recording has been automatically protected from deletion.")
+            if viewModel.crashDetected {
+                Text("A potential collision was detected. The current recording has been automatically protected from deletion.")
+            } else {
+                Text("An emergency braking event was detected. The current recording has been automatically protected from deletion.")
+            }
         }
         .onAppear {
             if !cameraSetup {

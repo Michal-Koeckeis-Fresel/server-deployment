@@ -6,7 +6,7 @@ A SwiftUI-based dashcam application for iOS that records video continuously, eve
 
 ✅ **Background Recording** - App continues recording when locked or switched away  
 ✅ **Video Chunking** - Automatically splits recordings into smaller files (1-15 min, configurable)  
-✅ **Crash Detection** - Detects potential accidents via accelerometer and auto-protects current file  
+✅ **Crash Detection** - Detects collisions and emergency braking via accelerometer and auto-protects current file  
 ✅ **Smart Storage** - Auto-deletes oldest unprotected videos when storage limit is reached  
 ✅ **File Protection** - Lock important videos to prevent accidental deletion  
 ✅ **Storage Management** - Set max storage in GB (1-100 GB, configurable)  
@@ -305,57 +305,132 @@ When storage limit is reached:
 
 ---
 
-## Crash Detection
+## Impact Detection
 
-Automatic detection of potential accidents using device accelerometer. When a crash is detected, the current recording is automatically protected.
+Automatic detection of accidents and emergency situations using device accelerometer. When an impact event is detected, the current recording is automatically protected.
+
+### Event Types
+
+#### Collision Detection
+Detects sudden high-impact collisions from various angles:
+
+**Triggers:**
+- Frontal impacts
+- Rear-end collisions
+- Side-impact crashes
+- Pothole/road hazard impacts
+
+**Detection Criteria:**
+- High sustained acceleration (>2.5G)
+- Rapid change in acceleration (>1G variation)
+- Typical for car crashes and severe impacts
+
+#### Emergency Brake Detection
+Detects hard, sustained braking (emergency stops):
+
+**Triggers:**
+- Rapid deceleration >1.5G
+- Sustained for 3+ measurements (0.15+ seconds)
+- Typical for emergency braking situations
+
+**Detection Criteria:**
+- Strong negative Z-axis acceleration (>1.5G)
+- Sustained deceleration pattern
+- Indicates driver hit brakes hard to avoid incident
 
 ### How It Works
-1. **Monitoring:** Once recording starts, accelerometer continuously monitors device acceleration
-2. **Detection Algorithm:** Analyzes acceleration patterns for sudden impacts
-   - High sustained acceleration (>2.5G)
-   - Rapid change in acceleration (>1G variation)
-   - Pattern matching to distinguish crash from normal driving
-3. **Auto-Protection:** When crash is detected:
+1. **Monitoring:** Once recording starts, accelerometer continuously monitors acceleration
+2. **Dual Detection:**
+   - **Collision:** Analyzes magnitude and sudden changes
+   - **Emergency Brake:** Analyzes sustained deceleration on Z-axis
+3. **Debouncing:** 2-second cooldown between detections to prevent false duplicates
+4. **Auto-Protection:** When either event is detected:
    - Current video chunk is automatically write-protected
-   - Alert notification appears
+   - Appropriate alert notification appears
    - Recording continues normally
    - File cannot be deleted until manually unlocked
 
 ### Detection Sensitivity
-- **Threshold:** 2.5G sustained acceleration (typical car crash)
+
+**Collision:**
+- **Threshold:** 2.5G sustained acceleration
 - **Analysis Window:** Last 5 measurements (0.25 seconds)
 - **Buffer Size:** 10 recent measurements
-- **False Positive Prevention:** Requires both high acceleration AND rapid change
+
+**Emergency Brake:**
+- **Threshold:** 1.5G deceleration
+- **Minimum Duration:** 3 consecutive measurements (~0.15 seconds)
+- **Focus:** Z-axis (vertical/braking axis)
 
 ### What Triggers Detection
-✓ Sudden collisions (frontal, rear, side)  
-✓ Hard braking with impact  
-✓ Pothole/severe road hazard impact  
+
+**Collisions:**
+✓ Frontal crashes  
+✓ Rear-end collisions  
+✓ Side impacts  
+✓ Severe road hazards (deep potholes)  
+✓ Hard object impacts  
+
+**Emergency Braking:**
+✓ Hard emergency stops  
+✓ Sudden obstacle avoidance  
+✓ Panic braking  
+✓ Collision prevention maneuvers  
 
 ### What Doesn't Trigger Detection
+
+**Generally Safe (No Detection):**
 ✗ Normal acceleration/braking  
 ✗ Turning and cornering  
+✗ Gentle lane changes  
 ✗ Speed bumps (low impact)  
 ✗ Highway bumps (distributed impact)  
+✗ Normal driving variations  
 
-### After Crash Detection
-1. **Alert:** User sees notification
-2. **Protection:** Current chunk is automatically locked
-3. **Indicator:** ⚠️ icon shows on main screen
-4. **Recovery:** Click through alert to continue recording
-5. **File Unlocking:** User can manually unlock protected file later if needed
+### Status Indicators
+
+**Normal Recording:**
+- Green dot: "Impact Detection Active"
+
+**Collision Detected:**
+- Red warning: "Crash Detected - Recording Protected"
+- ⚠️ icon on main screen
+
+**Emergency Brake Detected:**
+- Orange alert: "Emergency Brake - Recording Protected"
+- 🛑 icon on main screen
+
+### After Event Detection
+1. **Alert:** User sees notification with event type
+2. **Protection:** Current chunk automatically locked
+3. **Indicator:** Visual status on main screen
+4. **Message:** In-app notification explains what happened
+5. **Continuation:** Recording continues normally
+6. **Unlocking:** User can manually unlock if false positive
+
+### Debouncing
+- **Cooldown Period:** 2 seconds between detections
+- **Purpose:** Prevent duplicate alerts for same incident
+- **Behavior:** Only one alert per event sequence
 
 ### Limitations
 - ⚠️ Detection is heuristic-based (not 100% accurate)
-- ⚠️ Sensitivity varies by device accelerometer
+- ⚠️ Sensitivity varies by device accelerometer quality
 - ⚠️ False positives possible with severe road conditions
 - ⚠️ Requires motion/movement to detect (parked vehicle won't detect)
 - ⚠️ Accelerometer must be enabled on device
+- ⚠️ Accuracy depends on device orientation
 
 ### Enabling/Disabling
-- **Always Active:** Crash detection runs automatically when recording
+- **Always Active:** Impact detection runs automatically when recording
 - **No User Control:** Cannot be disabled (always on for safety)
 - **Accelerometer:** Must be available (all modern iPhones have this)
+
+### Typical Thresholds (Gravity Units)
+- Normal car acceleration: 0.3-0.5G
+- Emergency braking: 0.8-1.2G ← **Emergency Brake Threshold: 1.5G**
+- Collision impact: 2.5-8G ← **Collision Threshold: 2.5G**
+- Severe crash: 10G+
 
 ---
 
@@ -392,6 +467,27 @@ Automatic detection of potential accidents using device accelerometer. When a cr
 - **Key:** Last path component (filename)
 - **Scope:** Per-app only (not accessible to other apps)
 
+### Impact Detection
+- **Sensor:** Device accelerometer (CMMotionManager)
+- **Sample Rate:** 20 Hz (0.05s intervals)
+- **Buffer:** 10 measurements (0.5 second history)
+- **Analysis:** Dual algorithm (collision + brake)
+- **Debounce:** 2 second cooldown between events
+- **Callback:** Notifies ViewModel with event type
+- **Thread:** Main thread for UI updates
+
+**Collision Detection:**
+- Analyzes magnitude (all axes)
+- Requires >2.5G sustained acceleration
+- Needs >1.0G variation in 5-measurement window
+- Stops monitoring after detection
+
+**Emergency Brake Detection:**
+- Analyzes Z-axis deceleration
+- Requires >1.5G sustained deceleration
+- Needs 3+ consecutive high-decel measurements
+- Detects hard braking events
+
 ## Limitations
 
 - ⚠️ Requires valid developer signing certificate for real device
@@ -422,18 +518,25 @@ Manages:
 - AVCaptureSession setup (camera/mic input)
 - Video recording lifecycle & chunking
 - Recording timer updates
-- Crash detection integration
+- Impact detection integration (collisions + braking)
 - Storage management
 - File protection
 - Error state management
 - Audio session configuration
+
+**Published Properties:**
+- `crashDetected` - Collision event detected
+- `emergencyBrakeDetected` - Emergency braking detected
+- `showCrashAlert` - Show impact alert to user
+- `impactEventType` - Current event type (.collision or .emergencyBrake)
 
 **Key Methods:**
 - `setupCamera()` - Initialize capture session
 - `startRecording()` - Begin video capture
 - `stopRecording()` - End recording
 - `startNewChunk()` - Start next video chunk
-- `handleCrashDetected()` - Auto-protect on crash
+- `handleImpactEventDetected()` - Auto-protect on collision or emergency brake
+- `setupCrashDetection()` - Initialize accelerometer monitoring
 - `toggleFileProtection()` - Lock/unlock files
 - `getRecordedFiles()` - List all videos
 
@@ -441,13 +544,21 @@ Manages:
 Monitors:
 - Device accelerometer data
 - Acceleration magnitude and changes
-- Crash pattern detection
+- Collision pattern detection
+- Emergency braking patterns
+- Debouncing between events
 - Running buffer of recent measurements
 
+**Event Types:**
+- `.collision` - High-impact collision detected
+- `.emergencyBrake` - Hard braking detected
+
 **Key Methods:**
-- `startMonitoring()` - Begin accelerometer updates
+- `startMonitoring()` - Begin accelerometer updates with event callback
 - `stopMonitoring()` - Stop tracking
-- `isCrashDetected()` - Analyze sensor data for crashes
+- `isCrashDetected()` - Analyze sensor data for collisions
+- `isEmergencyBrakeDetected()` - Analyze deceleration for hard braking
+- `shouldDebounce()` - Check if event detection should be suppressed
 
 ### StorageManager
 Handles:
