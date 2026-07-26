@@ -35,6 +35,11 @@ struct SettingsView: View {
 
                 ScrollView {
                     VStack(spacing: 24) {
+                        // Permissions Status
+                        PermissionStatusView()
+
+                        Divider()
+                            .background(Color.gray.opacity(0.3))
                         // Video Chunk Duration
                         VStack(alignment: .leading, spacing: 12) {
                             HStack {

@@ -412,6 +412,93 @@ Access via:
 - "X GB used" and "X GB available"
 - Auto-cleanup indicator
 
+---
+
+## Permissions Management
+
+The app requires specific permissions to record video and audio. You can view and manage these permissions from the Settings screen.
+
+### Permission Status Display
+
+**Location:** Settings → Permissions Status (top of screen)
+
+Shows real-time status for each permission:
+
+**Camera Permission**
+- 🟢 **Granted** - App can access camera
+- 🔴 **Denied** - User rejected permission (need to enable in Settings)
+- 🟠 **Not Yet Requested** - Permission prompt hasn't been shown yet
+
+**Microphone Permission**
+- 🟢 **Granted** - App can record audio
+- 🔴 **Denied** - User rejected permission (need to enable in Settings)
+- 🟠 **Not Yet Requested** - Permission prompt hasn't been shown yet
+
+**Photos Permission** (Optional)
+- 🟢 **Granted** - Photos can be saved to Photos app
+- 🔴 **Denied** - User rejected permission
+- 🟠 **Not Yet Requested** - Only needed if using Photos storage option
+
+### Required vs Optional
+
+**Required:**
+- Camera (needed for recording)
+- Microphone (needed for audio)
+
+**Optional:**
+- Photos (only if saving videos to Photos library)
+
+### Granting Permissions
+
+**Method 1: In-App Requests**
+1. On first launch, you'll see permission request dialogs
+2. Tap **Allow** for Camera and Microphone
+3. Then tap **Allow** for Photos if using Photos storage
+
+**Method 2: Through App Settings**
+1. Open app Settings screen
+2. Click **Request** button for any "Not Yet Requested" permissions
+3. Tap **Allow** on system dialog
+
+**Method 3: Through iOS Settings**
+1. Go to iPhone Settings → **DashcamApp**
+2. Toggle **Camera** ON
+3. Toggle **Microphone** ON
+4. Toggle **Photos** ON (if using Photos storage)
+5. Restart the app
+
+### Permission Status Indicators
+
+**Main Recording Screen:**
+- Orange warning banner appears if Camera or Microphone denied
+- Shows "Permissions Required" with link to Settings
+- Recording will not work until permissions granted
+
+**Settings Screen:**
+- Shows status of each permission
+- "Request" button for permissions not yet requested
+- "Settings" button for denied permissions (opens iOS Settings)
+- Green checkmark when all required permissions granted
+
+### Fixing Permission Issues
+
+**Camera Permission Denied:**
+1. Settings → DashcamApp → Camera → Toggle ON
+2. Restart app
+3. Check if "Ready" status shows for cameras
+
+**Microphone Permission Denied:**
+1. Settings → DashcamApp → Microphone → Toggle ON
+2. Restart app
+3. Try recording - audio should now work
+
+**Photos Permission Denied:**
+1. Settings → DashcamApp → Photos → Toggle ON
+2. Change storage location to "Photos" in Settings
+3. Recordings will now save to Photos app
+
+---
+
 ## Troubleshooting
 
 ### App keeps stopping when backgrounded

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject var viewModel: CameraDashcamViewModel
+    @StateObject private var permissionManager = PermissionStatusManager()
     @State private var cameraSetup = false
     @State private var showSettings = false
     @State private var showFiles = false
@@ -57,6 +58,32 @@ struct ContentView: View {
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 16)
+
+                // Permission Warning
+                if !permissionManager.allPermissionsGranted() {
+                    HStack(spacing: 12) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.orange)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Permissions Required")
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.orange)
+                            Text("Camera and Microphone needed for recording")
+                                .font(.caption2)
+                                .foregroundColor(.orange)
+                        }
+                        Spacer()
+                        NavigationLink(destination: SettingsView()) {
+                            Image(systemName: "chevron.right")
+                                .foregroundColor(.orange)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(Color.orange.opacity(0.1))
+                    .cornerRadius(8)
+                }
 
                 // Camera Status Display
                 VStack(spacing: 8) {
@@ -323,7 +350,14 @@ struct ContentView: View {
                 viewModel.setupCameras()
                 cameraSetup = true
             }
+            permissionManager.updatePermissionStatuses()
         }
+        .onReceive(
+            NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification),
+            perform: { _ in
+                permissionManager.updatePermissionStatuses()
+            }
+        )
     }
 }
 
