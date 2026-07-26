@@ -40,6 +40,17 @@ struct SystemPressureView: View {
                         .foregroundColor(.white)
                 }
 
+                HStack {
+                    Text("Video Frame Rate")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                    Spacer()
+                    Text("\(pressureMonitor.recommendedFrameRate) fps")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(pressureMonitor.pressureLevel.color)
+                }
+
                 ProgressView(value: Double(pressureMonitor.thermalPressure))
                     .tint(pressureMonitor.pressureLevel.color)
             }

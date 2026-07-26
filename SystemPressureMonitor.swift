@@ -48,6 +48,7 @@ class SystemPressureMonitor: NSObject, ObservableObject {
     @Published var thermalWarningLevel: AVCaptureDevice.ThermalState = .nominal
     @Published var shouldReduceQuality: Bool = false
     @Published var shouldPauseRecording: Bool = false
+    @Published var recommendedFrameRate: Int32 = 30
 
     private var captureDevices: [AVCaptureDevice] = []
     private var pressureObservers: [NSObjectProtocol] = []
@@ -129,6 +130,7 @@ class SystemPressureMonitor: NSObject, ObservableObject {
     private func updateSystemPressure() {
         guard let primaryDevice = captureDevices.first else {
             pressureLevel = .nominal
+            recommendedFrameRate = 30
             return
         }
 
@@ -160,15 +162,18 @@ class SystemPressureMonitor: NSObject, ObservableObject {
         case .nominal:
             shouldReduceQuality = false
             shouldPauseRecording = false
+            recommendedFrameRate = 30
         case .elevated:
             shouldReduceQuality = true
             shouldPauseRecording = false
+            recommendedFrameRate = max(15, Int32(Float(24) * (1.0 - thermalPressure)))
         case .critical:
             shouldReduceQuality = true
             shouldPauseRecording = true
+            recommendedFrameRate = 15
         }
 
-        logPressureState("Pressure level: \(pressureLevel.rawValue), Thermal: \(String(format: "%.2f", thermalPressure))")
+        logPressureState("Pressure level: \(pressureLevel.rawValue), Thermal: \(String(format: "%.2f", thermalPressure)), FPS: \(recommendedFrameRate)")
     }
 
     private func logPressureState(_ message: String) {
@@ -195,13 +200,14 @@ class SystemPressureMonitor: NSObject, ObservableObject {
         }
     }
 
-    func getPressureHealthStatus() -> (level: String, thermal: String, shouldReduceQuality: String, shouldPauseRecording: String) {
+    func getPressureHealthStatus() -> (level: String, thermal: String, frameRate: String, shouldReduceQuality: String, shouldPauseRecording: String) {
         let levelStr = pressureLevel.rawValue
         let thermalStr = thermalStateDescription
+        let frameRateStr = "\(recommendedFrameRate) fps"
         let reduceStr = shouldReduceQuality ? "Yes" : "No"
         let pauseStr = shouldPauseRecording ? "Yes" : "No"
 
-        return (levelStr, thermalStr, reduceStr, pauseStr)
+        return (levelStr, thermalStr, frameRateStr, reduceStr, pauseStr)
     }
 
     func printPressureDiagnostics() {
@@ -211,6 +217,7 @@ class SystemPressureMonitor: NSObject, ObservableObject {
         print("Pressure Description: \(pressureLevel.description)")
         print("Thermal Pressure: \(String(format: "%.2f", thermalPressure))")
         print("Thermal State: \(thermalStateDescription)")
+        print("Recommended Frame Rate: \(recommendedFrameRate) fps")
         print("Should Reduce Quality: \(shouldReduceQuality)")
         print("Should Pause Recording: \(shouldPauseRecording)")
         print("Active Capture Devices: \(captureDevices.count)")

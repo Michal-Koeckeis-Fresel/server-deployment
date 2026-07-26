@@ -223,10 +223,28 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
             errorMessage = "🌡️ Device cooling required. Recording paused."
         } else if systemPressureMonitor.shouldReduceQuality && isRecording {
             if thermalWarningMessage == nil {
-                thermalWarningMessage = "Device under thermal pressure - video quality reduced"
+                thermalWarningMessage = "Device under thermal pressure - video quality and frame rate reduced"
             }
+            adjustFrameRates()
         } else if thermalWarningMessage != nil && !systemPressureMonitor.shouldReduceQuality {
             thermalWarningMessage = nil
+            restoreFrameRates()
+        }
+    }
+
+    private func adjustFrameRates() {
+        for position in cameras.keys {
+            var camera = cameras[position]!
+            camera.setFrameRate(systemPressureMonitor.recommendedFrameRate)
+            cameras[position] = camera
+        }
+    }
+
+    private func restoreFrameRates() {
+        for position in cameras.keys {
+            var camera = cameras[position]!
+            camera.setFrameRate(30)
+            cameras[position] = camera
         }
     }
 

@@ -285,6 +285,25 @@ struct CameraRecorder {
         }
     }
 
+    mutating func setFrameRate(_ fps: Int32) {
+        guard let videoInput = videoInput else { return }
+
+        let device = videoInput.device
+        let targetDuration = CMTime(value: 1, timescale: fps)
+
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+
+            device.activeVideoMinFrameDuration = targetDuration
+            device.activeVideoMaxFrameDuration = targetDuration
+
+            print("Frame rate set to \(fps) fps for \(position.rawValue)")
+        } catch {
+            print("Error setting frame rate for \(position.rawValue): \(error)")
+        }
+    }
+
     func getSessionStatus() -> String {
         if !isAvailable {
             return "Unavailable"
