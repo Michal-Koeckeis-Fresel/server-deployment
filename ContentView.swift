@@ -37,6 +37,15 @@ struct ContentView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
 
                         VStack(spacing: 8) {
+                            NavigationLink(destination: LiveCameraFeedView()) {
+                                Image(systemName: "video.fill")
+                                    .font(.system(size: 18))
+                                    .frame(width: 44, height: 44)
+                                    .background(Color.gray.opacity(0.3))
+                                    .foregroundColor(.white)
+                                    .cornerRadius(8)
+                            }
+
                             NavigationLink(destination: MultiCameraPreviewView()) {
                                 Image(systemName: "square.grid.2x2")
                                     .font(.system(size: 18))
