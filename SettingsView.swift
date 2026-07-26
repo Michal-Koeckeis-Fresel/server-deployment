@@ -6,6 +6,7 @@ struct SettingsView: View {
     @StateObject private var qualityManager = VideoQualityManager.shared
     @StateObject private var gForceMonitor = GForceMonitor.shared
     @StateObject private var performanceLogger = PerformanceLogger.shared
+    @StateObject private var nightModeManager = NightModeManager.shared
     @State private var selectedStorageLocation = StorageLocationManager.shared.selectedLocation
     @State private var selectedCodec = VideoCodecManager.shared.selectedCodec
     @State private var showMigrationAlert = false
@@ -630,6 +631,47 @@ struct SettingsView: View {
                         .padding(16)
                         .background(Color.gray.opacity(0.1))
                         .cornerRadius(12)
+
+                        // Night Mode
+                        if nightModeManager.isSupported {
+                            VStack(alignment: .leading, spacing: 12) {
+                                HStack {
+                                    Label("Night Mode", systemImage: "moon.stars.fill")
+                                        .font(.headline)
+                                        .foregroundColor(.white)
+                                    Spacer()
+                                    Toggle("", isOn: $nightModeManager.isEnabled)
+                                        .labelsHidden()
+                                }
+
+                                Text(nightModeManager.getNightModeDescription())
+                                    .font(.caption)
+                                    .foregroundColor(.gray)
+
+                                VStack(spacing: 6) {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "info.circle.fill")
+                                            .foregroundColor(.blue)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("Low Light Enhancement")
+                                                .font(.caption2)
+                                                .fontWeight(.semibold)
+                                                .foregroundColor(.blue)
+                                            Text("Automatically boosts video brightness and reduces noise in dark conditions")
+                                                .font(.caption2)
+                                                .foregroundColor(.blue)
+                                        }
+                                    }
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color.blue.opacity(0.1))
+                                .cornerRadius(6)
+                            }
+                            .padding(16)
+                            .background(Color.gray.opacity(0.1))
+                            .cornerRadius(12)
+                        }
 
                         Spacer()
                     }

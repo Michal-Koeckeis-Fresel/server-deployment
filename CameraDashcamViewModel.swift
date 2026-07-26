@@ -56,6 +56,7 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
     private let gForceMonitor = GForceMonitor.shared
     private let performanceLogger = PerformanceLogger.shared
     private let audioEventDetector = AudioEventDetector.shared
+    private let nightModeManager = NightModeManager.shared
     @available(iOS 14.0, *)
     private let watchConnectivityManager = WatchConnectivityManager.shared
 
@@ -210,6 +211,10 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
                 continue
             }
 
+            if let device = AVCaptureDevice.default(position.deviceType, for: .video, position: position.position) {
+                nightModeManager.enableNightMode(for: device)
+            }
+
             let timestamp = DateFormatter.iso8601.string(from: Date())
             let fileName = "dashcam_\(timestamp)_\(position.filePrefix)_chunk_0001.mov"
             let outputURL = recordingsPath.appendingPathComponent(fileName)
@@ -252,6 +257,10 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
             camera.stopRecording()
             cameras[position] = camera
             cameraStatus[position] = camera.captureSession?.isRunning == true ? "Ready" : "Error"
+
+            if let device = AVCaptureDevice.default(position.deviceType, for: .video, position: position.position) {
+                nightModeManager.disableNightMode(for: device)
+            }
         }
 
         isRecording = false
