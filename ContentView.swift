@@ -60,6 +60,29 @@ struct ContentView: View {
                     .padding(.horizontal, 20)
                     .padding(.top, 16)
 
+                // Low Power Mode Warning
+                let powerModeMonitor = LowPowerModeMonitor.shared
+                if powerModeMonitor.isLowPowerModeEnabled {
+                    HStack(spacing: 12) {
+                        Image(systemName: "bolt.slash.fill")
+                            .foregroundColor(.orange)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Low Power Mode")
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.orange)
+                            Text("Video quality reduced to conserve battery")
+                                .font(.caption2)
+                                .foregroundColor(.orange)
+                        }
+                        Spacer()
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(Color.orange.opacity(0.1))
+                    .cornerRadius(8)
+                }
+
                 // Thermal Warning
                 if let thermalMessage = viewModel.thermalWarningMessage {
                     HStack(spacing: 12) {

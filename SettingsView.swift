@@ -39,6 +39,9 @@ struct SettingsView: View {
                         // Battery Status
                         BatteryStatusView()
 
+                        // Low Power Mode Status
+                        LowPowerModeView()
+
                         // System Pressure Status
                         SystemPressureView()
 

@@ -39,6 +39,7 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
     private let crashDetectionManager = CrashDetectionManager()
     private let storageLocationManager = StorageLocationManager.shared
     private let systemPressureMonitor = SystemPressureMonitor.shared
+    private let lowPowerModeMonitor = LowPowerModeMonitor.shared
 
     @Published var crashDetected = false
     @Published var emergencyBrakeDetected = false
@@ -162,6 +163,8 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
 
         if systemPressureMonitor.shouldReduceQuality {
             thermalWarningMessage = "Device under thermal pressure - video quality reduced"
+        } else if lowPowerModeMonitor.isLowPowerModeEnabled {
+            thermalWarningMessage = "Low Power Mode active - video quality reduced to save battery"
         }
 
         guard let recordingsPath = storageLocationManager.getRecordingsURL() else {
@@ -221,21 +224,26 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
             stopRecording()
             thermalWarningMessage = "Critical thermal pressure - recording paused automatically"
             errorMessage = "🌡️ Device cooling required. Recording paused."
-        } else if systemPressureMonitor.shouldReduceQuality && isRecording {
+        } else if (systemPressureMonitor.shouldReduceQuality || lowPowerModeMonitor.shouldReduceQuality) && isRecording {
+            let reason = systemPressureMonitor.shouldReduceQuality ? "thermal pressure" : "Low Power Mode"
             if thermalWarningMessage == nil {
-                thermalWarningMessage = "Device under thermal pressure - video quality and frame rate reduced"
+                thermalWarningMessage = "Device under \(reason) - video quality and frame rate reduced"
             }
             adjustFrameRates()
-        } else if thermalWarningMessage != nil && !systemPressureMonitor.shouldReduceQuality {
+        } else if thermalWarningMessage != nil && !systemPressureMonitor.shouldReduceQuality && !lowPowerModeMonitor.shouldReduceQuality {
             thermalWarningMessage = nil
             restoreFrameRates()
         }
     }
 
     private func adjustFrameRates() {
+        let thermalFPS = systemPressureMonitor.recommendedFrameRate
+        let powerModeFPS = lowPowerModeMonitor.recommendedFrameRate
+        let effectiveFPS = min(thermalFPS, powerModeFPS)
+
         for position in cameras.keys {
             var camera = cameras[position]!
-            camera.setFrameRate(systemPressureMonitor.recommendedFrameRate)
+            camera.setFrameRate(effectiveFPS)
             cameras[position] = camera
         }
     }
