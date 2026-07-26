@@ -41,6 +41,8 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
     private let systemPressureMonitor = SystemPressureMonitor.shared
     private let lowPowerModeMonitor = LowPowerModeMonitor.shared
     private let locationManager = LocationManager.shared
+    private let parkingModeManager = ParkingModeManager.shared
+    private let autoStartManager = AutoStartRecordingManager.shared
 
     @Published var crashDetected = false
     @Published var emergencyBrakeDetected = false
@@ -172,6 +174,10 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
             thermalWarningMessage = "Device under thermal pressure - video quality reduced"
         } else if lowPowerModeMonitor.isLowPowerModeEnabled {
             thermalWarningMessage = "Low Power Mode active - video quality reduced to save battery"
+        }
+
+        if autoStartManager.shouldAutoStartRecording() {
+            print("Auto-start recording triggered: driving detected")
         }
 
         guard let recordingsPath = storageLocationManager.getRecordingsURL() else {

@@ -5,6 +5,8 @@ struct ContentView: View {
     @StateObject private var permissionManager = PermissionStatusManager()
     @StateObject private var batteryManager = BatteryMonitorManager.shared
     @StateObject private var locationManager = LocationManager.shared
+    @StateObject private var parkingManager = ParkingModeManager.shared
+    @StateObject private var autoStartManager = AutoStartRecordingManager.shared
     @State private var cameraSetup = false
     @State private var showSettings = false
     @State private var showFiles = false
@@ -173,6 +175,50 @@ struct ContentView: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)
                     .background(Color.orange.opacity(0.1))
+                    .cornerRadius(8)
+                }
+
+                // Parking Mode Status
+                if parkingManager.isParkingModeEnabled {
+                    HStack(spacing: 12) {
+                        Image(systemName: parkingManager.isParked ? "parkingsign.circle.fill" : "car.fill")
+                            .foregroundColor(parkingManager.isParked ? .purple : .gray)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Parking Mode")
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                                .foregroundColor(parkingManager.isParked ? .purple : .gray)
+                            Text(parkingManager.parkingStatusDescription)
+                                .font(.caption2)
+                                .foregroundColor(parkingManager.isParked ? .purple : .gray)
+                        }
+                        Spacer()
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(parkingManager.isParked ? Color.purple.opacity(0.1) : Color.gray.opacity(0.05))
+                    .cornerRadius(8)
+                }
+
+                // Auto-Start Status
+                if autoStartManager.isAutoStartEnabled && autoStartManager.isDriving {
+                    HStack(spacing: 12) {
+                        Image(systemName: "play.circle.fill")
+                            .foregroundColor(.green)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Auto-Start Ready")
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.green)
+                            Text("Driving detected - will start recording automatically")
+                                .font(.caption2)
+                                .foregroundColor(.green)
+                        }
+                        Spacer()
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(Color.green.opacity(0.1))
                     .cornerRadius(8)
                 }
 
@@ -479,6 +525,40 @@ struct ContentView: View {
             }
             permissionManager.updatePermissionStatuses()
             locationManager.requestLocationPermission()
+
+            if parkingManager.isParkingModeEnabled {
+                parkingManager.startParkingModeMonitoring()
+            }
+        }
+        .onDisappear {
+            parkingManager.stopParkingModeMonitoring()
+        }
+        .onChange(of: parkingManager.isParkingModeEnabled) { newValue in
+            if newValue {
+                parkingManager.startParkingModeMonitoring()
+            } else {
+                parkingManager.stopParkingModeMonitoring()
+            }
+        }
+        .onChange(of: parkingManager.parkingMotionDetected) { motionDetected in
+            if motionDetected && parkingManager.isParked {
+                for (_, url) in viewModel.chunkURLs {
+                    viewModel.fileProtectionManager.setProtection(true, for: url)
+                }
+                viewModel.errorMessage = "🚨 Motion detected while parked - recordings protected"
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                    viewModel.errorMessage = nil
+                }
+            }
+        }
+        .onChange(of: autoStartManager.isDriving) { isDriving in
+            if isDriving && autoStartManager.isAutoStartEnabled && !viewModel.isRecording {
+                if !cameraSetup {
+                    viewModel.setupCameras()
+                    cameraSetup = true
+                }
+                viewModel.startRecording()
+            }
         }
         .onReceive(
             NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification),

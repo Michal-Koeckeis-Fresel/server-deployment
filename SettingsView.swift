@@ -53,6 +53,80 @@ struct SettingsView: View {
 
                         Divider()
                             .background(Color.gray.opacity(0.3))
+
+                        // Parking Mode
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Label("Parking Mode", systemImage: "parkingsign.circle.fill")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                                Spacer()
+                                Toggle("", isOn: Binding(
+                                    get: { ParkingModeManager.shared.isParkingModeEnabled },
+                                    set: { ParkingModeManager.shared.isParkingModeEnabled = $0 }
+                                ))
+                                .labelsHidden()
+                            }
+
+                            Text("Monitor vehicle when parked. Automatically records motion detection events and protects them.")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+
+                            HStack(spacing: 8) {
+                                Image(systemName: "info.circle.fill")
+                                    .foregroundColor(.blue)
+                                    .font(.caption)
+                                Text("Requires accelerometer - drains battery when recording")
+                                    .font(.caption)
+                                    .foregroundColor(.blue)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color.blue.opacity(0.1))
+                            .cornerRadius(6)
+                        }
+                        .padding(16)
+                        .background(Color.gray.opacity(0.1))
+                        .cornerRadius(12)
+
+                        // Auto-Start Recording
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Label("Auto-Start Recording", systemImage: "play.circle.fill")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                                Spacer()
+                                Toggle("", isOn: Binding(
+                                    get: { AutoStartRecordingManager.shared.isAutoStartEnabled },
+                                    set: { AutoStartRecordingManager.shared.isAutoStartEnabled = $0 }
+                                ))
+                                .labelsHidden()
+                            }
+
+                            Text("Automatically start recording when driving is detected (>8 km/h for 5 seconds).")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+
+                            HStack(spacing: 8) {
+                                Image(systemName: "info.circle.fill")
+                                    .foregroundColor(.green)
+                                    .font(.caption)
+                                Text("Requires location access - uses GPS speed data")
+                                    .font(.caption)
+                                    .foregroundColor(.green)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color.green.opacity(0.1))
+                            .cornerRadius(6)
+                        }
+                        .padding(16)
+                        .background(Color.gray.opacity(0.1))
+                        .cornerRadius(12)
+
+                        Divider()
+                            .background(Color.gray.opacity(0.3))
+
                         // Video Chunk Duration
                         VStack(alignment: .leading, spacing: 12) {
                             HStack {
