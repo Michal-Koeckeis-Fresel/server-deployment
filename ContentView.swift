@@ -7,6 +7,7 @@ struct ContentView: View {
     @StateObject private var locationManager = LocationManager.shared
     @StateObject private var parkingManager = ParkingModeManager.shared
     @StateObject private var autoStartManager = AutoStartRecordingManager.shared
+    @StateObject private var siriManager = SiriShortcutManager.shared
     @State private var cameraSetup = false
     @State private var showSettings = false
     @State private var showFiles = false
@@ -63,6 +64,20 @@ struct ContentView: View {
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 16)
+
+                // Siri Status Indicator
+                HStack(spacing: 8) {
+                    Image(systemName: "mic.circle.fill")
+                        .foregroundColor(.blue)
+                    Text("Siri commands enabled")
+                        .font(.caption2)
+                        .foregroundColor(.blue)
+                    Spacer()
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color.blue.opacity(0.05))
+                .cornerRadius(6)
 
                 // Low Power Mode Warning
                 let powerModeMonitor = LowPowerModeMonitor.shared
@@ -529,6 +544,8 @@ struct ContentView: View {
             if parkingManager.isParkingModeEnabled {
                 parkingManager.startParkingModeMonitoring()
             }
+
+            siriManager.registerSiriVoiceShortcuts()
         }
         .onDisappear {
             parkingManager.stopParkingModeMonitoring()
@@ -558,6 +575,11 @@ struct ContentView: View {
                     cameraSetup = true
                 }
                 viewModel.startRecording()
+            }
+        }
+        .onChange(of: siriManager.lastCommand) { command in
+            if let command = command {
+                siriManager.handleShortcutCommand(command, viewModel: viewModel)
             }
         }
         .onReceive(
