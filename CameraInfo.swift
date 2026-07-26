@@ -3,15 +3,9 @@ import AVFoundation
 enum CameraPosition: String, CaseIterable {
     case frontWide = "Front Wide"
     case frontTelephoto = "Front Zoom"
-    case rear = "Rear"
 
     var position: AVCaptureDevice.Position {
-        switch self {
-        case .frontWide, .frontTelephoto:
-            return .front
-        case .rear:
-            return .back
-        }
+        return .front
     }
 
     var deviceType: AVCaptureDevice.DeviceType {
@@ -20,8 +14,6 @@ enum CameraPosition: String, CaseIterable {
             return .builtInWideAngleCamera
         case .frontTelephoto:
             return .builtInTelephotoCamera
-        case .rear:
-            return .builtInWideAngleCamera
         }
     }
 
@@ -31,8 +23,6 @@ enum CameraPosition: String, CaseIterable {
             return "front_wide"
         case .frontTelephoto:
             return "front_zoom"
-        case .rear:
-            return "rear"
         }
     }
 }

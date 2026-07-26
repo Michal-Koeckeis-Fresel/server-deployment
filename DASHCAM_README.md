@@ -4,7 +4,7 @@ A SwiftUI-based dashcam application for iOS that records video continuously, eve
 
 ## Features
 
-✅ **Multi-Camera Recording** - Simultaneously records from all available cameras (wide, telephoto, rear)  
+✅ **Multi-Camera Recording** - Simultaneously records from front cameras (wide angle & telephoto)  
 ✅ **Background Recording** - App continues recording when locked or switched away  
 ✅ **Video Chunking** - Automatically splits recordings into smaller files (1-15 min, configurable)  
 ✅ **Impact Detection** - Detects collisions and emergency braking via accelerometer and auto-protects all files  
@@ -30,23 +30,19 @@ The app simultaneously records from all available device cameras, providing comp
 
 ### Available Cameras
 
-**Front Wide-Angle** (Default 1x)
-- Captures broad road view
+**Front Wide-Angle** (1x - Default)
+- Captures broad road view ahead
 - Pedestrian and obstacle detection
-- Lane and traffic visibility
-- Full dashboard view
+- Lane markings and traffic visibility
+- Context and full scene documentation
+- Privacy-focused (no cabin recording)
 
-**Front Telephoto** (Zoom, if available)
-- Captures distant details
+**Front Telephoto** (Zoom - if available)
+- Captures distant details ahead
 - License plate recognition at distance
-- Traffic sign reading
-- Focused perspective ahead
-
-**Rear Camera** (if available)
-- Rear-end collision evidence
-- Tailgating documentation
-- Rear traffic monitoring
-- Backup perspective
+- Traffic sign reading and compliance
+- Focused perspective for fine details
+- Complements wide angle coverage
 
 ### How Multi-Camera Works
 
@@ -59,7 +55,6 @@ The app simultaneously records from all available device cameras, providing comp
    ```
    dashcam_2025_01_15_144230_front_wide_chunk_0001.mov
    dashcam_2025_01_15_144230_front_zoom_chunk_0001.mov
-   dashcam_2025_01_15_144230_rear_chunk_0001.mov
    ```
 
 3. **Synchronized Chunking:**
@@ -90,58 +85,58 @@ Examples:
 Cameras
   ● Front Wide      Recording
   ● Front Zoom      Recording
-  ● Rear            Unavailable
 ```
 
 ### Coverage Benefits
 
 **Accident Investigation:**
-- Wide angle captures full incident scene
-- Telephoto shows fine details (plate numbers, signs)
-- Rear shows following traffic
+- Wide angle captures full incident scene ahead
+- Telephoto shows fine details (license plates, signs, vehicle markings)
+- Dual perspectives resolve disputes about distance and details
 
 **Liability Protection:**
-- Multiple angles reduce disputes
-- Hard to argue with 3 synchronized views
-- Pedestrian detection (wide angle)
-- Vehicle identification (telephoto)
+- Synchronized dual-camera view reduces disputes
+- Hard to argue with corroborated perspectives
+- Pedestrian detection and documentation (wide angle)
+- Vehicle identification and compliance verification (telephoto)
 
 **Evidence Quality:**
-- Wide + zoom = comprehensive coverage
-- Rear prevents rear-end accident false claims
-- Impact detection protects all perspectives
+- Wide + telephoto = comprehensive forward coverage
+- Impact detection protects all footage
+- Privacy-respecting (no interior/cabin recording)
+- Professional-grade dual-camera documentation
 
 ### Storage Implications
 
 **Storage Calculation:**
 - Wide angle: ~350-400 MB per minute (HD)
 - Telephoto: ~350-400 MB per minute (HD)
-- Rear: ~350-400 MB per minute (HD)
-- **Total:** ~1 GB per minute for all 3 cameras
+- **Total:** ~700-800 MB per minute for both cameras
 
 With 10 GB storage and 5-minute chunks:
-- Each chunk set: ~5 GB
-- ~2 complete chunk sets available
+- Each chunk set: ~3.5-4 GB
+- ~2.5 complete chunk sets available
 - Older chunks auto-delete as limit approaches
 
 ### Device Support
 
-**All Cameras Available:**
-- Most modern iPhones (iPhone 11+)
-- iPhone 12, 13, 14, 15, 16 Pro models
-- Wide angle always available
-- Telephoto on iPhone 12 Pro and newer
+**Both Front Cameras Available:**
+- iPhone 12 Pro and newer
+- iPhone 13, 14, 15, 16 Pro models
+- Provides wide angle + telephoto dual coverage
 
-**Limited Cameras:**
-- iPhone SE, XR, 11: Wide angle only
-- iPhone 12-15 standard: Wide angle + telephoto
-- iPhone 16: Wide angle + telephoto + ultra-wide option
+**Front Wide-Angle Only:**
+- iPhone SE (any generation)
+- iPhone XR, 11, 11 Pro
+- iPhone 12, 13, 14, 15, 16 standard models
+- iPhone X, XS, 8, 7, 6s
 
 **App Behavior:**
-- Uses all available cameras on device
-- Gracefully handles unavailable cameras
-- Shows status for each camera
+- Uses all available front cameras on device
+- Gracefully handles unavailable telephoto
+- Shows status for each available camera
 - Records with whatever is available
+- Always privacy-focused (front/road only, no interior)
 
 ### Technical Implementation
 
@@ -159,17 +154,17 @@ With 10 GB storage and 5-minute chunks:
 
 **File Naming:**
 - Timestamp matches across cameras
-- Position indicator (front_wide, front_zoom, rear)
+- Position indicator (front_wide, front_zoom)
 - Chunk number synchronized
 - Easy to identify related files
 
 ### Limitations
 
-- ⚠️ Significantly increases storage usage (3x typical)
+- ⚠️ Increases storage usage (dual cameras = ~2x single camera)
 - ⚠️ Not all iPhone models have telephoto
-- ⚠️ Battery drain greater with multiple cameras
+- ⚠️ Battery drain greater with dual cameras (still lower than rear camera)
 - ⚠️ Audio only from primary microphone
-- ⚠️ Some older devices may have thermal issues
+- ⚠️ Some older devices may have thermal issues with sustained recording
 
 ### Future Enhancements
 
@@ -702,20 +697,24 @@ Manages:
 
 ### CameraInfo
 Defines:
-- `CameraPosition` enum (frontWide, frontTelephoto, rear)
-- Device type and position mapping
+- `CameraPosition` enum (frontWide, frontTelephoto)
+- Front camera device type and position mapping
 - File naming conventions per camera
 - `CameraRecorder` struct for individual camera management
 
 **Camera Positions:**
-- Front Wide: Broad road view (all devices)
-- Front Telephoto: Distant detail capture (Pro models)
-- Rear: Trailing traffic monitoring (if available)
+- Front Wide: Broad road view ahead (all devices)
+- Front Telephoto: Distant detail capture ahead (Pro models +)
+
+**Privacy Focus:**
+- Only front-facing cameras
+- No interior/cabin recording
+- Driver privacy protected
+- Road and environment documentation only
 
 **File Prefix Examples:**
 - `front_wide_chunk_0001.mov`
 - `front_zoom_chunk_0001.mov`
-- `rear_chunk_0001.mov`
 
 ### CrashDetectionManager
 Monitors:
