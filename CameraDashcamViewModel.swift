@@ -43,6 +43,8 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
     private let locationManager = LocationManager.shared
     private let parkingModeManager = ParkingModeManager.shared
     private let autoStartManager = AutoStartRecordingManager.shared
+    private let gForceMonitor = GForceMonitor.shared
+    private let performanceLogger = PerformanceLogger.shared
 
     @Published var crashDetected = false
     @Published var emergencyBrakeDetected = false
@@ -213,6 +215,8 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         crashDetected = false
         emergencyBrakeDetected = false
         fpsCounter.start()
+        gForceMonitor.startMonitoring()
+        performanceLogger.startRecording()
         locationManager.startLocationUpdates()
         startTimerUpdate()
         setupChunkTimer()
@@ -231,6 +235,8 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         isRecording = false
         fpsCounter.stop()
         fpsCounter.printFPSReport()
+        gForceMonitor.stopMonitoring()
+        performanceLogger.stopRecording()
         locationManager.stopLocationUpdates()
         displayLink?.invalidate()
         displayLink = nil
@@ -371,6 +377,8 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         let seconds = elapsed % 60
 
         recordingTime = String(format: "%02d:%02d:%02d", hours, minutes, seconds)
+
+        performanceLogger.recordFrame()
     }
 
     private func setupCrashDetection() {

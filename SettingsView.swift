@@ -4,6 +4,8 @@ struct SettingsView: View {
     @EnvironmentObject var viewModel: CameraDashcamViewModel
     @Environment(\.dismiss) var dismiss
     @StateObject private var qualityManager = VideoQualityManager.shared
+    @StateObject private var gForceMonitor = GForceMonitor.shared
+    @StateObject private var performanceLogger = PerformanceLogger.shared
     @State private var selectedStorageLocation = StorageLocationManager.shared.selectedLocation
     @State private var selectedCodec = VideoCodecManager.shared.selectedCodec
     @State private var showMigrationAlert = false
@@ -47,6 +49,156 @@ struct SettingsView: View {
 
                         // System Pressure Status
                         SystemPressureView()
+
+                        // G-Force Monitoring Status
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Label("G-Force Monitoring", systemImage: "waveform.circle.fill")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                                Spacer()
+                            }
+
+                            VStack(spacing: 10) {
+                                HStack {
+                                    Text("Status")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                    Spacer()
+                                    Text("Active during recording")
+                                        .font(.caption)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.green)
+                                }
+
+                                Divider()
+                                    .background(Color.gray.opacity(0.3))
+
+                                HStack {
+                                    Text("Current G-Force")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                    Spacer()
+                                    Text(gForceMonitor.getGForceString())
+                                        .font(.caption)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.white)
+                                }
+
+                                HStack {
+                                    Text("Peak G-Force (Session)")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                    Spacer()
+                                    Text(gForceMonitor.getPeakGForceString())
+                                        .font(.caption)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.orange)
+                                }
+
+                                Button(action: { gForceMonitor.resetPeakGForce() }) {
+                                    Text("Reset Peak")
+                                        .font(.caption)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 6)
+                                        .background(Color.blue.opacity(0.2))
+                                        .foregroundColor(.blue)
+                                        .cornerRadius(6)
+                                }
+                            }
+
+                            HStack(spacing: 8) {
+                                Image(systemName: "info.circle.fill")
+                                    .foregroundColor(.blue)
+                                Text("Monitors acceleration during recording to detect impacts and aggressive driving")
+                                    .font(.caption2)
+                                    .foregroundColor(.blue)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color.blue.opacity(0.1))
+                            .cornerRadius(6)
+                        }
+                        .padding(16)
+                        .background(Color.gray.opacity(0.1))
+                        .cornerRadius(12)
+
+                        // Performance Metrics Status
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Label("Performance Metrics", systemImage: "chart.line.uptrend.xyaxis")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                                Spacer()
+                            }
+
+                            VStack(spacing: 10) {
+                                if performanceLogger.isRecording {
+                                    HStack {
+                                        Text("Recording FPS")
+                                            .font(.caption)
+                                            .foregroundColor(.gray)
+                                        Spacer()
+                                        Text(String(format: "%.1f fps", performanceLogger.recordingFPS))
+                                            .font(.caption)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.white)
+                                    }
+
+                                    HStack {
+                                        Text("Memory Usage")
+                                            .font(.caption)
+                                            .foregroundColor(.gray)
+                                        Spacer()
+                                        Text(String(format: "%.0f MB", performanceLogger.memoryUsageMB))
+                                            .font(.caption)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.white)
+                                    }
+
+                                    HStack {
+                                        Text("CPU Usage")
+                                            .font(.caption)
+                                            .foregroundColor(.gray)
+                                        Spacer()
+                                        Text(String(format: "%.1f%%", performanceLogger.cpuUsagePercent))
+                                            .font(.caption)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.white)
+                                    }
+
+                                    HStack {
+                                        Text("Storage Write Speed")
+                                            .font(.caption)
+                                            .foregroundColor(.gray)
+                                        Spacer()
+                                        Text(String(format: "%.1f MB/s", performanceLogger.storageWriteSpeedMBps))
+                                            .font(.caption)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.white)
+                                    }
+                                } else {
+                                    Text("Performance metrics displayed during recording")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                }
+                            }
+
+                            HStack(spacing: 8) {
+                                Image(systemName: "info.circle.fill")
+                                    .foregroundColor(.green)
+                                Text("Monitors app performance including frame rate, memory, CPU, and storage write speed")
+                                    .font(.caption2)
+                                    .foregroundColor(.green)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color.green.opacity(0.1))
+                            .cornerRadius(6)
+                        }
+                        .padding(16)
+                        .background(Color.gray.opacity(0.1))
+                        .cornerRadius(12)
 
                         // Permissions Status
                         PermissionStatusView()

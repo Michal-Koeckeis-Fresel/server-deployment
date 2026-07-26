@@ -8,10 +8,13 @@ struct ContentView: View {
     @StateObject private var parkingManager = ParkingModeManager.shared
     @StateObject private var autoStartManager = AutoStartRecordingManager.shared
     @StateObject private var siriManager = SiriShortcutManager.shared
+    @StateObject private var gForceMonitor = GForceMonitor.shared
+    @StateObject private var performanceLogger = PerformanceLogger.shared
     @State private var cameraSetup = false
     @State private var showSettings = false
     @State private var showFiles = false
     @State private var showPiP = false
+    @State private var showMultiCameraPreview = false
     @State private var recordingStartTime = Date()
 
     var body: some View {
@@ -34,6 +37,15 @@ struct ContentView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
 
                         VStack(spacing: 8) {
+                            NavigationLink(destination: MultiCameraPreviewView()) {
+                                Image(systemName: "square.grid.2x2")
+                                    .font(.system(size: 18))
+                                    .frame(width: 44, height: 44)
+                                    .background(Color.gray.opacity(0.3))
+                                    .foregroundColor(.white)
+                                    .cornerRadius(8)
+                            }
+
                             Button(action: { showPiP.toggle() }) {
                                 Image(systemName: "pip.fill")
                                     .font(.system(size: 18))
@@ -299,6 +311,118 @@ struct ContentView: View {
                 .padding(12)
                 .background(Color.gray.opacity(0.1))
                 .cornerRadius(8)
+
+                // G-Force Display
+                if viewModel.isRecording {
+                    VStack(spacing: 12) {
+                        HStack(spacing: 12) {
+                            Image(systemName: "waveform.circle.fill")
+                                .foregroundColor(.orange)
+                            Text("G-Force Monitoring")
+                                .font(.subheadline)
+                                .foregroundColor(.gray)
+                            Spacer()
+                        }
+
+                        VStack(spacing: 8) {
+                            HStack(spacing: 20) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Current")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                    Text(gForceMonitor.getGForceString())
+                                        .font(.headline)
+                                        .foregroundColor(.white)
+                                        .fontWeight(.semibold)
+                                }
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Peak")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                    Text(gForceMonitor.getPeakGForceString())
+                                        .font(.headline)
+                                        .foregroundColor(.orange)
+                                        .fontWeight(.semibold)
+                                }
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Average")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                    Text(gForceMonitor.getAverageGForceString())
+                                        .font(.headline)
+                                        .foregroundColor(.white)
+                                        .fontWeight(.semibold)
+                                }
+
+                                Spacer()
+                            }
+                        }
+                        .padding(10)
+                        .background(Color.orange.opacity(0.05))
+                        .cornerRadius(6)
+                    }
+                    .padding(12)
+                    .background(Color.gray.opacity(0.1))
+                    .cornerRadius(8)
+                }
+
+                // Performance Metrics Display
+                if viewModel.isRecording {
+                    VStack(spacing: 12) {
+                        HStack(spacing: 12) {
+                            Image(systemName: "chart.line.uptrend.xyaxis")
+                                .foregroundColor(.green)
+                            Text("Performance Metrics")
+                                .font(.subheadline)
+                                .foregroundColor(.gray)
+                            Spacer()
+                        }
+
+                        VStack(spacing: 8) {
+                            HStack(spacing: 20) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("FPS")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                    Text(String(format: "%.1f", performanceLogger.recordingFPS))
+                                        .font(.headline)
+                                        .foregroundColor(.white)
+                                        .fontWeight(.semibold)
+                                }
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Memory")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                    Text(String(format: "%.0f MB", performanceLogger.memoryUsageMB))
+                                        .font(.headline)
+                                        .foregroundColor(.white)
+                                        .fontWeight(.semibold)
+                                }
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("CPU")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                    Text(String(format: "%.1f%%", performanceLogger.cpuUsagePercent))
+                                        .font(.headline)
+                                        .foregroundColor(.white)
+                                        .fontWeight(.semibold)
+                                }
+
+                                Spacer()
+                            }
+                        }
+                        .padding(10)
+                        .background(Color.green.opacity(0.05))
+                        .cornerRadius(6)
+                    }
+                    .padding(12)
+                    .background(Color.gray.opacity(0.1))
+                    .cornerRadius(8)
+                }
 
                     // Impact Detection Status
                     if viewModel.isRecording {
