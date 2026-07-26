@@ -35,17 +35,47 @@ enum CameraSetupError: Error {
     case invalidSession
 }
 
+class CameraRecorderDelegate: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudioDataOutputSampleBufferDelegate {
+    var realtimeVideoWriter: RealtimeVideoWriter?
+    var watermarkGenerator: WatermarkTextGenerator?
+
+    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        if CMSampleBufferDataIsReady(sampleBuffer) {
+            if output is AVCaptureVideoDataOutput {
+                handleVideoSample(sampleBuffer)
+            } else if output is AVCaptureAudioDataOutput {
+                handleAudioSample(sampleBuffer)
+            }
+        }
+    }
+
+    private func handleVideoSample(_ sampleBuffer: CMSampleBuffer) {
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        let timestamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+        let watermarkText = watermarkGenerator?.generateFullWatermarkText() ?? ""
+        realtimeVideoWriter?.processAndWriteFrame(pixelBuffer, timestamp: timestamp, watermarkText: watermarkText)
+    }
+
+    private func handleAudioSample(_ sampleBuffer: CMSampleBuffer) {
+        realtimeVideoWriter?.writeAudioSample(sampleBuffer)
+    }
+}
+
 struct CameraRecorder {
     let position: CameraPosition
     var captureSession: AVCaptureSession?
     var videoOutput: AVCaptureMovieFileOutput?
     var videoDataOutput: AVCaptureVideoDataOutput?
+    var audioDataOutput: AVCaptureAudioDataOutput?
     var videoInput: AVCaptureDeviceInput?
+    var audioInput: AVCaptureDeviceInput?
     var realtimeVideoWriter: RealtimeVideoWriter?
     var watermarkGenerator: WatermarkTextGenerator?
+    var recorderDelegate: CameraRecorderDelegate?
     var isRecording: Bool = false
     var currentURL: URL?
     var isAvailable: Bool = false
+    var usingWatermark: Bool = false
     private let sessionQueue = DispatchQueue(label: "com.dashcam.camera.\(UUID().uuidString)", attributes: [], autoreleaseFrequency: .workItem)
 
     mutating func setupSession() -> Bool {
@@ -247,21 +277,26 @@ struct CameraRecorder {
     }
 
     mutating func startRecording(to url: URL, delegate: AVCaptureFileOutputRecordingDelegate, withWatermark watermarkGenerator: WatermarkTextGenerator? = nil) {
-        guard let videoOutput = videoOutput, captureSession?.isRunning == true else {
+        guard captureSession?.isRunning == true else {
             print("Error: Camera not ready for recording")
             return
         }
 
         sessionQueue.async {
-            if videoOutput.isRecording {
+            if let videoOutput = self.videoOutput, videoOutput.isRecording {
                 videoOutput.stopRecording()
             }
 
             self.currentURL = url
 
             if let watermarkGenerator = watermarkGenerator {
+                let recorderDelegate = CameraRecorderDelegate()
+                recorderDelegate.watermarkGenerator = watermarkGenerator
+                recorderDelegate.realtimeVideoWriter = self.realtimeVideoWriter
+                self.recorderDelegate = recorderDelegate
+
                 self.setupWatermarkedRecording(to: url, delegate: delegate, watermarkGenerator: watermarkGenerator)
-            } else {
+            } else if let videoOutput = self.videoOutput {
                 videoOutput.startRecording(to: url, recordingDelegate: delegate)
             }
 
@@ -271,6 +306,7 @@ struct CameraRecorder {
 
     private mutating func setupWatermarkedRecording(to url: URL, delegate: AVCaptureFileOutputRecordingDelegate, watermarkGenerator: WatermarkTextGenerator) {
         self.watermarkGenerator = watermarkGenerator
+        self.usingWatermark = true
 
         let writer = RealtimeVideoWriter()
         self.realtimeVideoWriter = writer
@@ -289,29 +325,63 @@ struct CameraRecorder {
 
         do {
             try writer.startRecording(to: url, videoSettings: videoSettings, audioSettings: audioSettings, sourceVideoTrack: videoInput)
+
+            sessionQueue.async {
+                self.setupDataOutputs()
+            }
+
             print("Watermarked recording started for \(position.rawValue)")
         } catch {
             print("Failed to start watermarked recording: \(error)")
         }
     }
 
-    mutating func stopRecording() {
-        guard let videoOutput = videoOutput else {
-            return
+    private mutating func setupDataOutputs() {
+        guard let session = captureSession else { return }
+
+        let videoDataOutput = AVCaptureVideoDataOutput()
+        videoDataOutput.setSampleBufferDelegate(recorderDelegate, queue: sessionQueue)
+        videoDataOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
+        videoDataOutput.alwaysDiscardsLateVideoFrames = true
+
+        if session.canAddOutput(videoDataOutput) {
+            session.addOutput(videoDataOutput)
+            self.videoDataOutput = videoDataOutput
         }
 
+        let audioDataOutput = AVCaptureAudioDataOutput()
+        audioDataOutput.setSampleBufferDelegate(recorderDelegate, queue: sessionQueue)
+
+        if session.canAddOutput(audioDataOutput) {
+            session.addOutput(audioDataOutput)
+            self.audioDataOutput = audioDataOutput
+        }
+    }
+
+    mutating func stopRecording() {
         sessionQueue.async {
-            if let realtimeWriter = self.realtimeVideoWriter {
+            if let realtimeWriter = self.realtimeVideoWriter, self.usingWatermark {
+                if let videoDataOutput = self.videoDataOutput {
+                    self.captureSession?.removeOutput(videoDataOutput)
+                    self.videoDataOutput = nil
+                }
+                if let audioDataOutput = self.audioDataOutput {
+                    self.captureSession?.removeOutput(audioDataOutput)
+                    self.audioDataOutput = nil
+                }
+
                 realtimeWriter.finishWriting { success, error in
                     if success {
-                        print("Watermarked video saved successfully")
+                        print("Watermarked video saved successfully for \(self.position.rawValue)")
                     } else if let error = error {
                         print("Error saving watermarked video: \(error)")
                     }
                 }
                 self.realtimeVideoWriter = nil
                 self.watermarkGenerator = nil
-            } else if videoOutput.isRecording {
+                self.recorderDelegate = nil
+                self.usingWatermark = false
+            } else if let videoOutput = self.videoOutput, videoOutput.isRecording {
                 videoOutput.stopRecording()
             }
             self.isRecording = false
@@ -320,13 +390,26 @@ struct CameraRecorder {
 
     func cleanup() {
         sessionQueue.async {
-            if let session = self.captureSession, session.isRunning {
-                session.stopRunning()
+            if let session = self.captureSession {
+                if session.isRunning {
+                    session.stopRunning()
+                }
+                if let videoDataOutput = self.videoDataOutput {
+                    session.removeOutput(videoDataOutput)
+                }
+                if let audioDataOutput = self.audioDataOutput {
+                    session.removeOutput(audioDataOutput)
+                }
             }
 
             self.videoInput = nil
+            self.audioInput = nil
             self.videoOutput = nil
+            self.videoDataOutput = nil
+            self.audioDataOutput = nil
             self.captureSession = nil
+            self.recorderDelegate = nil
+            self.realtimeVideoWriter = nil
         }
     }
 
