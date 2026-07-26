@@ -31,11 +31,23 @@ struct CameraRecorder {
     let position: CameraPosition
     var captureSession: AVCaptureSession?
     var videoOutput: AVCaptureMovieFileOutput?
+    var videoInput: AVCaptureDeviceInput?
     var isRecording: Bool = false
     var currentURL: URL?
+    private let sessionQueue = DispatchQueue(label: "session queue", attributes: [], autoreleaseFrequency: .workItem)
 
     mutating func setupSession() -> Bool {
         let session = AVCaptureSession()
+
+        sessionQueue.async { [self] in
+            self.configureSession(session)
+        }
+
+        self.captureSession = session
+        return true
+    }
+
+    private mutating func configureSession(_ session: AVCaptureSession) {
         session.sessionPreset = .high
 
         guard let videoDevice = AVCaptureDevice.default(
@@ -43,16 +55,15 @@ struct CameraRecorder {
             for: .video,
             position: position.position
         ) else {
-            return false
+            return
         }
 
         do {
             let videoInput = try AVCaptureDeviceInput(device: videoDevice)
+            self.videoInput = videoInput
 
             if session.canAddInput(videoInput) {
                 session.addInput(videoInput)
-            } else {
-                return false
             }
 
             let movieOutput = AVCaptureMovieFileOutput()
@@ -60,65 +71,99 @@ struct CameraRecorder {
             if session.canAddOutput(movieOutput) {
                 session.addOutput(movieOutput)
 
+                configureVideoConnection(for: movieOutput)
                 configureVideoCodec(for: movieOutput)
-            } else {
-                return false
+                configureVideoStabilization(for: movieOutput)
             }
 
-            self.captureSession = session
             self.videoOutput = movieOutput
 
-            DispatchQueue.global(qos: .userInitiated).async {
+            sessionQueue.async {
                 session.startRunning()
             }
-
-            return true
         } catch {
-            return false
+            print("Error setting up session: \(error)")
+        }
+    }
+
+    private func configureVideoConnection(for output: AVCaptureMovieFileOutput) {
+        if let videoConnection = output.connection(with: .video) {
+            if videoConnection.isVideoStabilizationSupported {
+                videoConnection.preferredVideoStabilizationMode = .auto
+            }
+
+            videoConnection.videoOrientation = .portrait
+            videoConnection.isVideoMirrored = (position == .frontWide || position == .frontTelephoto)
         }
     }
 
     private func configureVideoCodec(for output: AVCaptureMovieFileOutput) {
         let codecManager = VideoCodecManager.shared
-
-        if #available(iOS 17.0, *) {
-            for connection in output.connections {
-                if let videoConnection = connection as? AVCaptureVideoDataOutput {
-                    let settings = codecManager.getVideoSettings()
-                    videoConnection.videoSettings = settings
-                }
-            }
-        }
-
         output.setOutputSettings(codecManager.getVideoSettings(), for: output.connections.first)
     }
 
+    private func configureVideoStabilization(for output: AVCaptureMovieFileOutput) {
+        if let connection = output.connection(with: .video) {
+            if connection.isVideoStabilizationSupported {
+                connection.preferredVideoStabilizationMode = .auto
+            }
+        }
+    }
+
+    private func configureFocusAndExposure(device: AVCaptureDevice) {
+        do {
+            try device.lockForConfiguration()
+
+            if device.isFocusModeSupported(.continuousAutoFocus) {
+                device.focusMode = .continuousAutoFocus
+            }
+
+            if device.isExposureModeSupported(.continuousAutoExposure) {
+                device.exposureMode = .continuousAutoExposure
+            }
+
+            if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
+                device.whiteBalanceMode = .continuousAutoWhiteBalance
+            }
+
+            device.unlockForConfiguration()
+        } catch {
+            print("Error configuring focus/exposure: \(error)")
+        }
+    }
+
     mutating func startRecording(to url: URL, delegate: AVCaptureFileOutputRecordingDelegate) {
-        guard let videoOutput = videoOutput, captureSession?.isRunning == true else {
+        guard let videoOutput = videoOutput else {
             return
         }
 
-        if videoOutput.isRecording {
-            videoOutput.stopRecording()
-        }
+        sessionQueue.async {
+            if videoOutput.isRecording {
+                videoOutput.stopRecording()
+            }
 
-        currentURL = url
-        videoOutput.startRecording(to: url, recordingDelegate: delegate)
-        isRecording = true
+            self.currentURL = url
+            videoOutput.startRecording(to: url, recordingDelegate: delegate)
+            self.isRecording = true
+        }
     }
 
     mutating func stopRecording() {
-        guard let videoOutput = videoOutput, videoOutput.isRecording else {
+        guard let videoOutput = videoOutput else {
             return
         }
 
-        videoOutput.stopRecording()
-        isRecording = false
+        sessionQueue.async {
+            if videoOutput.isRecording {
+                videoOutput.stopRecording()
+                self.isRecording = false
+            }
+        }
     }
 
     func cleanup() {
-        if let session = captureSession, session.isRunning {
-            DispatchQueue.global(qos: .userInitiated).async {
+        sessionQueue.async {
+            if let session = self.captureSession, session.isRunning {
                 session.stopRunning()
             }
         }

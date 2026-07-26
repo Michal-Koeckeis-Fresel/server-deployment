@@ -160,11 +160,36 @@ With 10 GB storage and 5-minute chunks:
 - Chunk number synchronized
 - Easy to identify related files
 
+### Best Practices (AVCam-Based)
+
+The implementation follows Apple's official **AVCam** camera app best practices:
+
+**Session Management:**
+- Dedicated session queue for thread-safe operations
+- Proper queue-based configuration (no main thread blocking)
+- Atomic input/output changes
+- Graceful error handling
+
+**Video Configuration:**
+- Automatic video stabilization (.auto mode)
+- Continuous auto-focus when available
+- Continuous auto-exposure for varying lighting
+- Continuous auto white-balance adjustment
+- Proper video orientation handling
+- Mirror correction for front cameras
+
+**Recording Stability:**
+- Video stabilization on all supported devices
+- Proper connection configuration
+- Codec optimization (HEVC/H.264)
+- Device orientation synchronization
+- Focus/exposure locking during recording
+
 ### Limitations
 
 - ⚠️ Increases storage usage (dual cameras = ~2x single camera)
 - ⚠️ Not all iPhone models have telephoto
-- ⚠️ Battery drain greater with dual cameras (still lower than rear camera)
+- ⚠️ Battery drain greater with dual cameras
 - ⚠️ Audio only from primary microphone
 - ⚠️ Some older devices may have thermal issues with sustained recording
 
@@ -850,6 +875,35 @@ Detects hard, sustained braking (emergency stops):
 - **Key:** Last path component (filename)
 - **Scope:** Per-app only (not accessible to other apps)
 
+### Camera Recording (AVCam-Based)
+
+**Session Management:**
+- Dedicated `sessionQueue` for all session operations
+- Thread-safe configuration via queue dispatch
+- Proper lifecycle management (start/stop/cleanup)
+- No main thread blocking during setup
+
+**Video Configuration:**
+- Video stabilization (.auto) when available
+- Continuous auto-focus for subject tracking
+- Continuous auto-exposure for lighting changes
+- Continuous white-balance adjustment
+- Portrait orientation with proper mirroring
+- Video connection validation
+
+**Focus & Exposure:**
+- Continuous auto-focus mode
+- Continuous auto-exposure mode  
+- Continuous auto white-balance
+- Configuration locked during recording
+- Graceful fallback if modes unsupported
+
+**Video Stabilization:**
+- Automatic stabilization on all cameras
+- Improves video quality during vehicle movement
+- Reduced jitter and vibration
+- Works with both HEVC and H.264
+
 ### Impact Detection
 - **Sensor:** Device accelerometer (CMMotionManager)
 - **Sample Rate:** 20 Hz (0.05s intervals)
@@ -933,6 +987,14 @@ Defines:
 - File naming conventions per camera
 - `CameraRecorder` struct for individual camera management
 
+**AVCam-Based Implementation:**
+- Dedicated session queue for thread-safe operations
+- Queue-based session configuration (no main thread blocking)
+- Atomic input/output management
+- Proper focus/exposure/white-balance auto configuration
+- Video stabilization support
+- Video connection configuration
+
 **Camera Positions:**
 - Front Wide: Broad road view ahead (all devices)
 - Front Telephoto: Distant detail capture ahead (Pro models +)
@@ -942,6 +1004,14 @@ Defines:
 - No interior/cabin recording
 - Driver privacy protected
 - Road and environment documentation only
+
+**Features:**
+- Automatic video stabilization
+- Continuous auto-focus
+- Continuous auto-exposure
+- Continuous auto white-balance
+- Proper orientation handling
+- Video mirroring for front cameras
 
 **File Prefix Examples:**
 - `front_wide_chunk_0001.mov`
