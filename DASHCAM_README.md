@@ -23,7 +23,10 @@ A SwiftUI-based dashcam application for iOS that records video continuously, eve
 ✅ **Camera Status** - Real-time display of all camera recording status  
 ✅ **Synchronized Chunks** - All cameras chunk at the same time  
 ✅ **Simple Controls** - One-tap start/stop recording for all cameras  
-✅ **File Management** - Browse, protect, and delete recordings in-app  
+✅ **File Management** - Browse, protect, and delete recordings in-app
+✅ **Battery Monitoring** - Real-time battery level with alerts below 20%
+✅ **Low Battery Alerts** - Audio beep warning when battery low and not charging
+✅ **Critical Battery Protection** - Warning when battery below 10%  
 
 ## Requirements
 
@@ -1014,6 +1017,144 @@ Automatic storage management keeps your device from filling up while protecting 
 - **Main Screen:** Real-time storage usage with progress bar
 - **Settings:** Detailed breakdown (used / available)
 - **Files View:** Individual file sizes for each recording
+
+---
+
+## Battery Monitoring
+
+Real-time battery level monitoring with intelligent alerts to keep you informed during recording.
+
+### Battery Status Display
+
+**Location:** Settings screen (top) and Main screen (warning banner)
+
+Shows current battery status with visual indicators:
+- 🟢 **Good** - Above 50% battery
+- 🟡 **Moderate** - 20-50% battery
+- 🟠 **Low** - Below 20% battery (alert starts)
+- 🔴 **Critical** - Below 10% battery (urgent warning)
+- 🔌 **Charging** - Device plugged in
+
+### Battery Alerts
+
+**Low Battery Alert (20%)**
+- 🔊 Audio beep alert plays
+- Orange warning banner appears on main screen
+- Shows "Low Battery - Consider Charging"
+- Only triggers when NOT charging
+- Message appears on Settings screen
+
+**Critical Battery Alert (10%)**
+- 🔴 Red warning banner appears
+- "Critical Battery - Please charge immediately!"
+- Indicates urgent charging needed
+- Recording can continue but should stop soon
+
+### Alert Features
+
+**Smart Alerting:**
+- Only alerts if NOT plugged in
+- Prevents duplicate alerts (debounced by 5% intervals)
+- Alerts dismissed after 5 seconds
+- Automatic recovery when charging begins
+
+**Audio Beep:**
+- Two system beeps when threshold reached
+- Works even with volume muted
+- Fallback to system sound if custom unavailable
+- Plays through speaker even in quiet mode
+
+**Visual Indicators:**
+- Real-time battery percentage display
+- Battery icon changes with charge level
+- Color coding: Green → Yellow → Orange → Red
+- Charging indicator when plugged in
+
+### Battery Monitoring Location
+
+**Main Screen:**
+- Orange/red warning banners when low
+- Easy to see while recording
+- Quick action: Go to Settings to view battery details
+
+**Settings Screen (Top):**
+- Dedicated battery status section
+- Current percentage and remaining
+- Charging status
+- Full status breakdown:
+  - Battery Level: X%
+  - State: Charging/Full/Unplugged
+  - Charging: Yes/No
+
+**PiP Floating Window:**
+- Battery icon in header
+- Shows battery percentage
+- Color-coded status (green/orange)
+- Always visible while recording with navigation
+
+### Battery Management Tips
+
+**Best Practices:**
+
+1. **Check Battery Before Recording**
+   - Open Settings to see battery status
+   - Plan recording duration based on charge
+   - Full charge = 8+ hours typical recording
+
+2. **Monitor During Recording**
+   - Watch for low battery warnings
+   - Use PiP mode to keep battery visible
+   - Charge if below 50% for long trips
+
+3. **While Recording**
+   - App continues recording below 20%
+   - Audio alert warns you to charge
+   - Critical warning at 10%
+   - Graceful shutdown prevents data loss
+
+4. **Power Saving**
+   - Disable unnecessary features
+   - Reduce video quality if needed
+   - Turn off PiP to save battery
+   - Keep device in cooler environment
+
+5. **Long Recordings**
+   - Use car charger for extended trips
+   - Monitor battery during drive
+   - Plan breaks to charge
+   - Reduce screen brightness
+
+### Battery Usage During Recording
+
+**Typical Battery Drain:**
+- Average: ~5-10% per hour of recording
+- High Quality mode: ~10-15% per hour
+- Dual front cameras: Higher drain
+- PiP mode active: +2-3% per hour
+- With navigation app: +5-10% per hour
+
+**Factors Affecting Battery:**
+- Video quality setting (Standard/Enhanced/High)
+- Dual camera recording (2x drain)
+- Screen brightness
+- Ambient temperature
+- App running in foreground vs background
+
+### What Happens at Critical Battery
+
+At 10% battery (critical threshold):
+1. Red warning appears on screen
+2. Urgent charging message shown
+3. Recording continues but shouldn't persist
+4. System may force stop apps if battery dies
+5. Data is safe (chunks already saved to storage)
+
+**Important:** App does NOT auto-stop at critical battery because:
+- Users may be in emergency driving situation
+- Recording should continue for evidence
+- Users can manually stop recording
+- Data is continuously saved to files
+- Device gracefully handles shutdown
 
 ---
 

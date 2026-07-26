@@ -3,6 +3,7 @@ import AVFoundation
 
 struct PiPCameraView: View {
     @EnvironmentObject var viewModel: CameraDashcamViewModel
+    @StateObject private var batteryManager = BatteryMonitorManager.shared
     @State private var position = CGPoint(x: 100, y: 100)
     @State private var isDragging = false
     @State private var dragOffset = CGSize.zero
@@ -18,10 +19,20 @@ struct PiPCameraView: View {
                         .foregroundColor(.white)
                 }
 
-                Text("Dashcam")
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.white)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Dashcam")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                    HStack(spacing: 4) {
+                        Image(systemName: batteryManager.batteryLevel > 0.2 ? "battery.50" : "battery.25")
+                            .font(.caption2)
+                            .foregroundColor(batteryManager.batteryLevel > 0.2 ? .green : .orange)
+                        Text(batteryManager.batteryPercentage)
+                            .font(.caption2)
+                            .foregroundColor(batteryManager.batteryLevel > 0.2 ? .green : .orange)
+                    }
+                }
 
                 Spacer()
 

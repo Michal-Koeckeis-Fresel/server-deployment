@@ -3,6 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject var viewModel: CameraDashcamViewModel
     @StateObject private var permissionManager = PermissionStatusManager()
+    @StateObject private var batteryManager = BatteryMonitorManager.shared
     @State private var cameraSetup = false
     @State private var showSettings = false
     @State private var showFiles = false
@@ -58,6 +59,49 @@ struct ContentView: View {
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 16)
+
+                // Battery Warning
+                if batteryManager.shouldShowLowBatteryWarning {
+                    HStack(spacing: 12) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.orange)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Low Battery")
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.orange)
+                            Text("\(batteryManager.batteryPercentage) remaining - Consider charging")
+                                .font(.caption2)
+                                .foregroundColor(.orange)
+                        }
+                        Spacer()
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(Color.orange.opacity(0.1))
+                    .cornerRadius(8)
+                }
+
+                if batteryManager.shouldStopRecording {
+                    HStack(spacing: 12) {
+                        Image(systemName: "exclamationmark.circle.fill")
+                            .foregroundColor(.red)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Critical Battery")
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.red)
+                            Text("\(batteryManager.batteryPercentage) - Please charge immediately!")
+                                .font(.caption2)
+                                .foregroundColor(.red)
+                        }
+                        Spacer()
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(Color.red.opacity(0.1))
+                    .cornerRadius(8)
+                }
 
                 // Permission Warning
                 if !permissionManager.allPermissionsGranted() {
