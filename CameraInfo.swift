@@ -74,9 +74,12 @@ struct CameraRecorder {
                 configureVideoConnection(for: movieOutput)
                 configureVideoCodec(for: movieOutput)
                 configureVideoStabilization(for: movieOutput)
+                configureHDRVideo(for: movieOutput, device: videoDevice)
             }
 
             self.videoOutput = movieOutput
+
+            configureFocusAndExposure(device: videoDevice)
 
             sessionQueue.async {
                 session.startRunning()
@@ -105,7 +108,33 @@ struct CameraRecorder {
     private func configureVideoStabilization(for output: AVCaptureMovieFileOutput) {
         if let connection = output.connection(with: .video) {
             if connection.isVideoStabilizationSupported {
-                connection.preferredVideoStabilizationMode = .auto
+                connection.preferredVideoStabilizationMode = .cinematic
+            }
+
+            if #available(iOS 17.0, *) {
+                if connection.isCinematicVideoStabilizationSupported {
+                    connection.preferredVideoStabilizationMode = .cinematic
+                }
+            }
+
+            if connection.activeVideoStabilizationModes.contains(.optical) {
+                connection.preferredVideoStabilizationMode = .cinematic
+            }
+        }
+    }
+
+    private func configureHDRVideo(for output: AVCaptureMovieFileOutput, device: AVCaptureDevice) {
+        if #available(iOS 17.0, *) {
+            if device.isHDRVideoSupported {
+                do {
+                    try device.lockForConfiguration()
+                    if device.isVideoHDREnabled {
+                        device.isVideoHDREnabled = true
+                    }
+                    device.unlockForConfiguration()
+                } catch {
+                    print("Error enabling HDR: \(error)")
+                }
             }
         }
     }
@@ -124,6 +153,21 @@ struct CameraRecorder {
 
             if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
                 device.whiteBalanceMode = .continuousAutoWhiteBalance
+            }
+
+            if #available(iOS 16.0, *) {
+                if device.isAutoFocusSystemSupported(.autofocusSystemSensorFusion) {
+                    device.focusMode = .continuousAutoFocus
+                }
+            }
+
+            if device.isExposureModeSupported(.continuousAutoExposure) {
+                device.exposureMode = .continuousAutoExposure
+                device.automaticallyEnablesLowLightBoostWhenAvailable = true
+            }
+
+            if device.isLowLightBoostSupported {
+                device.automaticallyEnablesLowLightBoostWhenAvailable = true
             }
 
             device.unlockForConfiguration()

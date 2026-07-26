@@ -11,7 +11,11 @@ A SwiftUI-based dashcam application for iOS that records video continuously, eve
 ✅ **Impact Detection** - Detects collisions and emergency braking via accelerometer and auto-protects all files  
 ✅ **Smart Storage** - Auto-deletes oldest unprotected videos when storage limit is reached  
 ✅ **File Protection** - Lock important videos manually or automatically on crash/braking  
-✅ **Video Codec Selection** - Choose HEVC (40% smaller) or H.264 for compatibility  
+✅ **Video Quality Modes** - Standard, Enhanced (HDR), or High Quality settings
+✅ **Video Codec Selection** - Choose HEVC (40% smaller) or H.264 for compatibility
+✅ **Cinematic Stabilization** - Advanced optical + software stabilization for smoother video
+✅ **HDR Video** - Enhanced dynamic range for better detail in varied lighting
+✅ **Low-Light Boost** - Automatic enhancement for night and low-light recording  
 ✅ **Storage Management** - Set max storage in GB (1-100 GB, configurable)  
 ✅ **Persistent Storage** - iCloud Drive option preserves files even if app is uninstalled  
 ✅ **High-Quality Video** - Records at device camera quality from all cameras  
@@ -679,6 +683,90 @@ iCloud Drive
 - Upgrade iCloud plan
 - Delete old files
 - Disable iCloud Photos if not needed
+
+---
+
+## Video Quality Settings
+
+Control advanced recording features for optimal dashcam footage quality.
+
+### Quality Modes
+
+The app offers three quality profiles:
+
+#### 🎥 Standard Quality
+- **Best for:** Limited storage, basic needs
+- **Features:** Basic stabilization, standard codecs
+- **Stabilization:** Auto mode
+- **Low-Light:** Auto-enabled when needed
+- **HDR:** Disabled
+- **File Size:** Baseline (100%)
+- **Use Case:** Everyday recording, maximum storage efficiency
+
+#### 🎬 Enhanced Quality (Recommended)
+- **Best for:** Most dashcam users
+- **Features:** HDR video + cinematic stabilization
+- **Stabilization:** Cinematic mode (advanced optical + software)
+- **Low-Light:** Automatic boost in dark conditions
+- **HDR:** Enabled for better dynamic range
+- **File Size:** ~15% larger than standard
+- **Use Case:** Balanced quality and storage, excellent low-light performance
+
+#### 📹 High Quality (Professional)
+- **Best for:** Evidence documentation, legal protection
+- **Features:** Maximum clarity, optimal stabilization
+- **Stabilization:** Best cinematic + optical modes combined
+- **Low-Light:** Maximum sensitivity boost
+- **HDR:** Full HDR video recording
+- **File Size:** ~25% larger than standard
+- **Use Case:** Critical incidents, accident documentation
+
+### Advanced Features
+
+**Cinematic Stabilization**
+- Advanced video stabilization beyond standard modes
+- Combines optical and software stabilization
+- Reduces jitter and vibration from road movement
+- Better than traditional stabilization for moving vehicles
+- Works at any speed (parking, highway driving)
+
+**HDR Video (High Dynamic Range)**
+- Captures more detail in bright and dark areas simultaneously
+- Better visibility of road details and distant traffic
+- Improved color accuracy in varied lighting
+- Helps with license plate visibility
+- Especially useful for:
+  - Sunny days (bright sky + dark road)
+  - Shadowy areas
+  - Night driving with street lights
+
+**Low-Light Boost**
+- Automatic sensitivity enhancement in dark conditions
+- Better night driving footage
+- Clearer details in tunnels and underpasses
+- Toggle on/off in Settings
+- Minimal quality loss when enabled
+
+### Setting Video Quality
+
+1. Open **Settings** (gear icon)
+2. Scroll to **Video Quality** section
+3. Select your preferred mode:
+   - Standard (compact files)
+   - Enhanced (recommended)
+   - High Quality (maximum clarity)
+4. Toggle **Low Light Boost** (recommended: ON)
+5. Changes take effect on next recording
+
+### Storage Impact Comparison
+
+**Dual Front Cameras (5-minute chunks with HEVC):**
+
+| Mode | Per Chunk | 10 GB | 50 GB |
+|------|-----------|-------|-------|
+| Standard | ~3.5-4 GB | 2.5 sets | 12 sets |
+| Enhanced | ~4-4.6 GB | 2 sets | 10 sets |
+| High Quality | ~4.4-5.5 GB | 2 sets | 9 sets |
 
 ---
 

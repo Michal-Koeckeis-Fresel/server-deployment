@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject var viewModel: CameraDashcamViewModel
     @Environment(\.dismiss) var dismiss
+    @StateObject private var qualityManager = VideoQualityManager.shared
     @State private var selectedStorageLocation = StorageLocationManager.shared.selectedLocation
     @State private var selectedCodec = VideoCodecManager.shared.selectedCodec
     @State private var showMigrationAlert = false
@@ -158,6 +159,74 @@ struct SettingsView: View {
                                         .foregroundColor(.gray)
                                 }
                             }
+                        }
+                        .padding(16)
+                        .background(Color.gray.opacity(0.1))
+                        .cornerRadius(12)
+
+                        // Video Quality Selection
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Label("Video Quality", systemImage: "sparkles")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                                Spacer()
+                                Text(qualityManager.selectedQualityMode.displayName)
+                                    .font(.headline)
+                                    .foregroundColor(.blue)
+                            }
+
+                            VStack(spacing: 10) {
+                                ForEach(VideoQualityMode.allCases, id: \.self) { mode in
+                                    Button(action: {
+                                        qualityManager.selectedQualityMode = mode
+                                    }) {
+                                        HStack(spacing: 12) {
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                Text(mode.displayName)
+                                                    .font(.subheadline)
+                                                    .foregroundColor(.white)
+                                                Text(mode.description)
+                                                    .font(.caption)
+                                                    .foregroundColor(.gray)
+                                            }
+                                            Spacer()
+                                            if qualityManager.selectedQualityMode == mode {
+                                                Image(systemName: "checkmark.circle.fill")
+                                                    .foregroundColor(.blue)
+                                            }
+                                        }
+                                        .padding(12)
+                                        .background(qualityManager.selectedQualityMode == mode ? Color.blue.opacity(0.1) : Color.gray.opacity(0.05))
+                                        .cornerRadius(8)
+                                    }
+                                    .foregroundColor(.primary)
+                                }
+                            }
+
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "info.circle.fill")
+                                        .foregroundColor(.blue)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Storage impact: \(String(format: "%.0f%%", qualityManager.storageMultiplier * 100))")
+                                            .font(.caption)
+                                            .foregroundColor(.blue)
+                                        Text(qualityManager.qualityDescription)
+                                            .font(.caption2)
+                                            .foregroundColor(.blue)
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color.blue.opacity(0.1))
+                            .cornerRadius(6)
+
+                            Toggle("Low Light Boost", isOn: $qualityManager.lowLightBoostEnabled)
+                                .font(.caption)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 4)
                         }
                         .padding(16)
                         .background(Color.gray.opacity(0.1))
