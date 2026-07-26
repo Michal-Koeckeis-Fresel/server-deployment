@@ -230,6 +230,9 @@ struct SettingsView: View {
                         // Permissions Status
                         PermissionStatusView()
 
+                        // Audio & Watch Integration
+                        AudioAndWatchView()
+
                         Divider()
                             .background(Color.gray.opacity(0.3))
 

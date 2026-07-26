@@ -10,6 +10,8 @@ struct ContentView: View {
     @StateObject private var siriManager = SiriShortcutManager.shared
     @StateObject private var gForceMonitor = GForceMonitor.shared
     @StateObject private var performanceLogger = PerformanceLogger.shared
+    @StateObject private var audioEventDetector = AudioEventDetector.shared
+    @State private var watchConnectivityManager: WatchConnectivityManager? = nil
     @State private var cameraSetup = false
     @State private var showSettings = false
     @State private var showFiles = false
@@ -86,19 +88,44 @@ struct ContentView: View {
                     .padding(.horizontal, 20)
                     .padding(.top, 16)
 
-                // Siri Status Indicator
-                HStack(spacing: 8) {
-                    Image(systemName: "mic.circle.fill")
-                        .foregroundColor(.blue)
-                    Text("Siri commands enabled")
-                        .font(.caption2)
-                        .foregroundColor(.blue)
+                // Status Indicators Row
+                HStack(spacing: 12) {
+                    // Siri Status
+                    HStack(spacing: 6) {
+                        Image(systemName: "mic.circle.fill")
+                            .foregroundColor(.blue)
+                            .font(.caption)
+                        Text("Siri")
+                            .font(.caption2)
+                            .foregroundColor(.blue)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.blue.opacity(0.1))
+                    .cornerRadius(4)
+
+                    // Watch Status (if available)
+                    if #available(iOS 14.0, *) {
+                        if let manager = watchConnectivityManager {
+                            HStack(spacing: 6) {
+                                Image(systemName: manager.isWatchReachable ? "applewatch.fill" : "applewatch")
+                                    .foregroundColor(manager.isWatchReachable ? .green : .gray)
+                                    .font(.caption)
+                                Text("Watch")
+                                    .font(.caption2)
+                                    .foregroundColor(manager.isWatchReachable ? .green : .gray)
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(manager.isWatchReachable ? Color.green.opacity(0.1) : Color.gray.opacity(0.1))
+                            .cornerRadius(4)
+                        }
+                    }
+
                     Spacer()
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .background(Color.blue.opacity(0.05))
-                .cornerRadius(6)
 
                 // Low Power Mode Warning
                 let powerModeMonitor = LowPowerModeMonitor.shared
@@ -320,6 +347,72 @@ struct ContentView: View {
                 .padding(12)
                 .background(Color.gray.opacity(0.1))
                 .cornerRadius(8)
+
+                // Audio Event Monitoring
+                if viewModel.isRecording {
+                    VStack(spacing: 12) {
+                        HStack(spacing: 12) {
+                            Image(systemName: audioEventDetector.audioEventDetected ? "speaker.wave.3.fill" : "speaker.fill")
+                                .foregroundColor(audioEventDetector.audioEventDetected ? .red : .blue)
+                            Text("Audio Event Monitoring")
+                                .font(.subheadline)
+                                .foregroundColor(.gray)
+                            Spacer()
+                            if audioEventDetector.audioEventDetected {
+                                Text(audioEventDetector.lastAudioEventType.rawValue)
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.red)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Color.red.opacity(0.2))
+                                    .cornerRadius(4)
+                            }
+                        }
+
+                        VStack(spacing: 8) {
+                            HStack(spacing: 20) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Current Level")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                    Text(audioEventDetector.getFormattedAudioLevel())
+                                        .font(.headline)
+                                        .foregroundColor(.white)
+                                        .fontWeight(.semibold)
+                                }
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Peak Level")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                    Text(audioEventDetector.getPeakAudioLevelString())
+                                        .font(.headline)
+                                        .foregroundColor(.blue)
+                                        .fontWeight(.semibold)
+                                }
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Events")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                    Text("\(audioEventDetector.getAudioEventHistory().count)")
+                                        .font(.headline)
+                                        .foregroundColor(.white)
+                                        .fontWeight(.semibold)
+                                }
+
+                                Spacer()
+                            }
+                        }
+                        .padding(10)
+                        .background(Color.blue.opacity(0.05))
+                        .cornerRadius(6)
+                    }
+                    .padding(12)
+                    .background(Color.gray.opacity(0.1))
+                    .cornerRadius(8)
+                }
 
                 // G-Force Display
                 if viewModel.isRecording {
@@ -679,6 +772,12 @@ struct ContentView: View {
             }
 
             siriManager.registerSiriVoiceShortcuts()
+
+            if #available(iOS 14.0, *) {
+                if watchConnectivityManager == nil {
+                    watchConnectivityManager = WatchConnectivityManager.shared
+                }
+            }
         }
         .onDisappear {
             parkingManager.stopParkingModeMonitoring()

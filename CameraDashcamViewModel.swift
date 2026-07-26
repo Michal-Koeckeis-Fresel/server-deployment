@@ -45,6 +45,9 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
     private let autoStartManager = AutoStartRecordingManager.shared
     private let gForceMonitor = GForceMonitor.shared
     private let performanceLogger = PerformanceLogger.shared
+    private let audioEventDetector = AudioEventDetector.shared
+    @available(iOS 14.0, *)
+    private let watchConnectivityManager = WatchConnectivityManager.shared
 
     @Published var crashDetected = false
     @Published var emergencyBrakeDetected = false
@@ -217,10 +220,16 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         fpsCounter.start()
         gForceMonitor.startMonitoring()
         performanceLogger.startRecording()
+        audioEventDetector.startMonitoring()
         locationManager.startLocationUpdates()
         startTimerUpdate()
         setupChunkTimer()
         setupCrashDetection()
+
+        if #available(iOS 14.0, *) {
+            watchConnectivityManager.sendRecordingStatusAlert(isRecording: true)
+        }
+
         isRecording = true
         errorMessage = nil
     }
@@ -237,7 +246,12 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         fpsCounter.printFPSReport()
         gForceMonitor.stopMonitoring()
         performanceLogger.stopRecording()
+        audioEventDetector.stopMonitoring()
         locationManager.stopLocationUpdates()
+
+        if #available(iOS 14.0, *) {
+            watchConnectivityManager.sendRecordingStatusAlert(isRecording: false)
+        }
         displayLink?.invalidate()
         displayLink = nil
         chunkTimer?.invalidate()
@@ -396,9 +410,15 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         case .collision:
             crashDetected = true
             errorMessage = "⚠️ Crash Detected! Recordings protected."
+            if #available(iOS 14.0, *) {
+                watchConnectivityManager.sendCrashAlert(type: "Collision")
+            }
         case .emergencyBrake:
             emergencyBrakeDetected = true
             errorMessage = "🛑 Emergency Brake Detected! Recordings protected."
+            if #available(iOS 14.0, *) {
+                watchConnectivityManager.sendEmergencyBrakeAlert()
+            }
         }
 
         showCrashAlert = true
