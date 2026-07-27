@@ -263,7 +263,7 @@ struct PerformanceDashboardView: View {
 
                                 InfoRow(
                                     label: "Active Cameras",
-                                    value: "\(viewModel.cameras.count) cameras"
+                                    value: "\(viewModel.cameraStatus.count) cameras"
                                 )
                             }
                         }

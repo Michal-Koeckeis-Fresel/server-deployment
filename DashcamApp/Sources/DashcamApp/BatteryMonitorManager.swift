@@ -1,5 +1,6 @@
 import UIKit
 import AVFoundation
+import AudioToolbox
 
 enum BatteryStateDetail: String {
     case unknown = "Unknown"

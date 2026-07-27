@@ -655,7 +655,7 @@ struct ContentView: View {
                     if !viewModel.isRecording {
                         Button(action: {
                             if !cameraSetup {
-                                viewModel.setupCamera()
+                                viewModel.setupCameras()
                                 cameraSetup = true
                             }
                             viewModel.startRecording()
@@ -746,7 +746,7 @@ struct ContentView: View {
                         locationManager: locationManager,
                         timestamp: recordingStartTime
                     )
-                    .transition(.fadeIn)
+                    .transition(.opacity)
                 }
             }
         }
@@ -800,9 +800,7 @@ struct ContentView: View {
         }
         .onChange(of: parkingManager.parkingMotionDetected) { motionDetected in
             if motionDetected && parkingManager.isParked {
-                for (_, url) in viewModel.chunkURLs {
-                    viewModel.fileProtectionManager.setProtection(true, for: url)
-                }
+                viewModel.protectCurrentChunk()
                 viewModel.errorMessage = "🚨 Motion detected while parked - recordings protected"
                 DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
                     viewModel.errorMessage = nil
