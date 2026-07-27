@@ -43,6 +43,11 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
             UserDefaults.standard.set(Int(preferredRecordingFPS), forKey: "preferredRecordingFPS")
         }
     }
+    @Published var recordFrontCamera: Bool = UserDefaults.standard.bool(forKey: "recordFrontCamera") {
+        didSet {
+            UserDefaults.standard.set(recordFrontCamera, forKey: "recordFrontCamera")
+        }
+    }
 
     @Published var cameraStatus: [CameraPosition: String] = [:]
 
@@ -147,8 +152,14 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         let capabilityChecker = CameraCapabilityChecker.shared
         capabilityChecker.printCapabilitiesReport()
 
-        print("[ViewModel] Initializing cameras...")
-        for position in CameraPosition.allCases {
+        print("[ViewModel] Initializing cameras... (Front camera: \(recordFrontCamera ? "enabled" : "disabled"))")
+
+        var camerasToInit = CameraPosition.allCases
+        if !recordFrontCamera {
+            camerasToInit = camerasToInit.filter { $0 != .frontWide }
+        }
+
+        for position in camerasToInit {
             print("[ViewModel] Checking capabilities for \(position.rawValue)")
             let capabilities = capabilityChecker.checkCapabilities(for: position)
 

@@ -24,9 +24,96 @@ struct ContentView: View {
             ZStack {
                 Color.black.ignoresSafeArea()
 
-                VStack(spacing: 24) {
-                    // Header with buttons
-                    HStack(spacing: 12) {
+                VStack(spacing: 0) {
+                    // Control Buttons - Moved to top
+                    VStack(spacing: 12) {
+                        if !viewModel.isRecording {
+                            Button(action: {
+                                if !cameraSetup {
+                                    viewModel.setupCameras()
+                                    cameraSetup = true
+                                }
+                                viewModel.startRecording()
+                            }) {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "record.circle.fill")
+                                        .font(.system(size: 24))
+
+                                    Text("Start Recording")
+                                        .font(.headline)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                                .foregroundColor(.white)
+                                .background(Color.red)
+                                .cornerRadius(12)
+                            }
+                        } else {
+                            VStack(spacing: 10) {
+                                Button(action: {
+                                    viewModel.stopRecording()
+                                }) {
+                                    HStack(spacing: 12) {
+                                        Image(systemName: "stop.circle.fill")
+                                            .font(.system(size: 24))
+
+                                        Text("Stop Recording")
+                                            .font(.headline)
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 16)
+                                    .foregroundColor(.white)
+                                    .background(Color.orange)
+                                    .cornerRadius(12)
+                                }
+
+                                Button(action: {
+                                    viewModel.protectCurrentChunk()
+                                }) {
+                                    HStack(spacing: 12) {
+                                        Image(systemName: "lock.circle.fill")
+                                            .font(.system(size: 24))
+
+                                        Text("Protect Recording")
+                                            .font(.headline)
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 16)
+                                    .foregroundColor(.white)
+                                    .background(Color.blue)
+                                    .cornerRadius(12)
+                                }
+                            }
+                        }
+
+                        // Error Display
+                        if let error = viewModel.errorMessage {
+                            HStack(spacing: 8) {
+                                Image(systemName: "exclamationmark.circle.fill")
+                                    .foregroundColor(.red)
+
+                                Text(error)
+                                    .font(.caption)
+                                    .foregroundColor(.red)
+
+                                Spacer()
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(Color.red.opacity(0.1))
+                            .cornerRadius(8)
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 16)
+                    .background(Color.gray.opacity(0.05))
+                    .borderBottom(Color.gray.opacity(0.2))
+
+                    // Scrollable Content
+                    ScrollView {
+                        VStack(spacing: 24) {
+                            // Header with buttons
+                            HStack(spacing: 12) {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Dashcam")
                                 .font(.system(size: 32, weight: .bold))
@@ -647,89 +734,12 @@ struct ContentView: View {
                     }
                 }
 
-                Spacer()
-
-                // Control Buttons
-                VStack(spacing: 12) {
-                    if !viewModel.isRecording {
-                        Button(action: {
-                            if !cameraSetup {
-                                viewModel.setupCameras()
-                                cameraSetup = true
-                            }
-                            viewModel.startRecording()
-                        }) {
-                            HStack(spacing: 12) {
-                                Image(systemName: "record.circle.fill")
-                                    .font(.system(size: 24))
-
-                                Text("Start Recording")
-                                    .font(.headline)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .foregroundColor(.white)
-                            .background(Color.red)
-                            .cornerRadius(12)
+                        Spacer()
                         }
-                    } else {
-                        VStack(spacing: 10) {
-                            Button(action: {
-                                viewModel.stopRecording()
-                            }) {
-                                HStack(spacing: 12) {
-                                    Image(systemName: "stop.circle.fill")
-                                        .font(.system(size: 24))
-
-                                    Text("Stop Recording")
-                                        .font(.headline)
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 16)
-                                .foregroundColor(.white)
-                                .background(Color.orange)
-                                .cornerRadius(12)
-                            }
-
-                            Button(action: {
-                                viewModel.protectCurrentChunk()
-                            }) {
-                                HStack(spacing: 12) {
-                                    Image(systemName: "lock.circle.fill")
-                                        .font(.system(size: 24))
-
-                                    Text("Protect Recording")
-                                        .font(.headline)
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 16)
-                                .foregroundColor(.white)
-                                .background(Color.blue)
-                                .cornerRadius(12)
-                            }
-                        }
-                    }
-
-                    // Error Display
-                    if let error = viewModel.errorMessage {
-                        HStack(spacing: 8) {
-                            Image(systemName: "exclamationmark.circle.fill")
-                                .foregroundColor(.red)
-
-                            Text(error)
-                                .font(.caption)
-                                .foregroundColor(.red)
-
-                            Spacer()
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 10)
-                        .background(Color.red.opacity(0.1))
-                        .cornerRadius(8)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 12)
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 32)
 
                 if showPiP {
                     PiPCameraView()

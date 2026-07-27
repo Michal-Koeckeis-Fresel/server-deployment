@@ -425,6 +425,47 @@ struct SettingsView: View {
                         .background(Color.gray.opacity(0.1))
                         .cornerRadius(12)
 
+                        // Front Camera Recording
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Label("Front Camera Recording", systemImage: "camera.front")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                                Spacer()
+                                Toggle("", isOn: $viewModel.recordFrontCamera)
+                                    .labelsHidden()
+                            }
+
+                            VStack(spacing: 8) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "info.circle.fill")
+                                        .foregroundColor(.blue)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Dual Recording")
+                                            .font(.caption2)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.blue)
+                                        if viewModel.recordFrontCamera {
+                                            Text("Recording from Back Wide, Back Telephoto, and Front Camera")
+                                                .font(.caption2)
+                                                .foregroundColor(.blue)
+                                        } else {
+                                            Text("Recording from Back Wide and Back Telephoto only")
+                                                .font(.caption2)
+                                                .foregroundColor(.blue)
+                                        }
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color.blue.opacity(0.1))
+                            .cornerRadius(6)
+                        }
+                        .padding(16)
+                        .background(Color.gray.opacity(0.1))
+                        .cornerRadius(12)
+
                         // Maximum Storage
                         VStack(alignment: .leading, spacing: 12) {
                             HStack {

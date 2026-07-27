@@ -3,9 +3,15 @@ import AVFoundation
 enum CameraPosition: String, CaseIterable {
     case backWide = "Back Wide"
     case backTelephoto = "Back Telephoto"
+    case frontWide = "Front Camera"
 
     var position: AVCaptureDevice.Position {
-        return .back
+        switch self {
+        case .backWide, .backTelephoto:
+            return .back
+        case .frontWide:
+            return .front
+        }
     }
 
     var deviceType: AVCaptureDevice.DeviceType {
@@ -14,6 +20,8 @@ enum CameraPosition: String, CaseIterable {
             return .builtInWideAngleCamera
         case .backTelephoto:
             return .builtInTelephotoCamera
+        case .frontWide:
+            return .builtInWideAngleCamera
         }
     }
 
@@ -23,6 +31,8 @@ enum CameraPosition: String, CaseIterable {
             return "back_wide"
         case .backTelephoto:
             return "back_zoom"
+        case .frontWide:
+            return "front_wide"
         }
     }
 }
@@ -217,7 +227,8 @@ class CameraRecorder {
             videoConnection.videoOrientation = .portrait
         }
 
-        videoConnection.isVideoMirrored = false
+        // Mirror front camera for natural recording appearance
+        videoConnection.isVideoMirrored = (position == .frontWide)
 
         if !videoConnection.isActive {
             print("[CameraInfo] \(position.rawValue): ❌ Video connection not active")
