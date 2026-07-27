@@ -24,16 +24,25 @@ print("Generating iOS app icons in \(scriptDir)...")
 for (size, filename) in iconSizes {
     // Create image
     let nsSize = NSSize(width: CGFloat(size), height: CGFloat(size))
-    guard let image = NSImage(size: nsSize) else { continue }
+    let image = NSImage(size: nsSize)
 
     image.lockFocus()
 
     // Draw dark blue background (25, 55, 100)
-    NSColor(sRed: 25/255, green: 55/255, blue: 100/255, alpha: 1.0).setFill()
+    let bgRed = CGFloat(25) / CGFloat(255)
+    let bgGreen = CGFloat(55) / CGFloat(255)
+    let bgBlue = CGFloat(100) / CGFloat(255)
+    let bgColor = NSColor(sRed: bgRed, green: bgGreen, blue: bgBlue, alpha: 1.0)
+    bgColor.setFill()
     NSRect(x: 0, y: 0, width: nsSize.width, height: nsSize.height).fill()
 
     // Draw camera lens circle
-    NSColor(sRed: 100/255, green: 180/255, blue: 255/255, alpha: 1.0).setFill()
+    let lensRed = CGFloat(100) / CGFloat(255)
+    let lensGreen = CGFloat(180) / CGFloat(255)
+    let lensBlue = CGFloat(255) / CGFloat(255)
+    let lensColor = NSColor(sRed: lensRed, green: lensGreen, blue: lensBlue, alpha: 1.0)
+    lensColor.setFill()
+
     let margin = CGFloat(size) / 3
     let circle = NSRect(x: margin, y: margin, width: nsSize.width - (margin * 2), height: nsSize.height - (margin * 2))
     NSBezierPath(ovalIn: circle).fill()
@@ -41,7 +50,7 @@ for (size, filename) in iconSizes {
     image.unlockFocus()
 
     // Save as PNG
-    let filepath = "\(scriptDir)/\(filename)"
+    let fileURL = URL(fileURLWithPath: "\(scriptDir)/\(filename)")
     guard let tiffData = image.tiffRepresentation,
           let bitmapImage = NSBitmapImageRep(data: tiffData),
           let pngData = bitmapImage.representation(using: .png, properties: [:]) else {
@@ -50,7 +59,7 @@ for (size, filename) in iconSizes {
     }
 
     do {
-        try pngData.write(toFile: filepath, options: .atomic)
+        try pngData.write(to: fileURL, options: .atomic)
         print("✓ Created \(filename) (\(size)x\(size))")
     } catch {
         print("✗ Error writing \(filename): \(error)")
