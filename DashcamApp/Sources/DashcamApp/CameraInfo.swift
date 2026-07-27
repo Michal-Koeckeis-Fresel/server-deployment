@@ -203,8 +203,6 @@ struct CameraRecorder {
 
     private func configureHDRVideo(for output: AVCaptureMovieFileOutput, device: AVCaptureDevice) {
         if #available(iOS 17.0, *) {
-            guard device.isVideoHDRSupported else { return }
-
             do {
                 try device.lockForConfiguration()
                 defer { device.unlockForConfiguration() }

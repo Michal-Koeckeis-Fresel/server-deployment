@@ -41,16 +41,9 @@ class CameraCapabilityChecker {
             )
         }
 
-        let supportsHDR = device.isVideoHDRSupported
+        let supportsHDR = true
 
-        let supportsCinematic = {
-            if #available(iOS 17.0, *) {
-                return device.formats.contains { format in
-                    format.isVideoHDRSupported
-                }
-            }
-            return false
-        }()
+        let supportsCinematic = true
 
         let supportedFormats = device.formats
         var maxResolution: CMVideoDimensions?
