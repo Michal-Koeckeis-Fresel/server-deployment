@@ -31,7 +31,7 @@ for (size, filename) in iconSizes {
         samplesPerPixel: 4,
         hasAlpha: true,
         isPlanar: false,
-        colorSpaceName: .sRGB,
+        colorSpaceName: .deviceRGB,
         bytesPerRow: size * 4,
         bitsPerPixel: 32
     ) else {
@@ -65,13 +65,13 @@ for (size, filename) in iconSizes {
 
     // Save as PNG
     let fileURL = URL(fileURLWithPath: "\(scriptDir)/\(filename)")
-    guard let pngData = bitmapRep.representation(using: .png, properties: [:]) else {
+    guard let pngData = bitmapRep.representation(using: NSBitmapImageRep.FileType.png, properties: [:]) else {
         print("✗ Failed to create PNG data for \(filename)")
         continue
     }
 
     do {
-        try pngData.write(to: fileURL, options: .atomic)
+        try pngData.write(to: fileURL, options: Data.WritingOptions.atomic)
         print("✓ Created \(filename) (\(size)x\(size))")
     } catch {
         print("✗ Error writing \(filename): \(error)")
