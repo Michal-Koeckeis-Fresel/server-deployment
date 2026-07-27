@@ -48,20 +48,18 @@ class EmergencySOSManager: NSObject, ObservableObject {
         logSOSEvent("SOS Triggered")
 
         // Send to watch
-        if #available(iOS 14.0, *) {
-            WatchConnectivityManager.shared.sendAlert(
-                WatchConnectivityManager.WatchAlert(
-                    type: .collision,
-                    timestamp: Date(),
-                    message: "🚨 SOS ACTIVATED! Emergency assistance requested."
-                ),
-                with: [
-                    "type": "sos_activated",
-                    "timestamp": ISO8601DateFormatter().string(from: Date()),
-                    "message": "SOS button activated - emergency alert sent"
-                ]
-            )
-        }
+        WatchConnectivityManager.shared.sendAlert(
+            WatchConnectivityManager.WatchAlert(
+                type: .collision,
+                timestamp: Date(),
+                message: "🚨 SOS ACTIVATED! Emergency assistance requested."
+            ),
+            with: [
+                "type": "sos_activated",
+                "timestamp": ISO8601DateFormatter().string(from: Date()),
+                "message": "SOS button activated - emergency alert sent"
+            ]
+        )
 
         // Notify emergency contacts if enabled
         if sosContactsEnabled {

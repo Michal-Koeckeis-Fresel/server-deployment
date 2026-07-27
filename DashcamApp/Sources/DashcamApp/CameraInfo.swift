@@ -234,11 +234,7 @@ class CameraRecorder {
         }
 
         // Set video orientation to portrait (0 degrees)
-        if #available(iOS 17.0, *) {
-            videoConnection.videoRotationAngle = 0
-        } else {
-            videoConnection.videoOrientation = .portrait
-        }
+        videoConnection.videoRotationAngle = 0
 
         // Mirror front camera for natural recording appearance
         videoConnection.isVideoMirrored = (position == .frontWide)
@@ -268,15 +264,13 @@ class CameraRecorder {
     }
 
     private func configureHDRVideo(for output: AVCaptureMovieFileOutput, device: AVCaptureDevice) {
-        if #available(iOS 17.0, *) {
-            do {
-                try device.lockForConfiguration()
-                defer { device.unlockForConfiguration() }
-                device.automaticallyAdjustsVideoHDREnabled = false
-                device.isVideoHDREnabled = true
-            } catch {
-                print("Warning: Could not enable HDR video: \(error)")
-            }
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+            device.automaticallyAdjustsVideoHDREnabled = false
+            device.isVideoHDREnabled = true
+        } catch {
+            print("Warning: Could not enable HDR video: \(error)")
         }
     }
 

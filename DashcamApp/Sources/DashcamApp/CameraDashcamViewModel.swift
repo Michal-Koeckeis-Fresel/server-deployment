@@ -129,20 +129,10 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         }
 
         // Request microphone permission
-        if #available(iOS 18.0, *) {
-            AVAudioApplication.requestRecordPermission { granted in
-                if !granted {
-                    DispatchQueue.main.async {
-                        self.errorMessage = "Microphone permission denied"
-                    }
-                }
-            }
-        } else {
-            AVAudioSession.sharedInstance().requestRecordPermission { granted in
-                if !granted {
-                    DispatchQueue.main.async {
-                        self.errorMessage = "Microphone permission denied"
-                    }
+        AVAudioApplication.requestRecordPermission { granted in
+            if !granted {
+                DispatchQueue.main.async {
+                    self.errorMessage = "Microphone permission denied"
                 }
             }
         }
@@ -283,9 +273,7 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         setupChunkTimer()
         setupCrashDetection()
 
-        if #available(iOS 14.0, *) {
-            watchConnectivityManager.sendRecordingStatusAlert(isRecording: true)
-        }
+        watchConnectivityManager.sendRecordingStatusAlert(isRecording: true)
 
         isRecording = true
         errorMessage = nil
@@ -310,9 +298,7 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         audioEventDetector.stopMonitoring()
         locationManager.stopLocationUpdates()
 
-        if #available(iOS 14.0, *) {
-            watchConnectivityManager.sendRecordingStatusAlert(isRecording: false)
-        }
+        watchConnectivityManager.sendRecordingStatusAlert(isRecording: false)
         displayLink?.invalidate()
         displayLink = nil
         chunkTimer?.invalidate()
@@ -474,15 +460,11 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         case .collision:
             crashDetected = true
             errorMessage = "⚠️ Crash Detected! Recordings protected."
-            if #available(iOS 14.0, *) {
-                watchConnectivityManager.sendCrashAlert(type: "Collision")
-            }
+            watchConnectivityManager.sendCrashAlert(type: "Collision")
         case .emergencyBrake:
             emergencyBrakeDetected = true
             errorMessage = "🛑 Emergency Brake Detected! Recordings protected."
-            if #available(iOS 14.0, *) {
-                watchConnectivityManager.sendEmergencyBrakeAlert()
-            }
+            watchConnectivityManager.sendEmergencyBrakeAlert()
         }
 
         showCrashAlert = true

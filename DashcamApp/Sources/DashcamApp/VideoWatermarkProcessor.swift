@@ -33,42 +33,19 @@ class VideoWatermarkProcessor {
 
                 try FileManager.default.removeItem(at: outputURL)
 
-                if #available(iOS 18.0, *) {
-                    guard let exporter = AVAssetExportSession(asset: composition, presetName: AVAssetExportPreset1920x1080) else {
-                        completion(false, NSError(domain: "VideoWatermarkProcessor", code: -3, userInfo: [NSLocalizedDescriptionKey: "Cannot create exporter"]))
-                        return
-                    }
-                    exporter.videoComposition = videoComposition
-                    exporter.outputFileType = .mov
-                    exporter.outputURL = outputURL
+                guard let exporter = AVAssetExportSession(asset: composition, presetName: AVAssetExportPreset1920x1080) else {
+                    completion(false, NSError(domain: "VideoWatermarkProcessor", code: -3, userInfo: [NSLocalizedDescriptionKey: "Cannot create exporter"]))
+                    return
+                }
+                exporter.videoComposition = videoComposition
+                exporter.outputFileType = .mov
+                exporter.outputURL = outputURL
 
-                    do {
-                        try await exporter.export(to: outputURL, as: .mov)
-                        completion(true, nil)
-                    } catch {
-                        completion(false, error)
-                    }
-                } else {
-                    guard let exporter = AVAssetExportSession(asset: composition, presetName: AVAssetExportPreset1920x1080) else {
-                        completion(false, NSError(domain: "VideoWatermarkProcessor", code: -3, userInfo: [NSLocalizedDescriptionKey: "Cannot create exporter"]))
-                        return
-                    }
-                    exporter.videoComposition = videoComposition
-                    exporter.outputFileType = .mov
-                    exporter.outputURL = outputURL
-
-                    exporter.exportAsynchronously { [weak exporter] in
-                        DispatchQueue.main.async {
-                            if exporter?.status == .completed {
-                                completion(true, nil)
-                            } else if let error = exporter?.error {
-                                completion(false, error)
-                            } else {
-                                let error = NSError(domain: "VideoWatermarkProcessor", code: -4, userInfo: [NSLocalizedDescriptionKey: "Export failed"])
-                                completion(false, error)
-                            }
-                        }
-                    }
+                do {
+                    try await exporter.export(to: outputURL, as: .mov)
+                    completion(true, nil)
+                } catch {
+                    completion(false, error)
                 }
             } catch {
                 completion(false, error)

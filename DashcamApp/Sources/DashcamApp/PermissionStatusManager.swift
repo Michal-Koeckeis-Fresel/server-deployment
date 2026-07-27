@@ -71,30 +71,16 @@ class PermissionStatusManager: ObservableObject {
     }
 
     private func checkMicrophonePermission() -> PermissionStatus {
-        if #available(iOS 18.0, *) {
-            let status = AVAudioApplication.recordPermission()
-            switch status {
-            case .granted:
-                return .granted
-            case .denied:
-                return .denied
-            case .undetermined:
-                return .notDetermined
-            @unknown default:
-                return .notDetermined
-            }
-        } else {
-            let status = AVAudioSession.sharedInstance().recordPermission
-            switch status {
-            case .granted:
-                return .granted
-            case .denied:
-                return .denied
-            case .undetermined:
-                return .notDetermined
-            @unknown default:
-                return .notDetermined
-            }
+        let status = AVAudioApplication.recordPermission()
+        switch status {
+        case .granted:
+            return .granted
+        case .denied:
+            return .denied
+        case .undetermined:
+            return .notDetermined
+        @unknown default:
+            return .notDetermined
         }
     }
 
@@ -123,17 +109,9 @@ class PermissionStatusManager: ObservableObject {
     }
 
     func requestMicrophonePermission() {
-        if #available(iOS 18.0, *) {
-            AVAudioApplication.requestRecordPermissionWithCompletionHandler { _ in
-                DispatchQueue.main.async {
-                    self.updatePermissionStatuses()
-                }
-            }
-        } else {
-            AVAudioSession.sharedInstance().requestRecordPermission { _ in
-                DispatchQueue.main.async {
-                    self.updatePermissionStatuses()
-                }
+        AVAudioApplication.requestRecordPermissionWithCompletionHandler { _ in
+            DispatchQueue.main.async {
+                self.updatePermissionStatuses()
             }
         }
     }

@@ -135,8 +135,7 @@ struct AudioAndWatchView: View {
             }
 
             // Apple Watch Connectivity
-            if #available(iOS 14.0, *) {
-                VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 12) {
                     HStack {
                         Label("Apple Watch Connection", systemImage: "applewatch.fill")
                             .font(.headline)
@@ -229,22 +228,19 @@ struct AudioAndWatchView: View {
                                 .font(.caption2)
                                 .foregroundColor(.green)
                         }
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Color.green.opacity(0.1))
-                    .cornerRadius(6)
                 }
-                .padding(16)
-                .background(Color.gray.opacity(0.1))
-                .cornerRadius(12)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.green.opacity(0.1))
+                .cornerRadius(6)
             }
+            .padding(16)
+            .background(Color.gray.opacity(0.1))
+            .cornerRadius(12)
         }
         .onAppear {
-            if #available(iOS 14.0, *) {
-                if watchConnectivityManager == nil {
-                    watchConnectivityManager = WatchConnectivityManager.shared
-                }
+            if watchConnectivityManager == nil {
+                watchConnectivityManager = WatchConnectivityManager.shared
             }
         }
     }

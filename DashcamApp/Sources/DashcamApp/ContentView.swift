@@ -208,22 +208,20 @@ struct ContentView: View {
                     .background(Color.blue.opacity(0.1))
                     .cornerRadius(4)
 
-                    // Watch Status (if available)
-                    if #available(iOS 14.0, *) {
-                        if let manager = watchConnectivityManager {
-                            HStack(spacing: 6) {
-                                Image(systemName: manager.isWatchReachable ? "applewatch.fill" : "applewatch")
-                                    .foregroundColor(manager.isWatchReachable ? .green : .gray)
-                                    .font(.caption)
-                                Text("Watch")
-                                    .font(.caption2)
-                                    .foregroundColor(manager.isWatchReachable ? .green : .gray)
-                            }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(manager.isWatchReachable ? Color.green.opacity(0.1) : Color.gray.opacity(0.1))
-                            .cornerRadius(4)
+                    // Watch Status
+                    if let manager = watchConnectivityManager {
+                        HStack(spacing: 6) {
+                            Image(systemName: manager.isWatchReachable ? "applewatch.fill" : "applewatch")
+                                .foregroundColor(manager.isWatchReachable ? .green : .gray)
+                                .font(.caption)
+                            Text("Watch")
+                                .font(.caption2)
+                                .foregroundColor(manager.isWatchReachable ? .green : .gray)
                         }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(manager.isWatchReachable ? Color.green.opacity(0.1) : Color.gray.opacity(0.1))
+                        .cornerRadius(4)
                     }
 
                     Spacer()
@@ -751,12 +749,11 @@ struct ContentView: View {
                     }
                 }
 
-                        Spacer()
-                        }
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 12)
-                    }
-                }
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+        }
 
                 if showPiP {
                     PiPCameraView()
@@ -808,10 +805,8 @@ struct ContentView: View {
 
             siriManager.registerSiriVoiceShortcuts()
 
-            if #available(iOS 14.0, *) {
-                if watchConnectivityManager == nil {
-                    watchConnectivityManager = WatchConnectivityManager.shared
-                }
+            if watchConnectivityManager == nil {
+                watchConnectivityManager = WatchConnectivityManager.shared
             }
         }
         .onDisappear {
