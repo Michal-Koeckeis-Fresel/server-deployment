@@ -85,12 +85,6 @@
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>This app requires local network access for enhanced features.</string>
-	<key>NSBonjourServices</key>
-	<array>
-		<string>_dashcam._tcp</string>
-	</array>
 	<key>NSSupportsAutomaticGraphicsSwitching</key>
 	<true/>
 	<key>UIStatusBarStyle</key>
