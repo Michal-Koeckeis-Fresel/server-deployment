@@ -28,25 +28,42 @@ struct ContentView: View {
                     // Control Buttons - Moved to top
                     VStack(spacing: 12) {
                         if !viewModel.isRecording {
-                            Button(action: {
-                                if !cameraSetup {
-                                    viewModel.setupCameras()
-                                    cameraSetup = true
-                                }
-                                viewModel.startRecording()
-                            }) {
-                                HStack(spacing: 12) {
-                                    Image(systemName: "record.circle.fill")
-                                        .font(.system(size: 24))
+                            VStack(spacing: 10) {
+                                Button(action: {
+                                    if !cameraSetup {
+                                        viewModel.setupCameras()
+                                        cameraSetup = true
+                                    }
+                                    viewModel.startRecording()
+                                }) {
+                                    HStack(spacing: 12) {
+                                        Image(systemName: "record.circle.fill")
+                                            .font(.system(size: 24))
 
-                                    Text("Start Recording")
-                                        .font(.headline)
+                                        Text("Start Recording")
+                                            .font(.headline)
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 16)
+                                    .foregroundColor(.white)
+                                    .background(Color.red)
+                                    .cornerRadius(12)
                                 }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 16)
-                                .foregroundColor(.white)
-                                .background(Color.red)
-                                .cornerRadius(12)
+
+                                NavigationLink(destination: FilesView()) {
+                                    HStack(spacing: 12) {
+                                        Image(systemName: "film.stack")
+                                            .font(.system(size: 24))
+
+                                        Text("View Recordings")
+                                            .font(.headline)
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 16)
+                                    .foregroundColor(.white)
+                                    .background(Color.blue.opacity(0.7))
+                                    .cornerRadius(12)
+                                }
                             }
                         } else {
                             VStack(spacing: 10) {

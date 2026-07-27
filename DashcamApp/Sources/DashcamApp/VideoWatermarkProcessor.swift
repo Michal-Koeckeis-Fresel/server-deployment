@@ -57,11 +57,11 @@ class VideoWatermarkProcessor {
                     exporter.outputFileType = .mov
                     exporter.outputURL = outputURL
 
-                    exporter.exportAsynchronously {
+                    exporter.exportAsynchronously { [weak exporter] in
                         DispatchQueue.main.async {
-                            if exporter.status == .completed {
+                            if exporter?.status == .completed {
                                 completion(true, nil)
-                            } else if let error = exporter.error {
+                            } else if let error = exporter?.error {
                                 completion(false, error)
                             } else {
                                 let error = NSError(domain: "VideoWatermarkProcessor", code: -4, userInfo: [NSLocalizedDescriptionKey: "Export failed"])
