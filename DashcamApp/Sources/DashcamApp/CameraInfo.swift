@@ -61,7 +61,7 @@ class CameraRecorderDelegate: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     }
 }
 
-struct CameraRecorder {
+class CameraRecorder {
     let position: CameraPosition
     var captureSession: AVCaptureSession?
     var videoOutput: AVCaptureMovieFileOutput?
@@ -78,7 +78,11 @@ struct CameraRecorder {
     var usingWatermark: Bool = false
     private let sessionQueue = DispatchQueue(label: "com.dashcam.camera.\(UUID().uuidString)", attributes: [], autoreleaseFrequency: .workItem)
 
-    mutating func setupSession() -> Bool {
+    init(position: CameraPosition) {
+        self.position = position
+    }
+
+    func setupSession() -> Bool {
         let session = AVCaptureSession()
 
         do {
@@ -94,7 +98,7 @@ struct CameraRecorder {
         }
     }
 
-    private mutating func configureSession(_ session: AVCaptureSession) throws {
+    private func configureSession(_ session: AVCaptureSession) throws {
         session.beginConfiguration()
         defer { session.commitConfiguration() }
 
@@ -133,7 +137,7 @@ struct CameraRecorder {
         return videoDevice
     }
 
-    private mutating func configureVideoInput(_ device: AVCaptureDevice, to session: AVCaptureSession) throws {
+    private func configureVideoInput(_ device: AVCaptureDevice, to session: AVCaptureSession) throws {
         let videoInput = try AVCaptureDeviceInput(device: device)
         self.videoInput = videoInput
 
@@ -144,7 +148,7 @@ struct CameraRecorder {
         session.addInput(videoInput)
     }
 
-    private mutating func configureVideoOutput(to session: AVCaptureSession, with device: AVCaptureDevice) throws {
+    private func configureVideoOutput(to session: AVCaptureSession, with device: AVCaptureDevice) throws {
         let movieOutput = AVCaptureMovieFileOutput()
 
         guard session.canAddOutput(movieOutput) else {
@@ -253,7 +257,7 @@ struct CameraRecorder {
         }
     }
 
-    mutating func startRecording(to url: URL, delegate: AVCaptureFileOutputRecordingDelegate, withWatermark watermarkGenerator: WatermarkTextGenerator? = nil) {
+    func startRecording(to url: URL, delegate: AVCaptureFileOutputRecordingDelegate, withWatermark watermarkGenerator: WatermarkTextGenerator? = nil) {
         guard captureSession?.isRunning == true else {
             print("Error: Camera not ready for recording")
             return
@@ -281,7 +285,7 @@ struct CameraRecorder {
         }
     }
 
-    private mutating func setupWatermarkedRecording(to url: URL, delegate: AVCaptureFileOutputRecordingDelegate, watermarkGenerator: WatermarkTextGenerator) {
+    private func setupWatermarkedRecording(to url: URL, delegate: AVCaptureFileOutputRecordingDelegate, watermarkGenerator: WatermarkTextGenerator) {
         self.watermarkGenerator = watermarkGenerator
         self.usingWatermark = true
 
@@ -313,7 +317,7 @@ struct CameraRecorder {
         }
     }
 
-    private mutating func setupDataOutputs() {
+    private func setupDataOutputs() {
         guard let session = captureSession else { return }
 
         let videoDataOutput = AVCaptureVideoDataOutput()
@@ -335,7 +339,7 @@ struct CameraRecorder {
         }
     }
 
-    mutating func stopRecording() {
+    func stopRecording() {
         sessionQueue.async {
             if let realtimeWriter = self.realtimeVideoWriter, self.usingWatermark {
                 if let videoDataOutput = self.videoDataOutput {
@@ -365,7 +369,7 @@ struct CameraRecorder {
         }
     }
 
-    mutating func cleanup() {
+    func cleanup() {
         sessionQueue.async {
             if let session = self.captureSession {
                 if session.isRunning {
@@ -390,7 +394,7 @@ struct CameraRecorder {
         }
     }
 
-    mutating func setFrameRate(_ fps: Int32) {
+    func setFrameRate(_ fps: Int32) {
         guard let videoInput = videoInput else { return }
 
         let device = videoInput.device
@@ -409,7 +413,7 @@ struct CameraRecorder {
         }
     }
 
-    mutating func setSlowMotionFrameRate(_ fps: Int32 = 60) {
+    func setSlowMotionFrameRate(_ fps: Int32 = 60) {
         guard let videoInput = videoInput else { return }
 
         let device = videoInput.device

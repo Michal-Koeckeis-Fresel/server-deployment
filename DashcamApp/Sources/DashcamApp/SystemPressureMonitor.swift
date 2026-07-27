@@ -106,12 +106,15 @@ class SystemPressureMonitor: NSObject, ObservableObject {
         case .nominal:
             shouldReduceQuality = false
             shouldPauseRecording = false
-        case .critical:
-            shouldPauseRecording = true
-            shouldReduceQuality = true
+        case .fair:
+            shouldReduceQuality = false
+            shouldPauseRecording = false
         case .serious:
             shouldReduceQuality = true
             shouldPauseRecording = false
+        case .critical:
+            shouldPauseRecording = true
+            shouldReduceQuality = true
         @unknown default:
             break
         }
@@ -128,6 +131,9 @@ class SystemPressureMonitor: NSObject, ObservableObject {
         case .serious:
             newPressureLevel = .elevated
             thermalPressure = 0.75
+        case .fair:
+            newPressureLevel = .nominal
+            thermalPressure = 0.25
         case .nominal:
             newPressureLevel = .nominal
             thermalPressure = 0.0
@@ -200,6 +206,8 @@ class SystemPressureMonitor: NSObject, ObservableObject {
         switch thermalWarningLevel {
         case .nominal:
             return "Nominal"
+        case .fair:
+            return "Fair"
         case .serious:
             return "Serious"
         case .critical:
@@ -247,6 +255,8 @@ extension ProcessInfo.ThermalState {
         switch self {
         case .nominal:
             return "Thermal state is normal"
+        case .fair:
+            return "Thermal state is fair"
         case .serious:
             return "Thermal state is serious"
         case .critical:
