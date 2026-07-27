@@ -927,6 +927,10 @@ struct SettingsView: View {
                                         migrationMessage = "Your existing recordings will be migrated to iCloud Drive.\n\nMake sure iCloud is enabled in Settings > [Your Name] > iCloud."
                                         showMigrationAlert = true
                                         StorageLocationManager.shared.migrateRecordings(from: oldLocation)
+                                    } else if oldLocation != location && location == .iCloudWiFiOnly {
+                                        migrationMessage = "Your existing recordings will be migrated to iCloud Drive (Wi-Fi only).\n\nFiles will only upload when connected to Wi-Fi to save cellular data. Make sure iCloud is enabled in Settings > [Your Name] > iCloud."
+                                        showMigrationAlert = true
+                                        StorageLocationManager.shared.migrateRecordings(from: oldLocation)
                                     } else if oldLocation != location && location == .iCloudLocal {
                                         migrationMessage = "Your existing recordings will be migrated to the iCloud folder (local only).\n\nFiles persist even if app is uninstalled, with no cloud upload or cellular data usage."
                                         showMigrationAlert = true
@@ -993,6 +997,23 @@ struct SettingsView: View {
                                 .padding(.vertical, 8)
                                 .background(Color.blue.opacity(0.1))
                                 .cornerRadius(6)
+                            } else if selectedStorageLocation == .iCloudWiFiOnly {
+                                VStack(spacing: 8) {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "wifi")
+                                            .foregroundColor(.green)
+                                        Text("Wi-Fi uploads only - saves cellular data")
+                                            .font(.caption)
+                                            .foregroundColor(.green)
+                                    }
+                                    Text("iCloud sync only happens over Wi-Fi. Recordings remain local until Wi-Fi is available, then automatically upload to iCloud.")
+                                        .font(.caption2)
+                                        .foregroundColor(.gray)
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color.green.opacity(0.1))
+                                .cornerRadius(6)
                             } else if selectedStorageLocation == .iCloudLocal {
                                 VStack(spacing: 8) {
                                     HStack(spacing: 8) {
@@ -1029,6 +1050,11 @@ struct SettingsView: View {
                             Text("Enable iCloud in Settings > [Your Name] > iCloud > Dashcam App")
                                 .font(.caption2)
                                 .foregroundColor(.orange)
+                                .padding(.top, 4)
+                        } else if selectedStorageLocation == .iCloudWiFiOnly {
+                            Text("Enable iCloud in Settings > [Your Name] > iCloud > Dashcam App. Syncing restricted to Wi-Fi only.")
+                                .font(.caption2)
+                                .foregroundColor(.blue)
                                 .padding(.top, 4)
                         } else if selectedStorageLocation == .iCloudLocal {
                             Text("Files stored locally in iCloud folder - accessible via Xcode or recovered after reinstall")

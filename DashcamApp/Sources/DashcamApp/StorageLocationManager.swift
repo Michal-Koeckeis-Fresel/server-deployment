@@ -1,8 +1,10 @@
 import Foundation
+import Network
 
 enum StorageLocation: String, CaseIterable {
     case onDevice = "On Device (Local)"
     case iCloud = "iCloud Drive"
+    case iCloudWiFiOnly = "iCloud Drive (Wi-Fi Only)"
     case iCloudLocal = "iCloud Folder (Local Only)"
     case filesApp = "Files App Folder"
 
@@ -16,6 +18,8 @@ enum StorageLocation: String, CaseIterable {
             return "Stores on device only. Deleted if app is uninstalled."
         case .iCloud:
             return "Stores in iCloud Drive. Persists even if app is uninstalled."
+        case .iCloudWiFiOnly:
+            return "Stores in iCloud but only syncs over Wi-Fi. Prevents cellular data usage."
         case .iCloudLocal:
             return "Stores in iCloud folder without uploading. Persists but no cellular data used."
         case .filesApp:
@@ -29,6 +33,8 @@ enum StorageLocation: String, CaseIterable {
             return "⚠️ Files will be deleted when app is uninstalled!"
         case .iCloud:
             return "✅ Files persist in iCloud even if app is uninstalled."
+        case .iCloudWiFiOnly:
+            return "✅ Files sync to iCloud but only over Wi-Fi to save cellular data."
         case .iCloudLocal:
             return "✅ Files persist but stay local - no cloud sync or cellular data used."
         case .filesApp:
@@ -81,6 +87,27 @@ class StorageLocationManager {
                 return nil
             }
 
+        case .iCloudWiFiOnly:
+            guard let iCloudContainerURL = fileManager.url(
+                forUbiquityContainerIdentifier: nil
+            ) else {
+                return nil
+            }
+
+            let dashcamFolder = iCloudContainerURL.appendingPathComponent("Dashcam Recordings WiFi", isDirectory: true)
+
+            do {
+                try fileManager.createDirectory(
+                    at: dashcamFolder,
+                    withIntermediateDirectories: true,
+                    attributes: nil
+                )
+                return dashcamFolder
+            } catch {
+                print("Failed to create iCloud Wi-Fi only directory: \(error)")
+                return nil
+            }
+
         case .iCloudLocal:
             guard let iCloudContainerURL = fileManager.url(
                 forUbiquityContainerIdentifier: nil
@@ -123,6 +150,25 @@ class StorageLocationManager {
 
     func isICloudAvailable() -> Bool {
         return fileManager.url(forUbiquityContainerIdentifier: nil) != nil
+    }
+
+    func isConnectedToWiFi() -> Bool {
+        let monitor = NWPathMonitor()
+        defer { monitor.cancel() }
+
+        let semaphore = DispatchSemaphore(value: 0)
+        var isWiFi = false
+
+        monitor.pathUpdateHandler = { path in
+            isWiFi = path.usesInterfaceType(.wifi)
+            semaphore.signal()
+        }
+
+        let queue = DispatchQueue(label: "com.dashcam.wifi.check")
+        monitor.start(queue: queue)
+
+        _ = semaphore.wait(timeout: .now() + 1.0)
+        return isWiFi
     }
 
     func getStorageInfo() -> (used: Double, location: String) {
@@ -185,6 +231,14 @@ class StorageLocationManager {
                 return nil
             }
             return iCloudContainerURL.appendingPathComponent("Dashcam Recordings", isDirectory: true)
+
+        case .iCloudWiFiOnly:
+            guard let iCloudContainerURL = fileManager.url(
+                forUbiquityContainerIdentifier: nil
+            ) else {
+                return nil
+            }
+            return iCloudContainerURL.appendingPathComponent("Dashcam Recordings WiFi", isDirectory: true)
 
         case .iCloudLocal:
             guard let iCloudContainerURL = fileManager.url(
