@@ -33,6 +33,9 @@
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>UISupportedInterfaceOrientationsIPad</key>
 	<array>
@@ -95,6 +98,6 @@
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>MinimumOSVersion</key>
-	<string>16.0</string>
+	<string>18.0</string>
 </dict>
 </plist>
