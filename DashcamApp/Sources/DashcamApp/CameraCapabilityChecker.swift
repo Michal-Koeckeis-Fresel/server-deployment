@@ -44,7 +44,7 @@ class CameraCapabilityChecker {
         let supportsHDR = {
             if #available(iOS 17.0, *) {
                 let formats = device.formats
-                return formats.contains { format in
+                return formats.contains { (format: AVCaptureDevice.Format) in
                     format.supportedColorSpaces.contains(.hlg)
                 }
             }
@@ -54,7 +54,7 @@ class CameraCapabilityChecker {
         let supportsCinematic = {
             if #available(iOS 17.0, *) {
                 let formats = device.formats
-                return formats.contains { format in
+                return formats.contains { (format: AVCaptureDevice.Format) in
                     format.supportedColorSpaces.contains(.hlg)
                 }
             }
@@ -72,9 +72,8 @@ class CameraCapabilityChecker {
             }
 
             for range in format.videoSupportedFrameRateRanges {
-                if let maxFrameRate = range.maxFrameRate as? Int {
-                    supportedFrameRates.insert(maxFrameRate)
-                }
+                let maxFrameRate = Int(range.maxFrameRate)
+                supportedFrameRates.insert(maxFrameRate)
             }
         }
 

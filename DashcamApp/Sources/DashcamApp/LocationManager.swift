@@ -37,7 +37,7 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         locationManager.requestWhenInUseAuthorization()
     }
 
-    private func startLocationUpdates() {
+    func startLocationUpdates() {
         locationManager.startUpdatingLocation()
         locationManager.startUpdatingHeading()
         isLocationAvailable = true

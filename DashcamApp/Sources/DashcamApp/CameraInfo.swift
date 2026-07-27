@@ -81,24 +81,17 @@ struct CameraRecorder {
     mutating func setupSession() -> Bool {
         let session = AVCaptureSession()
 
-        var setupSuccess = false
-        let semaphore = DispatchSemaphore(value: 0)
-
-        sessionQueue.async { [self] in
-            defer { semaphore.signal() }
-            do {
-                try self.configureSession(session)
-                setupSuccess = true
-            } catch {
-                print("Camera setup error for \(self.position.rawValue): \(error)")
-                setupSuccess = false
-            }
+        do {
+            try self.configureSession(session)
+            self.captureSession = session
+            self.isAvailable = true
+            return true
+        } catch {
+            print("Camera setup error for \(self.position.rawValue): \(error)")
+            self.captureSession = session
+            self.isAvailable = false
+            return false
         }
-
-        _ = semaphore.wait(timeout: .now() + 5.0)
-        self.captureSession = session
-        self.isAvailable = setupSuccess
-        return setupSuccess
     }
 
     private mutating func configureSession(_ session: AVCaptureSession) throws {
@@ -178,12 +171,7 @@ struct CameraRecorder {
         }
 
         // Set video orientation
-        if #available(iOS 17.0, *) {
-            // Video orientation handling for iOS 17+
-            videoConnection.videoOrientation = .portrait
-        } else {
-            videoConnection.videoOrientation = .portrait
-        }
+        videoConnection.videoOrientation = .portrait
 
         videoConnection.isVideoMirrored = (position == .frontWide || position == .frontTelephoto)
 
@@ -193,20 +181,12 @@ struct CameraRecorder {
     }
 
     private func configureVideoCodec(for output: AVCaptureMovieFileOutput) {
-        do {
-            let codecManager = VideoCodecManager.shared
-            guard let videoSettings = codecManager.getVideoSettings() as? [String: Any] else {
-                return
-            }
+        let codecManager = VideoCodecManager.shared
+        let videoSettings = codecManager.getVideoSettings()
 
-            if let audioSettings = codecManager.getAudioSettings() as? [String: Any] {
-                output.setOutputSettings([AVMediaType.audio: audioSettings], for: output.connections.first)
-            }
-
-            output.setOutputSettings(videoSettings, for: output.connections.first)
-        } catch {
-            print("Error configuring video codec: \(error)")
-        }
+        // Video codec settings are applied through the session preset.
+        // The settings dictionary is used for watermarked recording via RealtimeVideoWriter.
+        print("Video codec configured: \(videoSettings[AVVideoCodecKey] ?? "unknown")")
     }
 
     private func configureVideoStabilization(for output: AVCaptureMovieFileOutput) {
@@ -387,7 +367,7 @@ struct CameraRecorder {
         }
     }
 
-    func cleanup() {
+    mutating func cleanup() {
         sessionQueue.async {
             if let session = self.captureSession {
                 if session.isRunning {

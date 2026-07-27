@@ -125,7 +125,7 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
 
         // Request microphone permission
         if #available(iOS 18.0, *) {
-            AVAudioApplication.requestRecordPermissionWithCompletionHandler { granted in
+            AVAudioApplication.requestRecordPermission { granted in
                 if !granted {
                     DispatchQueue.main.async {
                         self.errorMessage = "Microphone permission denied"
@@ -381,7 +381,9 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
     private func setupChunkTimer() {
         chunkTimer?.invalidate()
         chunkTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            self?.checkChunkDuration()
+            DispatchQueue.main.async {
+                self?.checkChunkDuration()
+            }
         }
     }
 
@@ -483,7 +485,9 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
 
         slowMotionTimer?.invalidate()
         slowMotionTimer = Timer.scheduledTimer(withTimeInterval: slowMotionDuration, repeats: false) { [weak self] _ in
-            self?.deactivateSlowMotion()
+            DispatchQueue.main.async {
+                self?.deactivateSlowMotion()
+            }
         }
 
         logImpactEvent("Slow-motion activated at 60 fps")
