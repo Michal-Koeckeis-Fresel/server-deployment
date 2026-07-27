@@ -64,11 +64,12 @@ class PerformanceLogger: NSObject, ObservableObject {
     }
 
     private func getMemoryUsage() -> Double {
-        var info = task_vm_info()
-        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info>.size)/4
+        var info = task_vm_info_data_t()
+        let capacity = MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<integer_t>.size
+        var count = mach_msg_type_number_t(capacity)
 
         let kerr = withUnsafeMutablePointer(to: &info) {
-            $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: capacity) {
                 task_info(mach_task_self_,
                          task_flavor_t(TASK_VM_INFO),
                          $0,
@@ -85,16 +86,22 @@ class PerformanceLogger: NSObject, ObservableObject {
         var threadCount: mach_msg_type_number_t = 0
 
         let kerr = task_threads(mach_task_self_, &threadList, &threadCount)
-        guard kerr == KERN_SUCCESS else { return 0 }
+        guard kerr == KERN_SUCCESS, let threads = threadList else { return 0 }
+
+        defer {
+            let listSize = vm_size_t(Int(threadCount) * MemoryLayout<thread_t>.stride)
+            vm_deallocate(mach_task_self_, vm_address_t(UInt(bitPattern: threads)), listSize)
+        }
 
         var totalTime: UInt64 = 0
         for i in 0..<Int(threadCount) {
             var threadInfo = thread_basic_info()
-            var count = mach_msg_type_number_t(MemoryLayout<thread_basic_info>.size)/4
+            let capacity = MemoryLayout<thread_basic_info>.size / MemoryLayout<integer_t>.size
+            var count = mach_msg_type_number_t(capacity)
 
             let threadKerr = withUnsafeMutablePointer(to: &threadInfo) {
-                $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
-                    thread_info(threadList![i],
+                $0.withMemoryRebound(to: integer_t.self, capacity: capacity) {
+                    thread_info(threads[i],
                                thread_flavor_t(THREAD_BASIC_INFO),
                                $0,
                                &count)
@@ -197,15 +204,7 @@ class PerformanceLogger: NSObject, ObservableObject {
     }
 }
 
-import os
-
-// Memory info structures
-struct task_vm_info {
-    var resident_size: UInt64 = 0
-}
-
-var task_vm_info_data_t = task_vm_info()
-
+// Mach kernel constants (values from <mach/task_info.h> and <mach/thread_info.h>)
 let TASK_VM_INFO = Int32(22)
 let THREAD_BASIC_INFO = Int32(3)
-let TH_USAGE_SCALE = Int32(16)
+let TH_USAGE_SCALE = Int32(1000)

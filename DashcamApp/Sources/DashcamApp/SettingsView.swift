@@ -325,12 +325,13 @@ struct SettingsView: View {
 
                             VStack(spacing: 8) {
                                 Slider(
-                                    value: Double(viewModel.chunkDurationMinutes),
+                                    value: Binding(
+                                        get: { Double(viewModel.chunkDurationMinutes) },
+                                        set: { viewModel.chunkDurationMinutes = Int($0) }
+                                    ),
                                     in: 1...15,
                                     step: 1
-                                ) { _ in } onEditingChanged: { _ in
-                                    // Update happens via didSet
-                                }
+                                )
                                 .tint(.blue)
 
                                 HStack(spacing: 20) {

@@ -9,6 +9,7 @@ class RealtimeVideoWriter {
     private var pixelBufferAdapter: AVAssetWriterInputPixelBufferAdaptor?
     private let ciContext = CIContext()
     private var frameCount = 0
+    private var sessionStarted = false
     private var startTime: CMTime = .zero
     private let writeQueue = DispatchQueue(label: "com.dashcam.videowrite")
 
@@ -17,7 +18,7 @@ class RealtimeVideoWriter {
     }
 
     func startRecording(to url: URL, videoSettings: [String: Any], audioSettings: [String: Any], sourceVideoTrack: AVCaptureDeviceInput?) throws {
-        try FileManager.default.removeItem(at: url)
+        try? FileManager.default.removeItem(at: url)
 
         assetWriter = try AVAssetWriter(outputURL: url, fileType: .mov)
         guard let writer = assetWriter else { throw NSError(domain: "RealtimeVideoWriter", code: -1) }
@@ -46,6 +47,7 @@ class RealtimeVideoWriter {
 
         if writer.startWriting() {
             frameCount = 0
+            sessionStarted = false
             print("Video writer started recording to \(url.lastPathComponent)")
         } else {
             throw writer.error ?? NSError(domain: "RealtimeVideoWriter", code: -4)
@@ -55,11 +57,10 @@ class RealtimeVideoWriter {
     func processAndWriteFrame(_ pixelBuffer: CVPixelBuffer, timestamp: CMTime, watermarkText: String) {
         guard let writer = assetWriter, writer.status == .writing else { return }
 
-        if frameCount == 0 {
+        if !sessionStarted {
+            sessionStarted = true
             startTime = timestamp
-            writeQueue.async {
-                self.videoInput?.requestMediaDataWhenReady(on: self.writeQueue) { }
-            }
+            writer.startSession(atSourceTime: .zero)
         }
 
         let adjustedTime = CMTimeSubtract(timestamp, startTime)

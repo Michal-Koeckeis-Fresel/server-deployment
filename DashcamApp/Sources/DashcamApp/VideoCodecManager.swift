@@ -67,21 +67,24 @@ class VideoCodecManager {
 
     func getVideoSettings() -> [String: Any] {
         let codecType: AVVideoCodecType
+        var compressionProperties: [String: Any] = [
+            AVVideoAverageBitRateKey: 5_000_000
+        ]
+
         switch selectedCodec {
         case .hevc:
             codecType = .hevc
         case .h264:
             codecType = .h264
+            // Profile level keys are codec-specific; H.264 profiles are invalid for HEVC
+            compressionProperties[AVVideoProfileLevelKey] = AVVideoProfileLevelH264HighAutoLevel
         }
 
         return [
             AVVideoCodecKey: codecType,
             AVVideoWidthKey: 1920,
             AVVideoHeightKey: 1080,
-            AVVideoCompressionPropertiesKey: [
-                AVVideoAverageBitRateKey: 5_000_000,
-                AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel
-            ]
+            AVVideoCompressionPropertiesKey: compressionProperties
         ]
     }
 
