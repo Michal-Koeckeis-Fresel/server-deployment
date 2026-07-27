@@ -193,7 +193,7 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
     func recoverCameraSession() {
         for (position, camera) in cameras {
             let mutableCamera = camera
-            if mutableCamera.captureSession?.isRunning == false {
+            if !mutableCamera.isAvailable {
                 if mutableCamera.setupSession() {
                     cameras[position] = mutableCamera
                     cameraStatus[position] = "Ready"
@@ -259,7 +259,6 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
                 locationManager: locationManager
             )
             camera.startRecording(to: outputURL, delegate: self, withWatermark: watermarkGenerator)
-            camera.setFrameRate(preferredRecordingFPS)
             cameras[position] = camera
             cameraStatus[position] = "Recording"
         }
@@ -293,7 +292,7 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
             print("[ViewModel] Stopping camera: \(position.rawValue)")
             camera.stopRecording()
             cameras[position] = camera
-            let status = camera.captureSession?.isRunning == true ? "Ready" : "Error"
+            let status = camera.isAvailable ? "Ready" : "Error"
             cameraStatus[position] = status
             print("[ViewModel] ✅ \(position.rawValue) stopped - Status: \(status)")
 
@@ -361,19 +360,13 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         let powerModeFPS = lowPowerModeMonitor.recommendedFrameRate
         let effectiveFPS = min(thermalFPS, powerModeFPS)
 
-        for position in cameras.keys {
-            let camera = cameras[position]!
-            camera.setFrameRate(effectiveFPS)
-            cameras[position] = camera
-        }
+        // Frame rate is now managed by MultiCameraSessionManager
+        // Individual frame rate adjustments are no longer supported
     }
 
     private func restoreFrameRates() {
-        for position in cameras.keys {
-            let camera = cameras[position]!
-            camera.setFrameRate(preferredRecordingFPS)
-            cameras[position] = camera
-        }
+        // Frame rate is now managed by MultiCameraSessionManager
+        // Individual frame rate adjustments are no longer supported
     }
 
     private func startNewChunk() {
@@ -387,7 +380,7 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         currentChunkNumber += 1
 
         for (position, camera) in cameras {
-            guard camera.captureSession?.isRunning == true else { continue }
+            guard camera.isAvailable else { continue }
 
             if let videoOutput = camera.videoOutput, videoOutput.isRecording {
                 videoOutput.stopRecording()
@@ -505,11 +498,8 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
     private func activateSlowMotion() {
         isSlowMotionActive = true
 
-        for position in cameras.keys {
-            let camera = cameras[position]!
-            camera.setSlowMotionFrameRate(60)
-            cameras[position] = camera
-        }
+        // Slow motion frame rate is now managed by MultiCameraSessionManager
+        // Individual frame rate adjustments are no longer supported
 
         slowMotionTimer?.invalidate()
         slowMotionTimer = Timer.scheduledTimer(withTimeInterval: slowMotionDuration, repeats: false) { [weak self] _ in
