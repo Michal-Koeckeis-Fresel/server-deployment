@@ -78,17 +78,6 @@ class SystemPressureMonitor: NSObject, ObservableObject {
     }
 
     private func observeSystemPressure() {
-        for device in captureDevices {
-            let observer = NotificationCenter.default.addObserver(
-                forName: AVCaptureDevice.systemPressureStateDidChangeNotification,
-                object: device,
-                queue: .main
-            ) { [weak self] _ in
-                self?.updateSystemPressure()
-            }
-            pressureObservers.append(observer)
-        }
-
         updateSystemPressure()
     }
 
@@ -115,15 +104,13 @@ class SystemPressureMonitor: NSObject, ObservableObject {
 
         switch thermalWarningLevel {
         case .nominal:
-            break
+            shouldReduceQuality = false
+            shouldPauseRecording = false
         case .critical:
             shouldPauseRecording = true
             shouldReduceQuality = true
         case .serious:
             shouldReduceQuality = true
-            shouldPauseRecording = false
-        case .moderate:
-            shouldReduceQuality = false
             shouldPauseRecording = false
         @unknown default:
             break
@@ -131,32 +118,22 @@ class SystemPressureMonitor: NSObject, ObservableObject {
     }
 
     private func updateSystemPressure() {
-        guard let primaryDevice = captureDevices.first else {
-            pressureLevel = .nominal
-            recommendedFrameRate = 30
-            return
-        }
-
-        let pressureState = primaryDevice.systemPressureState
-        thermalPressure = Float(pressureState.level.rawValue)
+        thermalPressure = Float(ProcessInfo.processInfo.thermalState.rawValue) / 3.0
 
         let newPressureLevel: SystemPressureLevel
-
-        if #available(iOS 16.4, *) {
-            if pressureState.pressureFactors.contains(.thermalThrott) ||
-               pressureState.pressureFactors.contains(.memoryThrott) {
-                newPressureLevel = .critical
-            } else if pressureState.level.rawValue > 0.75 {
-                newPressureLevel = .elevated
-            } else {
-                newPressureLevel = .nominal
-            }
-        } else {
-            if pressureState.level.rawValue > 0.75 {
-                newPressureLevel = .elevated
-            } else {
-                newPressureLevel = .nominal
-            }
+        switch ProcessInfo.processInfo.thermalState {
+        case .critical:
+            newPressureLevel = .critical
+            thermalPressure = 1.0
+        case .serious:
+            newPressureLevel = .elevated
+            thermalPressure = 0.75
+        case .nominal:
+            newPressureLevel = .nominal
+            thermalPressure = 0.0
+        @unknown default:
+            newPressureLevel = .nominal
+            thermalPressure = 0.0
         }
 
         pressureLevel = newPressureLevel
@@ -272,8 +249,6 @@ extension ProcessInfo.ThermalState {
         switch self {
         case .nominal:
             return "Thermal state is normal"
-        case .moderate:
-            return "Thermal state is moderate"
         case .serious:
             return "Thermal state is serious"
         case .critical:

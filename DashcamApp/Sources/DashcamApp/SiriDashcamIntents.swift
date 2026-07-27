@@ -13,7 +13,7 @@ class DashcamIntentHandler: NSObject, INStartCallIntentHandling {
         }
 
         handleSiriCommand(recipient)
-        completion(INStartCallIntentResponse(code: .success, userActivity: nil))
+        completion(INStartCallIntentResponse(code: .continueInApp, userActivity: nil))
     }
 
     private func handleSiriCommand(_ command: String) {
