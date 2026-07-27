@@ -23,7 +23,7 @@ class RealtimeVideoWriter {
         print("[RealtimeVideoWriter] Audio settings: \(audioSettings)")
 
         do {
-            try? FileManager.default.removeItem(at: url)
+            try FileManager.default.removeItem(at: url)
             print("[RealtimeVideoWriter] ✅ Cleared existing file at: \(url.lastPathComponent)")
         } catch {
             print("[RealtimeVideoWriter] ⚠️ Failed to remove existing file: \(error)")

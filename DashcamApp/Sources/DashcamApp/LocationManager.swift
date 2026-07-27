@@ -2,7 +2,8 @@ import Foundation
 @preconcurrency import CoreLocation
 import SwiftUI
 
-class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
+@MainActor
+final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     static let shared = LocationManager()
 
     @Published var currentLocation: CLLocation?
@@ -56,52 +57,40 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
 
     // MARK: - CLLocationManagerDelegate
 
-    nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            let status = manager.authorizationStatus
-            print("[Location] Authorization changed: \(status.rawValue)")
-            if status == .authorizedWhenInUse || status == .authorizedAlways {
-                print("[Location] ✅ Authorization granted - starting updates")
-                self.startLocationUpdates()
-            } else if status == .denied || status == .restricted {
-                print("[Location] ❌ Authorization denied/restricted")
-                self.isLocationAvailable = false
-            } else {
-                print("[Location] ⚠️ Authorization: notDetermined")
-            }
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        let status = manager.authorizationStatus
+        print("[Location] Authorization changed: \(status.rawValue)")
+        if status == .authorizedWhenInUse || status == .authorizedAlways {
+            print("[Location] ✅ Authorization granted - starting updates")
+            startLocationUpdates()
+        } else if status == .denied || status == .restricted {
+            print("[Location] ❌ Authorization denied/restricted")
+            isLocationAvailable = false
+        } else {
+            print("[Location] ⚠️ Authorization: notDetermined")
         }
     }
 
-    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let location = locations.last else {
             print("[Location] ⚠️ Received location update but locations array is empty")
             return
         }
 
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            self.currentLocation = location
-            self.currentSpeed = location.speed > 0 ? location.speed * 3.6 : 0
-            self.currentAltitude = location.altitude
-            print("[Location] Update: Lat=\(location.coordinate.latitude), Lon=\(location.coordinate.longitude), Speed=\(self.currentSpeed)km/h")
-        }
+        currentLocation = location
+        currentSpeed = location.speed > 0 ? location.speed * 3.6 : 0
+        currentAltitude = location.altitude
+        print("[Location] Update: Lat=\(location.coordinate.latitude), Lon=\(location.coordinate.longitude), Speed=\(currentSpeed)km/h")
     }
 
-    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            self.currentHeading = newHeading.trueHeading >= 0 ? newHeading.trueHeading : newHeading.magneticHeading
-        }
+    func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {
+        currentHeading = newHeading.trueHeading >= 0 ? newHeading.trueHeading : newHeading.magneticHeading
     }
 
-    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            print("[Location] ❌ Location error: \(error.localizedDescription)")
-            self.logLocation("❌ Location error: \(error.localizedDescription)")
-            self.isLocationAvailable = false
-        }
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        print("[Location] ❌ Location error: \(error.localizedDescription)")
+        logLocation("❌ Location error: \(error.localizedDescription)")
+        isLocationAvailable = false
     }
 
     var locationString: String {

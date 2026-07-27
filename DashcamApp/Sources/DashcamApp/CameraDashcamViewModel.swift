@@ -356,10 +356,6 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
     }
 
     private func adjustFrameRates() {
-        let thermalFPS = systemPressureMonitor.recommendedFrameRate
-        let powerModeFPS = lowPowerModeMonitor.recommendedFrameRate
-        let effectiveFPS = min(thermalFPS, powerModeFPS)
-
         // Frame rate is now managed by MultiCameraSessionManager
         // Individual frame rate adjustments are no longer supported
     }
