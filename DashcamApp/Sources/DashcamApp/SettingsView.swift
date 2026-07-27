@@ -935,6 +935,10 @@ struct SettingsView: View {
                                         migrationMessage = "Your existing recordings will be migrated to the iCloud folder (local only).\n\nFiles persist even if app is uninstalled, with no cloud upload or cellular data usage."
                                         showMigrationAlert = true
                                         StorageLocationManager.shared.migrateRecordings(from: oldLocation)
+                                    } else if oldLocation != location && location == .iCloudLocalBackup {
+                                        migrationMessage = "Your existing recordings will be migrated to the protected iCloud folder.\n\nFiles are protected locally AND automatically backed up to iCloud Drive for redundancy."
+                                        showMigrationAlert = true
+                                        StorageLocationManager.shared.migrateRecordings(from: oldLocation)
                                     } else if oldLocation != location && location == .filesApp {
                                         migrationMessage = "Your existing recordings will be migrated to the Files app folder.\n\nAccess them in the Files app > On My iPhone > Dashcam > Dashcam Recordings."
                                         showMigrationAlert = true
@@ -1031,6 +1035,23 @@ struct SettingsView: View {
                                 .padding(.vertical, 8)
                                 .background(Color.green.opacity(0.1))
                                 .cornerRadius(6)
+                            } else if selectedStorageLocation == .iCloudLocalBackup {
+                                VStack(spacing: 8) {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundColor(.green)
+                                        Text("Local + Cloud backup protection")
+                                            .font(.caption)
+                                            .foregroundColor(.green)
+                                    }
+                                    Text("Files are protected locally in iCloud folder and automatically backed up to iCloud Drive. Best protection with redundancy on two locations.")
+                                        .font(.caption2)
+                                        .foregroundColor(.gray)
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color.green.opacity(0.1))
+                                .cornerRadius(6)
                             } else {
                                 HStack(spacing: 8) {
                                     Image(systemName: "checkmark.circle.fill")
@@ -1058,6 +1079,11 @@ struct SettingsView: View {
                                 .padding(.top, 4)
                         } else if selectedStorageLocation == .iCloudLocal {
                             Text("Files stored locally in iCloud folder - accessible via Xcode or recovered after reinstall")
+                                .font(.caption2)
+                                .foregroundColor(.blue)
+                                .padding(.top, 4)
+                        } else if selectedStorageLocation == .iCloudLocalBackup {
+                            Text("Files protected locally AND backed up to iCloud. Enable iCloud in Settings > [Your Name] > iCloud > Dashcam App")
                                 .font(.caption2)
                                 .foregroundColor(.blue)
                                 .padding(.top, 4)

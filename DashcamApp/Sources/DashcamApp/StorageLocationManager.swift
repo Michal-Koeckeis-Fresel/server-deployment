@@ -6,6 +6,7 @@ enum StorageLocation: String, CaseIterable {
     case iCloud = "iCloud Drive"
     case iCloudWiFiOnly = "iCloud Drive (Wi-Fi Only)"
     case iCloudLocal = "iCloud Folder (Local Only)"
+    case iCloudLocalBackup = "iCloud Folder with Cloud Backup"
     case filesApp = "Files App Folder"
 
     var displayName: String {
@@ -22,6 +23,8 @@ enum StorageLocation: String, CaseIterable {
             return "Stores in iCloud but only syncs over Wi-Fi. Prevents cellular data usage."
         case .iCloudLocal:
             return "Stores in iCloud folder without uploading. Persists but no cellular data used."
+        case .iCloudLocalBackup:
+            return "Stores locally in iCloud folder and automatically backs up to iCloud Drive."
         case .filesApp:
             return "Organized folder in Files app. Access via Files, iCloud Drive, or Mac."
         }
@@ -37,6 +40,8 @@ enum StorageLocation: String, CaseIterable {
             return "✅ Files sync to iCloud but only over Wi-Fi to save cellular data."
         case .iCloudLocal:
             return "✅ Files persist but stay local - no cloud sync or cellular data used."
+        case .iCloudLocalBackup:
+            return "✅ Protected locally + auto-backed up to iCloud. Double protection."
         case .filesApp:
             return "✅ Files persist in Files app folder. Accessible after uninstall."
         }
@@ -129,6 +134,27 @@ class StorageLocationManager {
                 return nil
             }
 
+        case .iCloudLocalBackup:
+            guard let iCloudContainerURL = fileManager.url(
+                forUbiquityContainerIdentifier: nil
+            ) else {
+                return nil
+            }
+
+            let dashcamFolder = iCloudContainerURL.appendingPathComponent("Dashcam Recordings Protected", isDirectory: true)
+
+            do {
+                try fileManager.createDirectory(
+                    at: dashcamFolder,
+                    withIntermediateDirectories: true,
+                    attributes: nil
+                )
+                return dashcamFolder
+            } catch {
+                print("Failed to create iCloud protected directory: \(error)")
+                return nil
+            }
+
         case .filesApp:
             guard let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
                 return nil
@@ -169,6 +195,32 @@ class StorageLocationManager {
 
         _ = semaphore.wait(timeout: .now() + 1.0)
         return isWiFi
+    }
+
+    func getBackupURL() -> URL? {
+        guard selectedLocation == .iCloudLocalBackup else {
+            return nil
+        }
+
+        guard let iCloudContainerURL = fileManager.url(
+            forUbiquityContainerIdentifier: nil
+        ) else {
+            return nil
+        }
+
+        let backupFolder = iCloudContainerURL.appendingPathComponent("Dashcam Recordings Backup", isDirectory: true)
+
+        do {
+            try fileManager.createDirectory(
+                at: backupFolder,
+                withIntermediateDirectories: true,
+                attributes: nil
+            )
+            return backupFolder
+        } catch {
+            print("Failed to create iCloud backup directory: \(error)")
+            return nil
+        }
     }
 
     func getStorageInfo() -> (used: Double, location: String) {
@@ -247,6 +299,14 @@ class StorageLocationManager {
                 return nil
             }
             return iCloudContainerURL.appendingPathComponent("Dashcam Recordings Local", isDirectory: true)
+
+        case .iCloudLocalBackup:
+            guard let iCloudContainerURL = fileManager.url(
+                forUbiquityContainerIdentifier: nil
+            ) else {
+                return nil
+            }
+            return iCloudContainerURL.appendingPathComponent("Dashcam Recordings Protected", isDirectory: true)
 
         case .filesApp:
             return fileManager.urls(for: .documentDirectory, in: .userDomainMask).first
