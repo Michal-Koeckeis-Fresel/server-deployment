@@ -194,7 +194,7 @@ class WatchConnectivityManager: NSObject, ObservableObject, WCSessionDelegate {
         sendToWatch(data)
     }
 
-    private func sendAlert(_ alert: WatchAlert, with data: [String: Any]) {
+    func sendAlert(_ alert: WatchAlert, with data: [String: Any]) {
         DispatchQueue.main.async {
             self.watchAlertLog.append(alert)
             if self.watchAlertLog.count > self.alertMaxSize {
