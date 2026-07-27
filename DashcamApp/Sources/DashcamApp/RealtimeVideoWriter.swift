@@ -121,9 +121,9 @@ class RealtimeVideoWriter {
         let composited = textCIImage.composited(over: ciImage)
 
         var outputBuffer: CVPixelBuffer?
-        CVPixelBufferPoolCreatePixelBuffer(nil, CVPixelBufferPoolGetPixelBufferType(
-            (pixelBufferAdapter?.pixelBufferPool)!
-        ) as CVPixelBufferPool, &outputBuffer)
+        if let pool = pixelBufferAdapter?.pixelBufferPool {
+            CVPixelBufferPoolCreatePixelBuffer(nil, pool, &outputBuffer)
+        }
 
         if let outputBuffer = outputBuffer {
             ciContext.render(composited, to: outputBuffer)
