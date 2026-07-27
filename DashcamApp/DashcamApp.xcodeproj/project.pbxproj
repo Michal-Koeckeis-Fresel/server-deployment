@@ -101,7 +101,7 @@
 		R00000000002 = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Resources/Assets.xcassets; sourceTree = "<group>"; };
 		R00000000004 = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = Resources/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		P00000000001 = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = SOURCE_ROOT; };
-		P00000000002 = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DashcamApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		P00000000002 = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Dcam.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -180,8 +180,8 @@
 			);
 			dependencies = (
 			);
-			name = DashcamApp;
-			productName = DashcamApp;
+			name = Dcam;
+			productName = Dcam;
 			productReference = P00000000002;
 			productType = "com.apple.product-type.application";
 		};
@@ -375,8 +375,8 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.koeckeis.dashcam;
-				PRODUCT_NAME = DashcamApp;
+				PRODUCT_BUNDLE_IDENTIFIER = com.koeckeis.dcam;
+				PRODUCT_NAME = Dcam;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
 			};
@@ -400,8 +400,8 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.koeckeis.dashcam;
-				PRODUCT_NAME = DashcamApp;
+				PRODUCT_BUNDLE_IDENTIFIER = com.koeckeis.dcam;
+				PRODUCT_NAME = Dcam;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
 			};
