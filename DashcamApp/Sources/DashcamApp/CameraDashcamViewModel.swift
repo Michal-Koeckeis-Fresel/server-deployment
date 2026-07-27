@@ -147,22 +147,30 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         let capabilityChecker = CameraCapabilityChecker.shared
         capabilityChecker.printCapabilitiesReport()
 
+        print("[ViewModel] Initializing cameras...")
         for position in CameraPosition.allCases {
+            print("[ViewModel] Checking capabilities for \(position.rawValue)")
             let capabilities = capabilityChecker.checkCapabilities(for: position)
 
             if !capabilities.isAvailable {
+                print("[ViewModel] ⚠️ \(position.rawValue) not available")
                 cameraStatus[position] = "Unavailable"
                 continue
             }
 
+            print("[ViewModel] ✅ \(position.rawValue) available, attempting setup...")
             let camera = CameraRecorder(position: position)
             if camera.setupSession() {
                 cameras[position] = camera
                 cameraStatus[position] = camera.getSessionStatus()
+                print("[ViewModel] ✅ \(position.rawValue) setup successful, added to cameras")
             } else {
                 cameraStatus[position] = "Setup Failed"
+                print("[ViewModel] ❌ \(position.rawValue) setup failed")
             }
         }
+        print("[ViewModel] Camera initialization complete. Total cameras: \(cameras.count)")
+        print("[ViewModel] Camera positions in dictionary: \(cameras.keys.map { $0.rawValue })")
     }
 
     func setupCameras() {
@@ -224,11 +232,15 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         }
 
         chunkURLs.removeAll()
+        print("[Recording] Starting recording on \(cameras.count) cameras")
         for (position, camera) in cameras {
             guard camera.captureSession?.isRunning == true else {
+                print("[Recording] ⚠️ Session not running for \(position.rawValue)")
                 cameraStatus[position] = "Error"
                 continue
             }
+
+            print("[Recording] 🎥 Starting recording for \(position.rawValue)")
 
             if let device = AVCaptureDevice.default(position.deviceType, for: .video, position: position.position) {
                 nightModeManager.enableNightMode(for: device)
@@ -238,6 +250,7 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
             let fileName = "dashcam_\(timestamp)_\(position.filePrefix)_chunk_0001.mov"
             let outputURL = recordingsPath.appendingPathComponent(fileName)
             chunkURLs[position] = outputURL
+            print("[Recording] File path: \(fileName)")
 
             let watermarkGenerator = WatermarkTextGenerator(
                 fpsCounter: fpsCounter,
@@ -249,6 +262,7 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
             cameras[position] = camera
             cameraStatus[position] = "Recording"
         }
+        print("[Recording] Recording started on \(chunkURLs.count) cameras")
 
         recordingStartTime = Date()
         chunkStartTime = Date()

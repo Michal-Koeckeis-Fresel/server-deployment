@@ -2,7 +2,7 @@ import AVFoundation
 
 enum CameraPosition: String, CaseIterable {
     case backWide = "Back Wide"
-    case backTelephoto = "Back Zoom"
+    case backTelephoto = "Back Telephoto"
 
     var position: AVCaptureDevice.Position {
         return .back
@@ -99,19 +99,30 @@ class CameraRecorder {
     }
 
     private func configureSession(_ session: AVCaptureSession) throws {
+        print("[CameraInfo] \(position.rawValue): Starting configuration")
         session.beginConfiguration()
 
+        print("[CameraInfo] \(position.rawValue): Validating preset")
         try validatePreset()
         session.sessionPreset = .high
 
+        print("[CameraInfo] \(position.rawValue): Finding video device")
         let videoDevice = try findAndConfigureVideoDevice()
+
+        print("[CameraInfo] \(position.rawValue): Configuring video input")
         try configureVideoInput(videoDevice, to: session)
+
+        print("[CameraInfo] \(position.rawValue): Configuring video output")
         try configureVideoOutput(to: session, with: videoDevice)
 
+        print("[CameraInfo] \(position.rawValue): Committing configuration")
         session.commitConfiguration()
 
+        print("[CameraInfo] \(position.rawValue): Starting session on queue")
         sessionQueue.async {
+            print("[CameraInfo] \(self.position.rawValue): Session starting...")
             session.startRunning()
+            print("[CameraInfo] \(self.position.rawValue): Session started, isRunning=\(session.isRunning)")
         }
     }
 
@@ -123,18 +134,25 @@ class CameraRecorder {
     }
 
     private func findAndConfigureVideoDevice() throws -> AVCaptureDevice {
+        print("[CameraInfo] Looking for \(position.rawValue) - deviceType: \(position.deviceType), position: \(position.position)")
+
         guard let videoDevice = AVCaptureDevice.default(
             position.deviceType,
             for: .video,
             position: position.position
         ) else {
+            print("[CameraInfo] ❌ Failed to find device for \(position.rawValue)")
             throw CameraSetupError.deviceNotAvailable
         }
+
+        print("[CameraInfo] ✅ Found device for \(position.rawValue): \(videoDevice.localizedName)")
 
         if !videoDevice.isConnected {
+            print("[CameraInfo] ⚠️ Device not connected for \(position.rawValue)")
             throw CameraSetupError.deviceNotAvailable
         }
 
+        print("[CameraInfo] ✅ Device connected: \(videoDevice.localizedName)")
         return videoDevice
     }
 
@@ -150,29 +168,46 @@ class CameraRecorder {
     }
 
     private func configureVideoOutput(to session: AVCaptureSession, with device: AVCaptureDevice) throws {
+        print("[CameraInfo] \(position.rawValue): Creating MovieFileOutput")
         let movieOutput = AVCaptureMovieFileOutput()
 
         guard session.canAddOutput(movieOutput) else {
+            print("[CameraInfo] \(position.rawValue): ❌ Cannot add MovieFileOutput to session")
             throw CameraSetupError.outputCreationFailed
         }
 
         session.addOutput(movieOutput)
         self.videoOutput = movieOutput
+        print("[CameraInfo] \(position.rawValue): ✅ MovieFileOutput added")
 
+        print("[CameraInfo] \(position.rawValue): Configuring video connection")
         try configureVideoConnection(for: movieOutput)
+
+        print("[CameraInfo] \(position.rawValue): Configuring codec")
         configureVideoCodec(for: movieOutput)
+
+        print("[CameraInfo] \(position.rawValue): Configuring stabilization")
         configureVideoStabilization(for: movieOutput)
+
+        print("[CameraInfo] \(position.rawValue): Configuring HDR")
         configureHDRVideo(for: movieOutput, device: device)
+
+        print("[CameraInfo] \(position.rawValue): Configuring focus and exposure")
         configureFocusAndExposure(device: device)
+
+        print("[CameraInfo] \(position.rawValue): ✅ Video output fully configured")
     }
 
     private func configureVideoConnection(for output: AVCaptureMovieFileOutput) throws {
         guard let videoConnection = output.connection(with: .video) else {
+            print("[CameraInfo] \(position.rawValue): ❌ No video connection available")
             throw CameraSetupError.configurationFailed
         }
+        print("[CameraInfo] \(position.rawValue): ✅ Video connection found")
 
         if videoConnection.isVideoStabilizationSupported {
             videoConnection.preferredVideoStabilizationMode = .cinematic
+            print("[CameraInfo] \(position.rawValue): ✅ Stabilization enabled")
         }
 
         // Set video orientation to portrait (0 degrees)
@@ -185,8 +220,10 @@ class CameraRecorder {
         videoConnection.isVideoMirrored = false
 
         if !videoConnection.isActive {
+            print("[CameraInfo] \(position.rawValue): ❌ Video connection not active")
             throw CameraSetupError.configurationFailed
         }
+        print("[CameraInfo] \(position.rawValue): ✅ Video connection configured")
     }
 
     private func configureVideoCodec(for output: AVCaptureMovieFileOutput) {
