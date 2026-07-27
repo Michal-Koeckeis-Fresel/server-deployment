@@ -170,8 +170,12 @@ struct CameraRecorder {
             videoConnection.preferredVideoStabilizationMode = .cinematic
         }
 
-        // Set video orientation
-        videoConnection.videoOrientation = .portrait
+        // Set video orientation to portrait (0 degrees)
+        if #available(iOS 17.0, *) {
+            videoConnection.videoRotationAngle = 0
+        } else {
+            videoConnection.videoOrientation = .portrait
+        }
 
         videoConnection.isVideoMirrored = (position == .frontWide || position == .frontTelephoto)
 
@@ -199,11 +203,7 @@ struct CameraRecorder {
 
     private func configureHDRVideo(for output: AVCaptureMovieFileOutput, device: AVCaptureDevice) {
         if #available(iOS 17.0, *) {
-            // Check if device formats support HDR by checking for HLG color space
-            let supportsHDR = device.formats.contains { format in
-                format.supportedColorSpaces.contains(.hlg)
-            }
-            guard supportsHDR else { return }
+            guard device.isVideoHDRSupported else { return }
 
             do {
                 try device.lockForConfiguration()

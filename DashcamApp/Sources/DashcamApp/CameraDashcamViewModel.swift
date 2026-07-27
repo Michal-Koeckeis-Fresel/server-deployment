@@ -552,7 +552,7 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
     }
 
     deinit {
-        for (_, camera) in cameras {
+        for (_, var camera) in cameras {
             camera.cleanup()
         }
     }
