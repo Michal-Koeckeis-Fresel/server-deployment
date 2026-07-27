@@ -43,7 +43,7 @@ class VideoWatermarkProcessor {
                     exporter.outputURL = outputURL
 
                     do {
-                        try await exporter.export(to: outputURL, as: .mov, videoComposition: videoComposition)
+                        try await exporter.export(to: outputURL, as: .mov)
                         completion(true, nil)
                     } catch {
                         completion(false, error)
