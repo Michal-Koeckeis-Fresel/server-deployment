@@ -104,7 +104,7 @@ struct MultiCameraPreviewView: View {
 
                             VStack(spacing: 12) {
                                 CameraSpecCard(
-                                    title: "Front Wide",
+                                    title: "Back Wide",
                                     specs: [
                                         ("Type", "Wide-angle Camera"),
                                         ("Focal Length", "26mm equivalent"),
@@ -115,7 +115,7 @@ struct MultiCameraPreviewView: View {
                                 )
 
                                 CameraSpecCard(
-                                    title: "Front Zoom",
+                                    title: "Back Zoom",
                                     specs: [
                                         ("Type", "Telephoto Camera"),
                                         ("Focal Length", "77mm equivalent"),
@@ -168,7 +168,7 @@ struct CameraPreviewCard: View {
         VStack(spacing: 12) {
             // Camera Icon / Placeholder
             VStack(spacing: 8) {
-                Image(systemName: position == .frontWide ? "camera.aperture" : "magnifyingglass")
+                Image(systemName: position == .backWide ? "camera.aperture" : "magnifyingglass")
                     .font(.system(size: 40))
                     .foregroundColor(.blue)
                     .padding(20)
@@ -192,7 +192,7 @@ struct CameraPreviewCard: View {
                     Text("Resolution")
                         .font(.caption)
                         .foregroundColor(.gray)
-                    Text(position == .frontWide ? "4K" : "FHD")
+                    Text(position == .backWide ? "4K" : "FHD")
                         .font(.caption)
                         .fontWeight(.semibold)
                         .foregroundColor(.white)

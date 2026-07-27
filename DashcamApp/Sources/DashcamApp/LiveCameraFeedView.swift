@@ -77,7 +77,7 @@ struct SideBySideCameraView: View {
 
     var body: some View {
         VStack(spacing: 2) {
-            // Front Wide Camera
+            // Back Wide Camera
             ZStack {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(Color.gray.opacity(0.2))
@@ -87,7 +87,7 @@ struct SideBySideCameraView: View {
                         .font(.system(size: 48))
                         .foregroundColor(.blue)
 
-                    Text("Front Wide")
+                    Text("Back Wide")
                         .font(.headline)
                         .foregroundColor(.white)
 
@@ -120,11 +120,11 @@ struct SideBySideCameraView: View {
                             Text("Status")
                                 .font(.caption)
                                 .foregroundColor(.gray)
-                            Text(viewModel.cameraStatus[.frontWide] ?? "Unknown")
+                            Text(viewModel.cameraStatus[.backWide] ?? "Unknown")
                                 .font(.caption)
                                 .fontWeight(.semibold)
                                 .foregroundColor(
-                                    (viewModel.cameraStatus[.frontWide] ?? "") == "Recording" ? .red : .green
+                                    (viewModel.cameraStatus[.backWide] ?? "") == "Recording" ? .red : .green
                                 )
                         }
                     }
@@ -136,7 +136,7 @@ struct SideBySideCameraView: View {
             }
             .padding(8)
 
-            // Front Zoom Camera
+            // Back Zoom Camera
             ZStack {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(Color.gray.opacity(0.2))
@@ -146,7 +146,7 @@ struct SideBySideCameraView: View {
                         .font(.system(size: 48))
                         .foregroundColor(.purple)
 
-                    Text("Front Zoom")
+                    Text("Back Zoom")
                         .font(.headline)
                         .foregroundColor(.white)
 
@@ -179,11 +179,11 @@ struct SideBySideCameraView: View {
                             Text("Status")
                                 .font(.caption)
                                 .foregroundColor(.gray)
-                            Text(viewModel.cameraStatus[.frontTelephoto] ?? "Unknown")
+                            Text(viewModel.cameraStatus[.backTelephoto] ?? "Unknown")
                                 .font(.caption)
                                 .fontWeight(.semibold)
                                 .foregroundColor(
-                                    (viewModel.cameraStatus[.frontTelephoto] ?? "") == "Recording" ? .red : .green
+                                    (viewModel.cameraStatus[.backTelephoto] ?? "") == "Recording" ? .red : .green
                                 )
                         }
                     }
@@ -200,7 +200,7 @@ struct SideBySideCameraView: View {
 }
 
 struct FullScreenCameraView: View {
-    @State private var selectedCamera: CameraPosition = .frontWide
+    @State private var selectedCamera: CameraPosition = .backWide
     @EnvironmentObject var viewModel: CameraDashcamViewModel
 
     var body: some View {
@@ -212,10 +212,10 @@ struct FullScreenCameraView: View {
 
                 VStack(spacing: 12) {
                     Image(
-                        systemName: selectedCamera == .frontWide ? "camera.aperture" : "magnifyingglass"
+                        systemName: selectedCamera == .backWide ? "camera.aperture" : "magnifyingglass"
                     )
                     .font(.system(size: 64))
-                    .foregroundColor(selectedCamera == .frontWide ? .blue : .purple)
+                    .foregroundColor(selectedCamera == .backWide ? .blue : .purple)
 
                     Text(selectedCamera.rawValue)
                         .font(.title2)
@@ -236,16 +236,16 @@ struct FullScreenCameraView: View {
             VStack(spacing: 10) {
                 SpecRow(
                     label: "Resolution",
-                    value: selectedCamera == .frontWide ? "4K (3840x2160)" : "Full HD (1920x1080)"
+                    value: selectedCamera == .backWide ? "4K (3840x2160)" : "Full HD (1920x1080)"
                 )
                 SpecRow(label: "Frame Rate", value: "30 fps")
                 SpecRow(
                     label: "Focal Length",
-                    value: selectedCamera == .frontWide ? "26mm equivalent" : "77mm equivalent"
+                    value: selectedCamera == .backWide ? "26mm equivalent" : "77mm equivalent"
                 )
                 SpecRow(
                     label: "Field of View",
-                    value: selectedCamera == .frontWide ? "~75°" : "~26°"
+                    value: selectedCamera == .backWide ? "~75°" : "~26°"
                 )
                 SpecRow(label: "Stabilization", value: "Cinematic")
             }
@@ -275,11 +275,11 @@ struct FullScreenCameraView: View {
 }
 
 struct PiPCameraLayoutView: View {
-    @State private var mainCamera: CameraPosition = .frontWide
+    @State private var mainCamera: CameraPosition = .backWide
     @EnvironmentObject var viewModel: CameraDashcamViewModel
 
     var secondaryCamera: CameraPosition {
-        mainCamera == .frontWide ? .frontTelephoto : .frontWide
+        mainCamera == .backWide ? .backTelephoto : .backWide
     }
 
     var body: some View {
@@ -292,10 +292,10 @@ struct PiPCameraLayoutView: View {
 
                     VStack(spacing: 12) {
                         Image(
-                            systemName: mainCamera == .frontWide ? "camera.aperture" : "magnifyingglass"
+                            systemName: mainCamera == .backWide ? "camera.aperture" : "magnifyingglass"
                         )
                         .font(.system(size: 56))
-                        .foregroundColor(mainCamera == .frontWide ? .blue : .purple)
+                        .foregroundColor(mainCamera == .backWide ? .blue : .purple)
 
                         Text(mainCamera.rawValue)
                             .font(.headline)
@@ -336,10 +336,10 @@ struct PiPCameraLayoutView: View {
 
                             VStack(spacing: 8) {
                                 Image(
-                                    systemName: secondaryCamera == .frontWide ? "camera.aperture" : "magnifyingglass"
+                                    systemName: secondaryCamera == .backWide ? "camera.aperture" : "magnifyingglass"
                                 )
                                 .font(.system(size: 32))
-                                .foregroundColor(secondaryCamera == .frontWide ? .blue : .purple)
+                                .foregroundColor(secondaryCamera == .backWide ? .blue : .purple)
 
                                 Text(secondaryCamera.rawValue)
                                     .font(.caption)
