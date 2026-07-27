@@ -33,21 +33,40 @@ class VideoWatermarkProcessor {
 
                 try FileManager.default.removeItem(at: outputURL)
 
-                guard let exporter = AVAssetExportSession(asset: composition, presetName: AVAssetExportPreset1920x1080) else {
-                    completion(false, NSError(domain: "VideoWatermarkProcessor", code: -3, userInfo: [NSLocalizedDescriptionKey: "Cannot create exporter"]))
-                    return
-                }
-                exporter.videoComposition = videoComposition
-                exporter.outputFileType = .mov
-                exporter.outputURL = outputURL
+                if #available(iOS 18.0, *) {
+                    guard let exporter = AVAssetExportSession(asset: composition, presetName: AVAssetExportPreset1920x1080) else {
+                        completion(false, NSError(domain: "VideoWatermarkProcessor", code: -3, userInfo: [NSLocalizedDescriptionKey: "Cannot create exporter"]))
+                        return
+                    }
+                    exporter.videoComposition = videoComposition
+                    exporter.outputFileType = .mov
+                    exporter.outputURL = outputURL
 
-                exporter.exportAsynchronously {
-                    DispatchQueue.main.async {
-                        if exporter.status == .completed {
-                            completion(true, nil)
-                        } else {
-                            let error = NSError(domain: "VideoWatermarkProcessor", code: Int(exporter.status.rawValue), userInfo: [NSLocalizedDescriptionKey: "Export failed: \(exporter.status)"])
-                            completion(false, error)
+                    do {
+                        try await exporter.export(to: outputURL, as: .mov, videoComposition: videoComposition)
+                        completion(true, nil)
+                    } catch {
+                        completion(false, error)
+                    }
+                } else {
+                    guard let exporter = AVAssetExportSession(asset: composition, presetName: AVAssetExportPreset1920x1080) else {
+                        completion(false, NSError(domain: "VideoWatermarkProcessor", code: -3, userInfo: [NSLocalizedDescriptionKey: "Cannot create exporter"]))
+                        return
+                    }
+                    exporter.videoComposition = videoComposition
+                    exporter.outputFileType = .mov
+                    exporter.outputURL = outputURL
+
+                    exporter.exportAsynchronously {
+                        DispatchQueue.main.async {
+                            if exporter.status == .completed {
+                                completion(true, nil)
+                            } else if let error = exporter.error {
+                                completion(false, error)
+                            } else {
+                                let error = NSError(domain: "VideoWatermarkProcessor", code: -4, userInfo: [NSLocalizedDescriptionKey: "Export failed"])
+                                completion(false, error)
+                            }
                         }
                     }
                 }
