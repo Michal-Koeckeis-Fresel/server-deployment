@@ -284,10 +284,8 @@ class MultiCameraSessionManager: NSObject {
         // Find a suitable format for 1920x1080 at 30fps
         guard let format = device.formats.first(where: { format in
             let formatDesc = format.formatDescription
-            if let dimensions = CMVideoFormatDescriptionGetDimensions(formatDesc) {
-                return dimensions.width == 1920 && dimensions.height == 1080
-            }
-            return false
+            let dimensions = CMVideoFormatDescriptionGetDimensions(formatDesc)
+            return dimensions.width == 1920 && dimensions.height == 1080
         }) else {
             print("[MultiCameraSession] ⚠️ Could not find 1920x1080 format, using device default")
             return
