@@ -1,6 +1,7 @@
 import Foundation
 
-class WatermarkTextGenerator {
+@MainActor
+final class WatermarkTextGenerator {
     private let fpsCounter: FPSCounter
     private let batteryManager: BatteryMonitorManager
     private let locationManager: LocationManager
