@@ -119,12 +119,9 @@ class CameraRecorderDelegate: NSObject, AVCaptureVideoDataOutputSampleBufferDele
 
 class CameraRecorder {
     let position: CameraPosition
-    var captureSession: AVCaptureSession?
     var videoOutput: AVCaptureMovieFileOutput?
     var videoDataOutput: AVCaptureVideoDataOutput?
     var audioDataOutput: AVCaptureAudioDataOutput?
-    var videoInput: AVCaptureDeviceInput?
-    var audioInput: AVCaptureDeviceInput?
     var realtimeVideoWriter: RealtimeVideoWriter?
     var watermarkGenerator: WatermarkTextGenerator?
     var recorderDelegate: CameraRecorderDelegate?
@@ -132,242 +129,58 @@ class CameraRecorder {
     var currentURL: URL?
     var isAvailable: Bool = false
     var usingWatermark: Bool = false
-    private let sessionQueue = DispatchQueue(label: "com.dashcam.camera.\(UUID().uuidString)", attributes: [], autoreleaseFrequency: .workItem)
-    private let sessionStartedSemaphore = DispatchSemaphore(value: 0)
+
+    private let multiCamSession = MultiCameraSessionManager.shared
 
     init(position: CameraPosition) {
         self.position = position
     }
 
     func setupSession() -> Bool {
-        let session = AVCaptureSession()
+        print("[CameraRecorder] ========== SETTING UP CAMERA: \(position.rawValue) ==========")
 
         do {
-            try self.configureSession(session)
-            self.captureSession = session
+            // Add camera to shared multi-camera session
+            try multiCamSession.addCamera(position)
+            print("[CameraRecorder] ✅ \(position.rawValue) added to multi-camera session")
+
+            // Configure this camera's outputs
+            try configureOutputs()
+            print("[CameraRecorder] ✅ \(position.rawValue) outputs configured")
+
             self.isAvailable = true
+            print("[CameraRecorder] ✅ \(position.rawValue) setup complete - Hardware cost: \(String(format: "%.2f", multiCamSession.hardwareCost))")
             return true
         } catch {
-            print("Camera setup error for \(self.position.rawValue): \(error)")
-            self.captureSession = session
+            print("[CameraRecorder] ❌ Camera setup error for \(self.position.rawValue): \(error)")
             self.isAvailable = false
             return false
         }
     }
 
-    private func configureSession(_ session: AVCaptureSession) throws {
-        print("[CameraInfo] \(position.rawValue): Starting configuration")
-        session.beginConfiguration()
+    private func configureOutputs() throws {
+        print("[CameraRecorder] \(position.rawValue): Configuring outputs for multi-camera session")
 
-        print("[CameraInfo] \(position.rawValue): Validating preset")
-        try validatePreset()
-        session.sessionPreset = .high
+        // Add movie file output
+        try multiCamSession.addMovieFileOutput(for: position)
+        self.videoOutput = multiCamSession.getMovieFileOutput(for: position)
+        print("[CameraRecorder] ✅ Movie file output configured")
 
-        print("[CameraInfo] \(position.rawValue): Finding video device")
-        let videoDevice = try findAndConfigureVideoDevice()
+        // Add video data output with recorder delegate if watermarking is enabled
+        if let recorderDelegate = recorderDelegate {
+            try multiCamSession.addVideoDataOutput(for: position, delegate: recorderDelegate)
+            self.videoDataOutput = multiCamSession.getVideoDataOutput(for: position)
+            print("[CameraRecorder] ✅ Video data output configured for watermarking")
 
-        print("[CameraInfo] \(position.rawValue): Configuring video input")
-        try configureVideoInput(videoDevice, to: session)
-
-        print("[CameraInfo] \(position.rawValue): Configuring video output")
-        try configureVideoOutput(to: session, with: videoDevice)
-
-        print("[CameraInfo] \(position.rawValue): Committing configuration")
-        session.commitConfiguration()
-
-        print("[CameraInfo] \(position.rawValue): Starting session on queue")
-        sessionQueue.async {
-            print("[CameraInfo] \(self.position.rawValue): Session starting...")
-            session.startRunning()
-            let isRunning = session.isRunning
-            print("[CameraInfo] \(self.position.rawValue): Session started, isRunning=\(isRunning)")
-            if !isRunning {
-                print("[CameraInfo] ⚠️ \(self.position.rawValue): Session failed to start running. Check if device is available and not already in use.")
-            }
-            // Signal that session has started
-            self.sessionStartedSemaphore.signal()
+            try multiCamSession.addAudioDataOutput(for: position, delegate: recorderDelegate)
+            self.audioDataOutput = multiCamSession.getAudioDataOutput(for: position)
+            print("[CameraRecorder] ✅ Audio data output configured")
         }
     }
 
-    private func validatePreset() throws {
-        let session = AVCaptureSession()
-        if !session.canSetSessionPreset(.high) {
-            throw CameraSetupError.configurationFailed
-        }
-    }
-
-    private func findAndConfigureVideoDevice() throws -> AVCaptureDevice {
-        print("[CameraInfo] Looking for \(position.rawValue) - deviceType: \(position.deviceType), position: \(position.position)")
-
-        guard let videoDevice = AVCaptureDevice.default(
-            position.deviceType,
-            for: .video,
-            position: position.position
-        ) else {
-            print("[CameraInfo] ❌ Failed to find device for \(position.rawValue)")
-            throw CameraSetupError.deviceNotAvailable
-        }
-
-        print("[CameraInfo] ✅ Found device for \(position.rawValue): \(videoDevice.localizedName)")
-
-        if !videoDevice.isConnected {
-            print("[CameraInfo] ⚠️ Device not connected for \(position.rawValue)")
-            throw CameraSetupError.deviceNotAvailable
-        }
-
-        print("[CameraInfo] ✅ Device connected: \(videoDevice.localizedName)")
-        return videoDevice
-    }
-
-    private func configureVideoInput(_ device: AVCaptureDevice, to session: AVCaptureSession) throws {
-        print("[CameraInfo] \(position.rawValue): Creating video input from device: \(device.localizedName)")
-        let videoInput = try AVCaptureDeviceInput(device: device)
-        self.videoInput = videoInput
-        print("[CameraInfo] \(position.rawValue): Video input created successfully")
-
-        guard session.canAddInput(videoInput) else {
-            print("[CameraInfo] \(position.rawValue): ❌ Cannot add video input to session")
-            throw CameraSetupError.inputCreationFailed
-        }
-
-        session.addInput(videoInput)
-        print("[CameraInfo] \(position.rawValue): ✅ Video input added to session")
-    }
-
-    private func configureVideoOutput(to session: AVCaptureSession, with device: AVCaptureDevice) throws {
-        print("[CameraInfo] \(position.rawValue): Creating MovieFileOutput")
-        let movieOutput = AVCaptureMovieFileOutput()
-
-        guard session.canAddOutput(movieOutput) else {
-            print("[CameraInfo] \(position.rawValue): ❌ Cannot add MovieFileOutput to session")
-            throw CameraSetupError.outputCreationFailed
-        }
-
-        session.addOutput(movieOutput)
-        self.videoOutput = movieOutput
-        print("[CameraInfo] \(position.rawValue): ✅ MovieFileOutput added")
-
-        print("[CameraInfo] \(position.rawValue): Configuring video connection")
-        try configureVideoConnection(for: movieOutput)
-
-        print("[CameraInfo] \(position.rawValue): Configuring codec")
-        configureVideoCodec(for: movieOutput)
-
-        print("[CameraInfo] \(position.rawValue): Configuring stabilization")
-        configureVideoStabilization(for: movieOutput)
-
-        print("[CameraInfo] \(position.rawValue): Configuring HDR")
-        configureHDRVideo(for: movieOutput, device: device)
-
-        print("[CameraInfo] \(position.rawValue): Configuring focus and exposure")
-        configureFocusAndExposure(device: device)
-
-        print("[CameraInfo] \(position.rawValue): ✅ Video output fully configured")
-    }
-
-    private func configureVideoConnection(for output: AVCaptureMovieFileOutput) throws {
-        guard let videoConnection = output.connection(with: .video) else {
-            print("[CameraInfo] \(position.rawValue): ❌ No video connection available")
-            throw CameraSetupError.configurationFailed
-        }
-        print("[CameraInfo] \(position.rawValue): ✅ Video connection found")
-
-        if videoConnection.isVideoStabilizationSupported {
-            videoConnection.preferredVideoStabilizationMode = .cinematic
-            print("[CameraInfo] \(position.rawValue): ✅ Stabilization enabled")
-        }
-
-        // Set video orientation to portrait (0 degrees)
-        videoConnection.videoRotationAngle = 0
-
-        // Mirror front camera for natural recording appearance
-        videoConnection.isVideoMirrored = (position == .frontWide)
-
-        if !videoConnection.isActive {
-            print("[CameraInfo] \(position.rawValue): ❌ Video connection not active")
-            throw CameraSetupError.configurationFailed
-        }
-        print("[CameraInfo] \(position.rawValue): ✅ Video connection configured")
-    }
-
-    private func configureVideoCodec(for output: AVCaptureMovieFileOutput) {
-        let codecManager = VideoCodecManager.shared
-        let videoSettings = codecManager.getVideoSettings()
-
-        // Video codec settings are applied through the session preset.
-        // The settings dictionary is used for watermarked recording via RealtimeVideoWriter.
-        print("Video codec configured: \(videoSettings[AVVideoCodecKey] ?? "unknown")")
-    }
-
-    private func configureVideoStabilization(for output: AVCaptureMovieFileOutput) {
-        guard let connection = output.connection(with: .video) else { return }
-
-        if connection.isVideoStabilizationSupported {
-            connection.preferredVideoStabilizationMode = .cinematic
-        }
-    }
-
-    private func configureHDRVideo(for output: AVCaptureMovieFileOutput, device: AVCaptureDevice) {
-        do {
-            try device.lockForConfiguration()
-            defer { device.unlockForConfiguration() }
-            device.automaticallyAdjustsVideoHDREnabled = false
-            device.isVideoHDREnabled = true
-        } catch {
-            print("Warning: Could not enable HDR video: \(error)")
-        }
-    }
-
-    private func configureFocusAndExposure(device: AVCaptureDevice) {
-        do {
-            try device.lockForConfiguration()
-            defer { device.unlockForConfiguration() }
-
-            if device.isFocusModeSupported(.continuousAutoFocus) {
-                device.focusMode = .continuousAutoFocus
-            }
-
-            if device.isFocusPointOfInterestSupported {
-                device.focusPointOfInterest = CGPoint(x: 0.5, y: 0.5)
-            }
-
-            if device.isExposureModeSupported(.continuousAutoExposure) {
-                device.exposureMode = .continuousAutoExposure
-            }
-
-            if device.isExposurePointOfInterestSupported {
-                device.exposurePointOfInterest = CGPoint(x: 0.5, y: 0.5)
-            }
-
-            if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
-                device.whiteBalanceMode = .continuousAutoWhiteBalance
-            }
-
-            // Note: isAutoFocusSystemSupported was removed in iOS 18
-            // Continuous auto-focus is set above and should be sufficient
-
-            if device.isLowLightBoostSupported {
-                device.automaticallyEnablesLowLightBoostWhenAvailable = true
-            }
-
-            if device.isSubjectAreaChangeMonitoringEnabled == false {
-                device.isSubjectAreaChangeMonitoringEnabled = true
-            }
-        } catch {
-            print("Warning: Could not configure focus/exposure: \(error)")
-        }
-    }
 
     func startRecording(to url: URL, delegate: AVCaptureFileOutputRecordingDelegate, withWatermark watermarkGenerator: WatermarkTextGenerator? = nil) {
-        print("[Recording] Starting recording for \(position.rawValue)")
-
-        // Start recording synchronously - don't use sessionQueue to avoid potential deadlocks
-        guard let session = self.captureSession else {
-            print("[Recording] \(self.position.rawValue): ❌ No capture session")
-            return
-        }
-
-        print("[Recording] \(self.position.rawValue): Session isRunning=\(session.isRunning)")
+        print("[Recording] ========== STARTING RECORDING FOR \(position.rawValue) ==========")
 
         if let videoOutput = self.videoOutput, videoOutput.isRecording {
             videoOutput.stopRecording()
@@ -376,19 +189,20 @@ class CameraRecorder {
         self.currentURL = url
 
         if let watermarkGenerator = watermarkGenerator {
-            let recorderDelegate = CameraRecorderDelegate()
-            recorderDelegate.watermarkGenerator = watermarkGenerator
-            recorderDelegate.realtimeVideoWriter = self.realtimeVideoWriter
-            self.recorderDelegate = recorderDelegate
-
             self.setupWatermarkedRecording(to: url, delegate: delegate, watermarkGenerator: watermarkGenerator)
         } else if let videoOutput = self.videoOutput {
-            print("[Recording] \(self.position.rawValue): ✅ Starting MovieFileOutput recording")
+            print("[Recording] \(self.position.rawValue): ✅ Starting MovieFileOutput recording to \(url.lastPathComponent)")
             videoOutput.startRecording(to: url, recordingDelegate: delegate)
+        } else {
+            print("[Recording] \(self.position.rawValue): ❌ No video output available")
+            return
         }
 
+        // Start the shared multi-camera session
+        multiCamSession.startSession()
+
         self.isRecording = true
-        print("[Recording] \(self.position.rawValue): ✅ Recording started")
+        print("[Recording] \(self.position.rawValue): ✅ Recording started, hardware cost: \(String(format: "%.2f", multiCamSession.hardwareCost))")
     }
 
     private func setupWatermarkedRecording(to url: URL, delegate: AVCaptureFileOutputRecordingDelegate, watermarkGenerator: WatermarkTextGenerator) {
@@ -411,170 +225,62 @@ class CameraRecorder {
         ]
 
         do {
-            try writer.startRecording(to: url, videoSettings: videoSettings, audioSettings: audioSettings, sourceVideoTrack: videoInput)
+            try writer.startRecording(to: url, videoSettings: videoSettings, audioSettings: audioSettings, sourceVideoTrack: nil)
 
-            print("[Recording] \(position.rawValue): Waiting for session to be ready before setting up outputs...")
-            // Wait up to 3 seconds for session to start
-            let waitResult = sessionStartedSemaphore.wait(timeout: .now() + 3.0)
-            if waitResult == .timedOut {
-                print("[Recording] \(position.rawValue): ⚠️ Timeout waiting for session to start")
-            } else {
-                print("[Recording] \(position.rawValue): ✅ Session is ready, setting up outputs")
-            }
+            let recorderDelegate = CameraRecorderDelegate()
+            recorderDelegate.watermarkGenerator = watermarkGenerator
+            recorderDelegate.realtimeVideoWriter = self.realtimeVideoWriter
+            self.recorderDelegate = recorderDelegate
 
-            sessionQueue.async {
-                self.setupDataOutputs()
-            }
-
-            print("Watermarked recording started for \(position.rawValue)")
+            print("[Recording] \(position.rawValue): ✅ Watermarked recording started")
         } catch {
-            print("Failed to start watermarked recording: \(error)")
+            print("[Recording] \(position.rawValue): ❌ Failed to start watermarked recording: \(error)")
         }
-    }
-
-    private func setupDataOutputs() {
-        guard let session = captureSession else {
-            print("[Recording] ❌ \(position.rawValue): setupDataOutputs called but session is nil!")
-            return
-        }
-
-        print("[Recording] \(position.rawValue): ========== SETTING UP DATA OUTPUTS ==========")
-        print("[Recording] \(position.rawValue): Session running: \(session.isRunning)")
-        print("[Recording] \(position.rawValue): Recorder delegate: \(recorderDelegate != nil ? "set" : "nil")")
-
-        session.beginConfiguration()
-        print("[Recording] \(position.rawValue): Configuration begun")
-
-        let videoDataOutput = AVCaptureVideoDataOutput()
-        videoDataOutput.setSampleBufferDelegate(recorderDelegate, queue: sessionQueue)
-        videoDataOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
-        videoDataOutput.alwaysDiscardsLateVideoFrames = true
-        print("[Recording] \(position.rawValue): Video output created - format: 32BGRA, discard late frames: true")
-
-        if session.canAddOutput(videoDataOutput) {
-            session.addOutput(videoDataOutput)
-            self.videoDataOutput = videoDataOutput
-            print("[Recording] \(position.rawValue): ✅ Video output added to session")
-        } else {
-            print("[Recording] \(position.rawValue): ❌ Cannot add video output to session")
-        }
-
-        let audioDataOutput = AVCaptureAudioDataOutput()
-        audioDataOutput.setSampleBufferDelegate(recorderDelegate, queue: sessionQueue)
-        print("[Recording] \(position.rawValue): Audio output created")
-
-        if session.canAddOutput(audioDataOutput) {
-            session.addOutput(audioDataOutput)
-            self.audioDataOutput = audioDataOutput
-            print("[Recording] \(position.rawValue): ✅ Audio output added to session")
-        } else {
-            print("[Recording] \(position.rawValue): ❌ Cannot add audio output to session")
-        }
-
-        session.commitConfiguration()
-        print("[Recording] \(position.rawValue): Configuration committed")
-        print("[Recording] \(position.rawValue): ========== DATA OUTPUTS SETUP COMPLETE ==========")
     }
 
     func stopRecording() {
-        sessionQueue.async {
-            if let realtimeWriter = self.realtimeVideoWriter, self.usingWatermark {
-                if let videoDataOutput = self.videoDataOutput {
-                    self.captureSession?.removeOutput(videoDataOutput)
-                    self.videoDataOutput = nil
-                }
-                if let audioDataOutput = self.audioDataOutput {
-                    self.captureSession?.removeOutput(audioDataOutput)
-                    self.audioDataOutput = nil
-                }
+        print("[Recording] ========== STOPPING RECORDING FOR \(position.rawValue) ==========")
 
-                realtimeWriter.finishWriting { success, error in
-                    if success {
-                        print("Watermarked video saved successfully for \(self.position.rawValue)")
-                    } else if let error = error {
-                        print("Error saving watermarked video: \(error)")
-                    }
+        if let realtimeWriter = self.realtimeVideoWriter, self.usingWatermark {
+            realtimeWriter.finishWriting { success, error in
+                if success {
+                    print("[Recording] \(self.position.rawValue): ✅ Watermarked video saved successfully")
+                } else if let error = error {
+                    print("[Recording] \(self.position.rawValue): ❌ Error saving watermarked video: \(error)")
                 }
-                self.realtimeVideoWriter = nil
-                self.watermarkGenerator = nil
-                self.recorderDelegate = nil
-                self.usingWatermark = false
-            } else if let videoOutput = self.videoOutput, videoOutput.isRecording {
-                videoOutput.stopRecording()
             }
-            self.isRecording = false
+            self.realtimeVideoWriter = nil
+            self.watermarkGenerator = nil
+            self.recorderDelegate = nil
+            self.usingWatermark = false
+        } else if let videoOutput = self.videoOutput, videoOutput.isRecording {
+            print("[Recording] \(self.position.rawValue): Stopping movie file output")
+            videoOutput.stopRecording()
         }
+
+        // Stop the shared multi-camera session
+        multiCamSession.stopSession()
+
+        self.isRecording = false
+        print("[Recording] \(self.position.rawValue): ✅ Recording stopped")
     }
 
     func cleanup() {
-        sessionQueue.async {
-            if let session = self.captureSession {
-                if session.isRunning {
-                    session.stopRunning()
-                }
-                if let videoDataOutput = self.videoDataOutput {
-                    session.removeOutput(videoDataOutput)
-                }
-                if let audioDataOutput = self.audioDataOutput {
-                    session.removeOutput(audioDataOutput)
-                }
-            }
-
-            self.videoInput = nil
-            self.audioInput = nil
-            self.videoOutput = nil
-            self.videoDataOutput = nil
-            self.audioDataOutput = nil
-            self.captureSession = nil
-            self.recorderDelegate = nil
-            self.realtimeVideoWriter = nil
+        if isRecording {
+            stopRecording()
         }
+
+        self.videoOutput = nil
+        self.videoDataOutput = nil
+        self.audioDataOutput = nil
+        self.recorderDelegate = nil
+        self.realtimeVideoWriter = nil
     }
 
-    func setFrameRate(_ fps: Int32) {
-        guard let videoInput = videoInput else { return }
-
-        let device = videoInput.device
-        let targetDuration = CMTime(value: 1, timescale: fps)
-
-        do {
-            try device.lockForConfiguration()
-            defer { device.unlockForConfiguration() }
-
-            device.activeVideoMinFrameDuration = targetDuration
-            device.activeVideoMaxFrameDuration = targetDuration
-
-            print("Frame rate set to \(fps) fps for \(position.rawValue)")
-        } catch {
-            print("Error setting frame rate for \(position.rawValue): \(error)")
-        }
-    }
-
-    func setSlowMotionFrameRate(_ fps: Int32 = 60) {
-        guard let videoInput = videoInput else { return }
-
-        let device = videoInput.device
-        let targetDuration = CMTime(value: 1, timescale: fps)
-
-        do {
-            try device.lockForConfiguration()
-            defer { device.unlockForConfiguration() }
-
-            device.activeVideoMinFrameDuration = targetDuration
-            device.activeVideoMaxFrameDuration = targetDuration
-
-            print("Slow-motion frame rate set to \(fps) fps for \(position.rawValue)")
-        } catch {
-            print("Error setting slow-motion frame rate for \(position.rawValue): \(error)")
-        }
-    }
 
     func getSessionStatus() -> String {
         if !isAvailable {
             return "Unavailable"
-        }
-        if captureSession?.isRunning == false {
-            return "Setup Failed"
         }
         if isRecording {
             return "Recording"
