@@ -97,6 +97,7 @@ class CameraRecorder {
     var isAvailable: Bool = false
     var usingWatermark: Bool = false
     private let sessionQueue = DispatchQueue(label: "com.dashcam.camera.\(UUID().uuidString)", attributes: [], autoreleaseFrequency: .workItem)
+    private let sessionStartedSemaphore = DispatchSemaphore(value: 0)
 
     init(position: CameraPosition) {
         self.position = position
@@ -143,6 +144,8 @@ class CameraRecorder {
             print("[CameraInfo] \(self.position.rawValue): Session starting...")
             session.startRunning()
             print("[CameraInfo] \(self.position.rawValue): Session started, isRunning=\(session.isRunning)")
+            // Signal that session has started
+            self.sessionStartedSemaphore.signal()
         }
     }
 
@@ -371,6 +374,15 @@ class CameraRecorder {
 
         do {
             try writer.startRecording(to: url, videoSettings: videoSettings, audioSettings: audioSettings, sourceVideoTrack: videoInput)
+
+            print("[Recording] \(position.rawValue): Waiting for session to be ready before setting up outputs...")
+            // Wait up to 3 seconds for session to start
+            let waitResult = sessionStartedSemaphore.wait(timeout: .now() + 3.0)
+            if waitResult == .timedOut {
+                print("[Recording] \(position.rawValue): ⚠️ Timeout waiting for session to start")
+            } else {
+                print("[Recording] \(position.rawValue): ✅ Session is ready, setting up outputs")
+            }
 
             sessionQueue.async {
                 self.setupDataOutputs()
