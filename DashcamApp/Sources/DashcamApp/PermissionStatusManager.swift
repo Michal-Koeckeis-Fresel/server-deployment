@@ -71,7 +71,7 @@ class PermissionStatusManager: ObservableObject {
     }
 
     private func checkMicrophonePermission() -> PermissionStatus {
-        let status = AVAudioApplication.recordPermission()
+        let status = AVAudioSession.sharedInstance().recordPermission
         switch status {
         case .granted:
             return .granted
@@ -109,7 +109,7 @@ class PermissionStatusManager: ObservableObject {
     }
 
     func requestMicrophonePermission() {
-        AVAudioApplication.requestRecordPermissionWithCompletionHandler { _ in
+        AVAudioApplication.requestRecordPermission { _ in
             DispatchQueue.main.async {
                 self.updatePermissionStatuses()
             }
