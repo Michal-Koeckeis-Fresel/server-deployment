@@ -234,13 +234,7 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         chunkURLs.removeAll()
         print("[Recording] Starting recording on \(cameras.count) cameras")
         for (position, camera) in cameras {
-            guard camera.captureSession?.isRunning == true else {
-                print("[Recording] ⚠️ Session not running for \(position.rawValue)")
-                cameraStatus[position] = "Error"
-                continue
-            }
-
-            print("[Recording] 🎥 Starting recording for \(position.rawValue)")
+            print("[Recording] 🎥 Initiating recording for \(position.rawValue)")
 
             if let device = AVCaptureDevice.default(position.deviceType, for: .video, position: position.position) {
                 nightModeManager.enableNightMode(for: device)

@@ -297,12 +297,32 @@ class CameraRecorder {
     }
 
     func startRecording(to url: URL, delegate: AVCaptureFileOutputRecordingDelegate, withWatermark watermarkGenerator: WatermarkTextGenerator? = nil) {
-        guard captureSession?.isRunning == true else {
-            print("Error: Camera not ready for recording")
-            return
-        }
+        print("[Recording] Starting recording for \(position.rawValue)")
 
+        // Use sessionQueue to ensure recording starts after session is ready
         sessionQueue.async {
+            // Wait for session to be ready
+            guard let session = self.captureSession else {
+                print("[Recording] \(self.position.rawValue): ❌ No capture session")
+                return
+            }
+
+            // Give session time to start if it was just queued
+            if !session.isRunning {
+                print("[Recording] \(self.position.rawValue): ⏳ Waiting for session to start...")
+                // Wait up to 2 seconds for session to start
+                let startTime = Date()
+                while !session.isRunning && Date().timeIntervalSince(startTime) < 2.0 {
+                    Thread.sleep(forTimeInterval: 0.05)
+                }
+                print("[Recording] \(self.position.rawValue): isRunning=\(session.isRunning)")
+            }
+
+            guard session.isRunning else {
+                print("[Recording] \(self.position.rawValue): ❌ Session did not start")
+                return
+            }
+
             if let videoOutput = self.videoOutput, videoOutput.isRecording {
                 videoOutput.stopRecording()
             }
@@ -317,10 +337,12 @@ class CameraRecorder {
 
                 self.setupWatermarkedRecording(to: url, delegate: delegate, watermarkGenerator: watermarkGenerator)
             } else if let videoOutput = self.videoOutput {
+                print("[Recording] \(self.position.rawValue): ✅ Starting MovieFileOutput recording")
                 videoOutput.startRecording(to: url, recordingDelegate: delegate)
             }
 
             self.isRecording = true
+            print("[Recording] \(self.position.rawValue): ✅ Recording started")
         }
     }
 
