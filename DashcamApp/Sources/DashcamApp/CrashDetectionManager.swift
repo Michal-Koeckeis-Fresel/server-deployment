@@ -104,7 +104,7 @@ class CrashDetectionManager {
             let y = recentData[i].1
             let z = recentData[i].2
 
-            let accelMagnitude = sqrt(x * x + y * y + z * z)
+            _ = sqrt(x * x + y * y + z * z)
 
             if z < -1.5 {
                 decelerationCount += 1
@@ -112,7 +112,7 @@ class CrashDetectionManager {
             }
         }
 
-        let brakingThreshold = gravityAccel * 1.5
+        _ = gravityAccel * 1.5
         let isSustainedDeceleration = decelerationCount >= 3
         let isHighDecel = maxDeceleration > 1.5
 

@@ -1,5 +1,5 @@
 import Foundation
-import CoreLocation
+@preconcurrency import CoreLocation
 import SwiftUI
 
 class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
@@ -24,7 +24,7 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         locationManager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
         locationManager.activityType = .automotiveNavigation
 
-        authorizationStatus = CLLocationManager.authorizationStatus()
+        authorizationStatus = locationManager.authorizationStatus
 
         if authorizationStatus == .notDetermined {
             locationManager.requestWhenInUseAuthorization()

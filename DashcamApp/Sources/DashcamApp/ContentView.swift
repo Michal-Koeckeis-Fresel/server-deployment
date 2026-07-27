@@ -296,7 +296,6 @@ struct ContentView: View {
                         ForEach(CameraPosition.allCases, id: \.self) { position in
                             HStack(spacing: 10) {
                                 let status = viewModel.cameraStatus[position] ?? "Unknown"
-                                let isRecording = status == "Recording"
 
                                 Circle()
                                     .fill(
@@ -751,8 +750,8 @@ struct ContentView: View {
             }
         }
             .navigationBarHidden(true)
-            .onChange(of: viewModel.isRecording) { newValue in
-                if newValue {
+            .onChange(of: viewModel.isRecording) {
+                if viewModel.isRecording {
                     recordingStartTime = Date()
                 }
             }
@@ -791,15 +790,15 @@ struct ContentView: View {
         .onDisappear {
             parkingManager.stopParkingModeMonitoring()
         }
-        .onChange(of: parkingManager.isParkingModeEnabled) { newValue in
-            if newValue {
+        .onChange(of: parkingManager.isParkingModeEnabled) {
+            if parkingManager.isParkingModeEnabled {
                 parkingManager.startParkingModeMonitoring()
             } else {
                 parkingManager.stopParkingModeMonitoring()
             }
         }
-        .onChange(of: parkingManager.parkingMotionDetected) { motionDetected in
-            if motionDetected && parkingManager.isParked {
+        .onChange(of: parkingManager.parkingMotionDetected) {
+            if parkingManager.parkingMotionDetected && parkingManager.isParked {
                 viewModel.protectCurrentChunk()
                 viewModel.errorMessage = "🚨 Motion detected while parked - recordings protected"
                 DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
@@ -807,8 +806,8 @@ struct ContentView: View {
                 }
             }
         }
-        .onChange(of: autoStartManager.isDriving) { isDriving in
-            if isDriving && autoStartManager.isAutoStartEnabled && !viewModel.isRecording {
+        .onChange(of: autoStartManager.isDriving) {
+            if autoStartManager.isDriving && autoStartManager.isAutoStartEnabled && !viewModel.isRecording {
                 if !cameraSetup {
                     viewModel.setupCameras()
                     cameraSetup = true
@@ -816,8 +815,8 @@ struct ContentView: View {
                 viewModel.startRecording()
             }
         }
-        .onChange(of: siriManager.lastCommand) { command in
-            if let command = command {
+        .onChange(of: siriManager.lastCommand) {
+            if let command = siriManager.lastCommand {
                 siriManager.handleShortcutCommand(command, viewModel: viewModel)
             }
         }

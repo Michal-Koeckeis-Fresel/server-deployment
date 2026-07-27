@@ -71,7 +71,13 @@ class PermissionStatusManager: ObservableObject {
     }
 
     private func checkMicrophonePermission() -> PermissionStatus {
-        let status = AVAudioSession.sharedInstance().recordPermission
+        let status: AVAudioSession.RecordPermission
+        if #available(iOS 17.0, *) {
+            status = AVAudioApplication.recordPermission()
+        } else {
+            status = AVAudioSession.sharedInstance().recordPermission
+        }
+
         switch status {
         case .granted:
             return .granted
@@ -109,9 +115,17 @@ class PermissionStatusManager: ObservableObject {
     }
 
     func requestMicrophonePermission() {
-        AVAudioSession.sharedInstance().requestRecordPermission { _ in
-            DispatchQueue.main.async {
-                self.updatePermissionStatuses()
+        if #available(iOS 17.0, *) {
+            AVAudioApplication.requestRecordPermissionWithCompletionHandler { _ in
+                DispatchQueue.main.async {
+                    self.updatePermissionStatuses()
+                }
+            }
+        } else {
+            AVAudioSession.sharedInstance().requestRecordPermission { _ in
+                DispatchQueue.main.async {
+                    self.updatePermissionStatuses()
+                }
             }
         }
     }

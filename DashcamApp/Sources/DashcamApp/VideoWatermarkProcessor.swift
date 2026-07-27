@@ -3,62 +3,53 @@ import UIKit
 
 class VideoWatermarkProcessor {
     static func addWatermark(to inputURL: URL, output outputURL: URL, metadata: WatermarkMetadata, completion: @escaping (Bool, Error?) -> Void) {
-        let asset = AVAsset(url: inputURL)
+        let asset = AVURLAsset(url: inputURL)
 
-        guard let videoTrack = asset.tracks(withMediaType: .video).first else {
-            completion(false, NSError(domain: "VideoWatermarkProcessor", code: -1, userInfo: [NSLocalizedDescriptionKey: "No video track found"]))
-            return
-        }
-
-        let composition = AVMutableComposition()
-        guard let compositionVideoTrack = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else {
-            completion(false, NSError(domain: "VideoWatermarkProcessor", code: -2, userInfo: [NSLocalizedDescriptionKey: "Cannot create composition track"]))
-            return
-        }
-
-        do {
-            try compositionVideoTrack.insertTimeRange(CMTimeRangeMake(start: .zero, duration: asset.duration), of: videoTrack, at: .zero)
-
-            let audioTracks = asset.tracks(withMediaType: .audio)
-            if let audioTrack = audioTracks.first {
-                if let compositionAudioTrack = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) {
-                    try compositionAudioTrack.insertTimeRange(CMTimeRangeMake(start: .zero, duration: asset.duration), of: audioTrack, at: .zero)
+        Task {
+            do {
+                let videoTracks = try await asset.loadTracks(withMediaType: .video)
+                guard let videoTrack = videoTracks.first else {
+                    completion(false, NSError(domain: "VideoWatermarkProcessor", code: -1, userInfo: [NSLocalizedDescriptionKey: "No video track found"]))
+                    return
                 }
-            }
 
-            let videoComposition = createVideoComposition(for: compositionVideoTrack, metadata: metadata, videoTrack: videoTrack)
+                let composition = AVMutableComposition()
+                guard let compositionVideoTrack = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else {
+                    completion(false, NSError(domain: "VideoWatermarkProcessor", code: -2, userInfo: [NSLocalizedDescriptionKey: "Cannot create composition track"]))
+                    return
+                }
 
-            let exporter = AVAssetExportSession(asset: composition, presetName: AVAssetExportPreset1920x1080)
-            exporter?.videoComposition = videoComposition
-            exporter?.outputFileType = .mov
-            exporter?.outputURL = outputURL
+                let duration = try await asset.load(.duration)
+                try compositionVideoTrack.insertTimeRange(CMTimeRangeMake(start: .zero, duration: duration), of: videoTrack, at: .zero)
 
-            exporter?.exportAsynchronously {
-                DispatchQueue.main.async {
-                    if let error = exporter?.error {
-                        completion(false, error)
-                    } else if exporter?.status == .completed {
-                        completion(true, nil)
-                    } else {
-                        let error = NSError(domain: "VideoWatermarkProcessor", code: Int(exporter?.status.rawValue ?? -1), userInfo: [NSLocalizedDescriptionKey: "Export failed"])
-                        completion(false, error)
+                let audioTracks = try await asset.loadTracks(withMediaType: .audio)
+                if let audioTrack = audioTracks.first {
+                    if let compositionAudioTrack = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) {
+                        try compositionAudioTrack.insertTimeRange(CMTimeRangeMake(start: .zero, duration: duration), of: audioTrack, at: .zero)
                     }
                 }
+
+                let videoComposition = try await createVideoComposition(for: compositionVideoTrack, metadata: metadata, videoTrack: videoTrack)
+
+                try FileManager.default.removeItem(at: outputURL)
+                try await AVAssetExportSession.export(composition, to: outputURL, as: .mov, videoComposition: videoComposition)
+                completion(true, nil)
+            } catch {
+                completion(false, error)
             }
-        } catch {
-            completion(false, error)
         }
     }
 
-    private static func createVideoComposition(for track: AVMutableCompositionTrack, metadata: WatermarkMetadata, videoTrack: AVAssetTrack) -> AVVideoComposition {
+    private static func createVideoComposition(for track: AVMutableCompositionTrack, metadata: WatermarkMetadata, videoTrack: AVAssetTrack) async throws -> AVVideoComposition {
         let videoComposition = AVMutableVideoComposition()
         videoComposition.frameDuration = CMTimeMake(value: 1, timescale: 30)
 
-        let size = videoTrack.naturalSize
+        let size = try await videoTrack.load(.naturalSize)
         videoComposition.renderSize = size
 
         let instruction = AVMutableVideoCompositionInstruction()
-        instruction.timeRange = CMTimeRangeMake(start: .zero, duration: videoTrack.asset?.duration ?? .zero)
+        let duration = try await videoTrack.load(.duration)
+        instruction.timeRange = CMTimeRangeMake(start: .zero, duration: duration)
 
         let layerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: track)
         instruction.layerInstructions = [layerInstruction]

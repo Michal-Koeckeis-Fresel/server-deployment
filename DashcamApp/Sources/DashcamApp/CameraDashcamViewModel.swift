@@ -155,7 +155,7 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
                 continue
             }
 
-            var camera = CameraRecorder(position: position)
+            let camera = CameraRecorder(position: position)
             if camera.setupSession() {
                 cameras[position] = camera
                 cameraStatus[position] = camera.getSessionStatus()
@@ -183,7 +183,7 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
 
     func recoverCameraSession() {
         for (position, camera) in cameras {
-            var mutableCamera = camera
+            let mutableCamera = camera
             if mutableCamera.captureSession?.isRunning == false {
                 if mutableCamera.setupSession() {
                     cameras[position] = mutableCamera
@@ -224,7 +224,7 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         }
 
         chunkURLs.removeAll()
-        for (position, var camera) in cameras {
+        for (position, let camera) in cameras {
             guard camera.captureSession?.isRunning == true else {
                 cameraStatus[position] = "Error"
                 continue
@@ -273,7 +273,7 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
     }
 
     func stopRecording() {
-        for (position, var camera) in cameras {
+        for (position, let camera) in cameras {
             camera.stopRecording()
             cameras[position] = camera
             cameraStatus[position] = camera.captureSession?.isRunning == true ? "Ready" : "Error"
@@ -330,7 +330,7 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         let effectiveFPS = min(thermalFPS, powerModeFPS)
 
         for position in cameras.keys {
-            var camera = cameras[position]!
+            let camera = cameras[position]!
             camera.setFrameRate(effectiveFPS)
             cameras[position] = camera
         }
@@ -338,7 +338,7 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
 
     private func restoreFrameRates() {
         for position in cameras.keys {
-            var camera = cameras[position]!
+            let camera = cameras[position]!
             camera.setFrameRate(preferredRecordingFPS)
             cameras[position] = camera
         }
@@ -354,7 +354,7 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         chunkURLs.removeAll()
         currentChunkNumber += 1
 
-        for (position, var camera) in cameras {
+        for (position, let camera) in cameras {
             guard camera.captureSession?.isRunning == true else { continue }
 
             if let videoOutput = camera.videoOutput, videoOutput.isRecording {
@@ -478,7 +478,7 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         isSlowMotionActive = true
 
         for position in cameras.keys {
-            var camera = cameras[position]!
+            let camera = cameras[position]!
             camera.setSlowMotionFrameRate(60)
             cameras[position] = camera
         }

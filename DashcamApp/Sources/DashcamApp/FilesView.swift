@@ -77,7 +77,7 @@ struct FilesView: View {
             Button("Cancel", role: .cancel) { }
             Button("Delete", role: .destructive) {
                 if let file = selectedFile {
-                    viewModel.deleteFile(at: file)
+                    _ = viewModel.deleteFile(at: file)
                     refreshFiles()
                     selectedFile = nil
                 }
@@ -90,7 +90,7 @@ struct FilesView: View {
         .onAppear {
             refreshFiles()
         }
-        .onChange(of: refreshTrigger) { _ in
+        .onChange(of: refreshTrigger) {
             refreshFiles()
         }
     }
