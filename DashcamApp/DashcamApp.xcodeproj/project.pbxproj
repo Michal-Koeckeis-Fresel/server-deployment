@@ -5,40 +5,50 @@
 	};
 	objectVersion = 55;
 	objects = {
+
 /* Begin PBXBuildFile section */
-		9D1000010000001 in Sources */ = {isa = PBXBuildFile; fileRef = 9D1000010000001; };
-		9D1000020000001 in Sources */ = {isa = PBXBuildFile; fileRef = 9D1000020000001; };
-		9D1000030000001 in Resources */ = {isa = PBXBuildFile; fileRef = 9D1000030000001; };
-		9D1000040000001 in Resources */ = {isa = PBXBuildFile; fileRef = 9D1000040000001; };
+		9D0000FA = {isa = PBXBuildFile; fileRef = 9D0000F9; };
+		9D0000FC = {isa = PBXBuildFile; fileRef = 9D0000FB; };
+		9D0000FE = {isa = PBXBuildFile; fileRef = 9D0000FD; };
+		9D0000FF = {isa = PBXBuildFile; fileRef = 9D0000FE; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		9D1000010000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/DashcamApp/DashcamApp.swift; sourceTree = "<group>"; };
-		9D1000020000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/DashcamApp/ContentView.swift; sourceTree = "<group>"; };
-		9D1000030000001 = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Resources/Assets.xcassets; sourceTree = "<group>"; };
-		9D1000040000001 = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = Resources/LaunchScreen.storyboard; sourceTree = "<group>"; };
-		9D1000050000001 = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = SOURCE_ROOT; };
-		9D1000060000001 = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DashcamApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		9D0000F9 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/DashcamApp/DashcamApp.swift; sourceTree = "<group>"; };
+		9D0000FB = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/DashcamApp/ContentView.swift; sourceTree = "<group>"; };
+		9D0000FD = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Resources/Assets.xcassets; sourceTree = "<group>"; };
+		9D0000FE = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = Resources/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		9D000100 = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = SOURCE_ROOT; };
+		9D000101 = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DashcamApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFrameworksBuildPhase section */
+		9D0000FD0 = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
 /* Begin PBXGroup section */
-		9D0000010000001 = {
+		9D0000E1 = {
 			isa = PBXGroup;
 			children = (
-				9D1000010000001,
-				9D1000020000001,
-				9D1000030000001,
-				9D1000040000001,
-				9D1000050000001,
-				9D0000080000001,
+				9D0000F9,
+				9D0000FB,
+				9D0000FD,
+				9D0000FE,
+				9D000100,
+				9D0000E5,
 			);
-			name = DashcamApp;
 			sourceTree = "<group>";
 		};
-		9D0000080000001 = {
+		9D0000E5 = {
 			isa = PBXGroup;
 			children = (
-				9D1000060000001,
+				9D000101,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -46,12 +56,13 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		9D0000060000001 = {
+		9D0000E6 = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 9D00000E0000001;
+			buildConfigurationList = 9D0000EF;
 			buildPhases = (
-				9D0000070000001,
-				9D0000090000001,
+				9D0000E7,
+				9D0000FD0,
+				9D0000E8,
 			);
 			buildRules = (
 			);
@@ -59,37 +70,13 @@
 			);
 			name = DashcamApp;
 			productName = DashcamApp;
-			productReference = 9D1000060000001;
+			productReference = 9D000101;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
 
-/* Begin PBXSourcesBuildPhase section */
-		9D0000070000001 = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				9D1000010000001,
-				9D1000020000001,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXSourcesBuildPhase section */
-
-/* Begin PBXResourcesBuildPhase section */
-		9D0000090000001 = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				9D1000040000001,
-				9D1000030000001,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXResourcesBuildPhase section */
-
-		/* Begin PBXProject section */
-		9D0000050000001 = {
+/* Begin PBXProject section */
+		9D0000DD = {
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
@@ -97,12 +84,12 @@
 				LastUpgradeCheck = 1300;
 				ORGANIZATIONNAME = "Dashcam App";
 				TargetAttributes = {
-					9D0000060000001 = {
+					9D0000E6 = {
 						CreatedOnToolsVersion = 13.0;
 					};
 				};
 			};
-			buildConfigurationList = 9D0000090000001;
+			buildConfigurationList = 9D0000E0;
 			compatibilityVersion = "Xcode 9.3";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -110,20 +97,42 @@
 				en,
 				Base,
 			);
-			mainGroup = 9D0000010000001;
-			packageReferences = (
-			);
-			productRefGroup = 9D0000080000001;
+			mainGroup = 9D0000E1;
+			productRefGroup = 9D0000E5;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				9D0000060000001,
+				9D0000E6,
 			);
 		};
-		/* End PBXProject section */
+/* End PBXProject section */
 
-		/* Begin PBXBuildConfiguration section */
-		9D00000A0000001 = {
+/* Begin PBXResourcesBuildPhase section */
+		9D0000E8 = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9D0000FE,
+				9D0000FF,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		9D0000E7 = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9D0000FA,
+				9D0000FC,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		9D0000EA = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -182,7 +191,7 @@
 			};
 			name = Debug;
 		};
-		9D00000B0000001 = {
+		9D0000EB = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -235,7 +244,7 @@
 			};
 			name = Release;
 		};
-		9D00000C0000001 = {
+		9D0000EC = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -265,7 +274,7 @@
 			};
 			name = Debug;
 		};
-		9D00000D0000001 = {
+		9D0000ED = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -295,46 +304,28 @@
 			};
 			name = Release;
 		};
-		/* End XCBuildConfiguration section */
+/* End XCBuildConfiguration section */
 
-		/* Begin XCConfigurationList section */
-		9D0000090000001 = {
+/* Begin XCConfigurationList section */
+		9D0000E0 = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				9D00000A0000001,
-				9D00000B0000001,
+				9D0000EA,
+				9D0000EB,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		9D00000E0000001 = {
+		9D0000EF = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				9D00000C0000001,
-				9D00000D0000001,
+				9D0000EC,
+				9D0000ED,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		9D0000090000001 = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				9D00000A0000001,
-				9D00000B0000001,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		9D00000E0000001 = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				9D00000C0000001,
-				9D00000D0000001,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		/* End XCConfigurationList section */
+/* End XCConfigurationList section */
 	};
-	rootObject = 9D0000050000001;
+	rootObject = 9D0000DD;
 }
