@@ -141,7 +141,7 @@ struct MultiCameraPreviewView: View {
                             }
 
                             VStack(alignment: .leading, spacing: 8) {
-                                TipRow(icon: "wide.rectangle.fill", text: "Wide camera captures full scene context")
+                                TipRow(icon: "rectangle.fill", text: "Wide camera captures full scene context")
                                 TipRow(icon: "magnifyingglass", text: "Zoom camera captures details and plates")
                                 TipRow(icon: "video.fill", text: "Both cameras record simultaneously")
                                 TipRow(icon: "lock.fill", text: "Protect recordings in accidents automatically")

@@ -428,7 +428,7 @@ struct SettingsView: View {
                         // Front Camera Recording
                         VStack(alignment: .leading, spacing: 12) {
                             HStack {
-                                Label("Front Camera Recording", systemImage: "camera.front")
+                                Label("Front Camera Recording", systemImage: "camera.fill")
                                     .font(.headline)
                                     .foregroundColor(.white)
                                 Spacer()
