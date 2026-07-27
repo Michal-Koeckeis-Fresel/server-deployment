@@ -77,10 +77,6 @@
 	<false/>
 	<key>UIRequiresFullScreen</key>
 	<true/>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>This app needs access to your photo library to save dashcam videos.</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>This app needs access to save dashcam videos to your photo library.</string>
 	<key>UIFileSharingEnabled</key>
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>

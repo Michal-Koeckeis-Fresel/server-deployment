@@ -927,10 +927,10 @@ struct SettingsView: View {
                                         migrationMessage = "Your existing recordings will be migrated to iCloud Drive.\n\nMake sure iCloud is enabled in Settings > [Your Name] > iCloud."
                                         showMigrationAlert = true
                                         StorageLocationManager.shared.migrateRecordings(from: oldLocation)
-                                    } else if oldLocation != location && location == .photos {
-                                        migrationMessage = "Videos will be saved to your Photos library and backed up locally.\n\nMake sure Photos permission is enabled."
+                                    } else if oldLocation != location && location == .filesApp {
+                                        migrationMessage = "Your existing recordings will be migrated to the Files app folder.\n\nAccess them in the Files app > On My iPhone > Dashcam > Dashcam Recordings."
                                         showMigrationAlert = true
-                                        StorageLocationManager.shared.requestPhotosPermission { _ in }
+                                        StorageLocationManager.shared.migrateRecordings(from: oldLocation)
                                     }
                                 }) {
                                     HStack(spacing: 12) {
@@ -1004,7 +1004,17 @@ struct SettingsView: View {
                             }
                         }
 
-                        Text(StorageLocation.iCloud.rawValue == selectedStorageLocation.rawValue ? "Enable iCloud in Settings > [Your Name] > iCloud > Dashcam App" : "")
+                        if selectedStorageLocation == .iCloud {
+                            Text("Enable iCloud in Settings > [Your Name] > iCloud > Dashcam App")
+                                .font(.caption2)
+                                .foregroundColor(.orange)
+                                .padding(.top, 4)
+                        } else if selectedStorageLocation == .filesApp {
+                            Text("Access your recordings in Files app > On My iPhone > Dashcam Recordings")
+                                .font(.caption2)
+                                .foregroundColor(.blue)
+                                .padding(.top, 4)
+                        }
                             .font(.caption2)
                             .foregroundColor(.orange)
                             .padding(.top, 4)

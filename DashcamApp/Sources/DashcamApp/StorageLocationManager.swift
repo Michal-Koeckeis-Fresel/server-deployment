@@ -1,10 +1,9 @@
 import Foundation
-import Photos
 
 enum StorageLocation: String, CaseIterable {
     case onDevice = "On Device (Local)"
     case iCloud = "iCloud Drive"
-    case photos = "Photos"
+    case filesApp = "Files App Folder"
 
     var displayName: String {
         self.rawValue
@@ -16,8 +15,8 @@ enum StorageLocation: String, CaseIterable {
             return "Stores on device only. Deleted if app is uninstalled."
         case .iCloud:
             return "Stores in iCloud Drive. Persists even if app is uninstalled."
-        case .photos:
-            return "Saves to Photos library with automatic backup to device storage."
+        case .filesApp:
+            return "Organized folder in Files app. Access via Files, iCloud Drive, or Mac."
         }
     }
 
@@ -27,8 +26,8 @@ enum StorageLocation: String, CaseIterable {
             return "⚠️ Files will be deleted when app is uninstalled!"
         case .iCloud:
             return "✅ Files persist in iCloud even if app is uninstalled."
-        case .photos:
-            return "✅ Videos saved to Photos library with local backup."
+        case .filesApp:
+            return "✅ Files persist in Files app folder. Accessible after uninstall."
         }
     }
 }
@@ -37,7 +36,6 @@ class StorageLocationManager {
     static let shared = StorageLocationManager()
     private let storageLocationKey = "selectedStorageLocation"
     private let fileManager = FileManager.default
-    private let photosQueue = DispatchQueue(label: "com.dashcam.photos", qos: .background)
 
     var selectedLocation: StorageLocation {
         get {
@@ -78,20 +76,20 @@ class StorageLocationManager {
                 return nil
             }
 
-        case .photos:
-            guard let cacheURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
+        case .filesApp:
+            guard let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
                 return nil
             }
-            let photoCacheFolder = cacheURL.appendingPathComponent("PhotoCache", isDirectory: true)
+            let dashcamFolder = documentsURL.appendingPathComponent("Dashcam Recordings", isDirectory: true)
             do {
                 try fileManager.createDirectory(
-                    at: photoCacheFolder,
+                    at: dashcamFolder,
                     withIntermediateDirectories: true,
                     attributes: nil
                 )
-                return photoCacheFolder
+                return dashcamFolder
             } catch {
-                print("Failed to create photo cache directory: \(error)")
+                print("Failed to create Files app folder: \(error)")
                 return nil
             }
         }
@@ -162,43 +160,10 @@ class StorageLocationManager {
             }
             return iCloudContainerURL.appendingPathComponent("Dashcam Recordings", isDirectory: true)
 
-        case .photos:
+        case .filesApp:
             return fileManager.urls(for: .documentDirectory, in: .userDomainMask).first
-                .map { $0.appendingPathComponent("PhotoCache", isDirectory: true) }
+                .map { $0.appendingPathComponent("Dashcam Recordings", isDirectory: true) }
         }
     }
 
-    func saveVideoToPhotos(_ videoURL: URL, completion: @escaping (Bool) -> Void) {
-        photosQueue.async {
-            PHPhotoLibrary.requestAuthorization { status in
-                guard status == .authorized else {
-                    print("Photos permission denied")
-                    completion(false)
-                    return
-                }
-
-                PHPhotoLibrary.shared().performChanges({
-                    let request = PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: videoURL)
-                    request?.creationDate = Date()
-                }) { success, error in
-                    if let error = error {
-                        print("Failed to save video to Photos: \(error)")
-                        completion(false)
-                    } else {
-                        completion(success)
-                    }
-                }
-            }
-        }
-    }
-
-    func requestPhotosPermission(completion: @escaping (Bool) -> Void) {
-        photosQueue.async {
-            PHPhotoLibrary.requestAuthorization { status in
-                DispatchQueue.main.async {
-                    completion(status == .authorized)
-                }
-            }
-        }
-    }
 }
