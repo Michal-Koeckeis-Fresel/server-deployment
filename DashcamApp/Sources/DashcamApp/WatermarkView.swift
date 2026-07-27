@@ -122,6 +122,7 @@ struct WatermarkView: View {
             WatermarkView(
                 fpsCounter: FPSCounter(),
                 batteryManager: BatteryMonitorManager.shared,
+                locationManager: LocationManager.shared,
                 timestamp: Date()
             )
             Spacer()

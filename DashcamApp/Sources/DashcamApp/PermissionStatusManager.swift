@@ -1,5 +1,6 @@
 import AVFoundation
 import Photos
+import SwiftUI
 
 enum PermissionStatus: Equatable {
     case granted

@@ -22,11 +22,25 @@ let scriptDir = FileManager.default.currentDirectoryPath
 print("Generating iOS app icons in \(scriptDir)...")
 
 for (size, filename) in iconSizes {
-    // Create image
-    let nsSize = NSSize(width: CGFloat(size), height: CGFloat(size))
-    let image = NSImage(size: nsSize)
+    // Create bitmap representation at exact pixel size
+    guard let bitmapRep = NSBitmapImageRep(
+        bitmapDataPlanes: nil,
+        pixelsWide: size,
+        pixelsHigh: size,
+        bitsPerSample: 8,
+        samplesPerPixel: 4,
+        hasAlpha: true,
+        isPlanar: false,
+        colorSpaceName: .sRGB,
+        bytesPerRow: size * 4,
+        bitsPerPixel: 32
+    ) else {
+        print("✗ Failed to create bitmap for \(filename)")
+        continue
+    }
 
-    image.lockFocus()
+    let context = NSGraphicsContext(bitmapImageRep: bitmapRep)
+    NSGraphicsContext.current = context
 
     // Draw dark blue background (25, 55, 100)
     let bgRed = CGFloat(25) / CGFloat(255)
@@ -34,7 +48,7 @@ for (size, filename) in iconSizes {
     let bgBlue = CGFloat(100) / CGFloat(255)
     let bgColor = NSColor(srgbRed: bgRed, green: bgGreen, blue: bgBlue, alpha: 1.0)
     bgColor.setFill()
-    NSRect(x: 0, y: 0, width: nsSize.width, height: nsSize.height).fill()
+    NSRect(x: 0, y: 0, width: size, height: size).fill()
 
     // Draw camera lens circle
     let lensRed = CGFloat(100) / CGFloat(255)
@@ -44,17 +58,15 @@ for (size, filename) in iconSizes {
     lensColor.setFill()
 
     let margin = CGFloat(size) / 3
-    let circle = NSRect(x: margin, y: margin, width: nsSize.width - (margin * 2), height: nsSize.height - (margin * 2))
+    let circle = NSRect(x: margin, y: margin, width: CGFloat(size) - (margin * 2), height: CGFloat(size) - (margin * 2))
     NSBezierPath(ovalIn: circle).fill()
 
-    image.unlockFocus()
+    NSGraphicsContext.current = nil
 
     // Save as PNG
     let fileURL = URL(fileURLWithPath: "\(scriptDir)/\(filename)")
-    guard let tiffData = image.tiffRepresentation,
-          let bitmapImage = NSBitmapImageRep(data: tiffData),
-          let pngData = bitmapImage.representation(using: .png, properties: [:]) else {
-        print("✗ Failed to create \(filename)")
+    guard let pngData = bitmapRep.representation(using: .png, properties: [:]) else {
+        print("✗ Failed to create PNG data for \(filename)")
         continue
     }
 

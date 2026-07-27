@@ -46,7 +46,7 @@ class SystemPressureMonitor: NSObject, ObservableObject {
 
     @Published var pressureLevel: SystemPressureLevel = .nominal
     @Published var thermalPressure: Float = 0.0
-    @Published var thermalWarningLevel: AVCaptureDevice.ThermalState = .nominal
+    @Published var thermalWarningLevel: ProcessInfo.ThermalState = .nominal
     @Published var shouldReduceQuality: Bool = false
     @Published var shouldPauseRecording: Bool = false
     @Published var recommendedFrameRate: Int32 = 30
@@ -267,7 +267,7 @@ class SystemPressureMonitor: NSObject, ObservableObject {
     }
 }
 
-extension AVCaptureDevice.ThermalState {
+extension ProcessInfo.ThermalState {
     var description: String {
         switch self {
         case .nominal:
