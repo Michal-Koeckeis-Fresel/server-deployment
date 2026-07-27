@@ -212,8 +212,8 @@ struct PerformanceDashboardView: View {
 
                                 HealthIndicator(
                                     label: "Battery Level",
-                                    status: "\(BatteryMonitorManager.shared.batteryPercentage)%",
-                                    color: BatteryMonitorManager.shared.batteryPercentage > 20 ? .green : .orange
+                                    status: BatteryMonitorManager.shared.batteryPercentage,
+                                    color: BatteryMonitorManager.shared.batteryLevel > 0.2 ? .green : .orange
                                 )
 
                                 HealthIndicator(
@@ -309,7 +309,7 @@ struct PerformanceGauge: View {
     let color: Color
 
     var percentage: Double {
-        min(max(value / max, 0), 1)
+        Swift.min(Swift.max(value / max, 0), 1)
     }
 
     var body: some View {
