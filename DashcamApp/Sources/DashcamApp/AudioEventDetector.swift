@@ -3,7 +3,7 @@ import AVFoundation
 import SwiftUI
 
 @MainActor
-final class AudioEventDetector: NSObject, ObservableObject, @preconcurrency AVAudioRecorderDelegate {
+final class AudioEventDetector: NSObject, ObservableObject, AVAudioRecorderDelegate {
     static let shared = AudioEventDetector()
 
     @Published var isMonitoring: Bool = false
@@ -69,8 +69,10 @@ final class AudioEventDetector: NSObject, ObservableObject, @preconcurrency AVAu
         audioEventHistory.removeAll()
 
         monitoringQueue.async {
-            self.setupAudioRecorder()
-            self.startAudioLevelMonitoring()
+            DispatchQueue.main.async {
+                self.setupAudioRecorder()
+                self.startAudioLevelMonitoring()
+            }
         }
     }
 
@@ -109,7 +111,9 @@ final class AudioEventDetector: NSObject, ObservableObject, @preconcurrency AVAu
 
     private func startAudioLevelMonitoring() {
         audioTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            self?.updateAudioLevel()
+            DispatchQueue.main.async {
+                self?.updateAudioLevel()
+            }
         }
     }
 

@@ -297,7 +297,7 @@ final class BatteryMonitorManager: NSObject, ObservableObject {
         print("====================================\n")
     }
 
-    deinit {
+    @MainActor deinit {
         NotificationCenter.default.removeObserver(self)
         UIDevice.current.isBatteryMonitoringEnabled = false
     }

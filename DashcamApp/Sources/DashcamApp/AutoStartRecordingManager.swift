@@ -30,7 +30,9 @@ final class AutoStartRecordingManager: NSObject, ObservableObject {
     private func setupSpeedMonitoring() {
         speedCheckTimer?.invalidate()
         speedCheckTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
-            self?.checkDrivingStatus()
+            DispatchQueue.main.async {
+                self?.checkDrivingStatus()
+            }
         }
     }
 

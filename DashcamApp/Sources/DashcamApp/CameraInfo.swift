@@ -86,14 +86,17 @@ class CameraRecorderDelegate: NSObject, AVCaptureVideoDataOutputSampleBufferDele
         }
 
         let timestamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-        let watermarkText = watermarkGenerator?.generateFullWatermarkText() ?? ""
 
         if realtimeVideoWriter == nil {
             if videoFrameCount <= 3 {
                 print("[CameraRecorder] ❌ Video writer is nil - cannot write frame \(videoFrameCount)")
             }
         } else {
-            realtimeVideoWriter?.processAndWriteFrame(pixelBuffer, timestamp: timestamp, watermarkText: watermarkText)
+            // Get watermark text on main thread since WatermarkTextGenerator is @MainActor
+            DispatchQueue.main.async { [weak self] in
+                let watermarkText = self?.watermarkGenerator?.generateFullWatermarkText() ?? ""
+                self?.realtimeVideoWriter?.processAndWriteFrame(pixelBuffer, timestamp: timestamp, watermarkText: watermarkText)
+            }
         }
     }
 

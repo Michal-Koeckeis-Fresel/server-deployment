@@ -90,7 +90,9 @@ final class ParkingModeManager: NSObject, ObservableObject {
     private func setupParkingTimer() {
         parkingTimer?.invalidate()
         parkingTimer = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: true) { [weak self] _ in
-            self?.checkParkingStatus()
+            DispatchQueue.main.async {
+                self?.checkParkingStatus()
+            }
         }
     }
 
