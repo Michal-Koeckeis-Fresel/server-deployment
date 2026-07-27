@@ -29,18 +29,35 @@ class VideoWatermarkProcessor {
                     }
                 }
 
-                let videoComposition = try await createVideoComposition(for: compositionVideoTrack, metadata: metadata, videoTrack: videoTrack)
+                let videoComposition = try await createVideoComposition(for: compositionVideoTrack, metadata: metadata, videoTrack: videoTrack, assetDuration: duration)
 
                 try FileManager.default.removeItem(at: outputURL)
-                try await AVAssetExportSession.export(composition, to: outputURL, as: .mov, videoComposition: videoComposition)
-                completion(true, nil)
+
+                guard let exporter = AVAssetExportSession(asset: composition, presetName: AVAssetExportPreset1920x1080) else {
+                    completion(false, NSError(domain: "VideoWatermarkProcessor", code: -3, userInfo: [NSLocalizedDescriptionKey: "Cannot create exporter"]))
+                    return
+                }
+                exporter.videoComposition = videoComposition
+                exporter.outputFileType = .mov
+                exporter.outputURL = outputURL
+
+                exporter.exportAsynchronously {
+                    DispatchQueue.main.async {
+                        if exporter.status == .completed {
+                            completion(true, nil)
+                        } else {
+                            let error = NSError(domain: "VideoWatermarkProcessor", code: Int(exporter.status.rawValue), userInfo: [NSLocalizedDescriptionKey: "Export failed: \(exporter.status)"])
+                            completion(false, error)
+                        }
+                    }
+                }
             } catch {
                 completion(false, error)
             }
         }
     }
 
-    private static func createVideoComposition(for track: AVMutableCompositionTrack, metadata: WatermarkMetadata, videoTrack: AVAssetTrack) async throws -> AVVideoComposition {
+    private static func createVideoComposition(for track: AVMutableCompositionTrack, metadata: WatermarkMetadata, videoTrack: AVAssetTrack, assetDuration: CMTime) async throws -> AVVideoComposition {
         let videoComposition = AVMutableVideoComposition()
         videoComposition.frameDuration = CMTimeMake(value: 1, timescale: 30)
 
@@ -48,8 +65,7 @@ class VideoWatermarkProcessor {
         videoComposition.renderSize = size
 
         let instruction = AVMutableVideoCompositionInstruction()
-        let duration = try await videoTrack.load(.duration)
-        instruction.timeRange = CMTimeRangeMake(start: .zero, duration: duration)
+        instruction.timeRange = CMTimeRangeMake(start: .zero, duration: assetDuration)
 
         let layerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: track)
         instruction.layerInstructions = [layerInstruction]
