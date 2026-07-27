@@ -50,6 +50,7 @@
 		B0028000000 = {isa = PBXBuildFile; fileRef = F0028000000; };
 		B0029000000 = {isa = PBXBuildFile; fileRef = F0029000000; };
 		B002A000000 = {isa = PBXBuildFile; fileRef = F002A000000; };
+		B002B000000 = {isa = PBXBuildFile; fileRef = F002B000000; };
 		R00000000001 = {isa = PBXBuildFile; fileRef = R00000000002; };
 		R00000000003 = {isa = PBXBuildFile; fileRef = R00000000004; };
 /* End PBXBuildFile section */
@@ -98,6 +99,7 @@
 		F0028000000 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/DashcamApp/WatchConnectivityManager.swift; sourceTree = "<group>"; };
 		F0029000000 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/DashcamApp/WatermarkTextGenerator.swift; sourceTree = "<group>"; };
 		F002A000000 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/DashcamApp/WatermarkView.swift; sourceTree = "<group>"; };
+		F002B000000 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/DashcamApp/iCloudStorageManager.swift; sourceTree = "<group>"; };
 		R00000000002 = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Resources/Assets.xcassets; sourceTree = "<group>"; };
 		R00000000004 = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = Resources/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		P00000000001 = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = SOURCE_ROOT; };
@@ -151,6 +153,7 @@
 				F0028000000,
 				F0029000000,
 				F002A000000,
+				F002B000000,
 				R00000000002,
 				R00000000004,
 				P00000000001,
@@ -267,6 +270,7 @@
 				B0028000000,
 				B0029000000,
 				B002A000000,
+				B002B000000,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
