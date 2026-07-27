@@ -206,14 +206,20 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
     }
 
     func startRecording() {
+        print("[ViewModel] ========== RECORDING START REQUEST ==========")
+        print("[ViewModel] isRecording: \(isRecording), Cameras: \(cameras.count)")
+
         guard !cameras.isEmpty else {
             errorMessage = "No cameras available"
+            print("[ViewModel] ❌ ERROR: No cameras available")
             return
         }
+        print("[ViewModel] ✅ Cameras ready: \(cameras.keys.map { $0.rawValue }.joined(separator: ", "))")
 
         if systemPressureMonitor.shouldPauseRecording {
             errorMessage = "⚠️ Device under critical thermal load. Pause recording and let device cool down."
             thermalWarningMessage = "Critical thermal pressure detected"
+            print("[ViewModel] ❌ ERROR: Critical thermal pressure")
             return
         }
 
@@ -280,13 +286,34 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
     }
 
     func stopRecording() {
+        print("[ViewModel] ========== RECORDING STOP REQUEST ==========")
+        print("[ViewModel] Stopping \(cameras.count) cameras")
+
         for (position, camera) in cameras {
+            print("[ViewModel] Stopping camera: \(position.rawValue)")
             camera.stopRecording()
             cameras[position] = camera
-            cameraStatus[position] = camera.captureSession?.isRunning == true ? "Ready" : "Error"
+            let status = camera.captureSession?.isRunning == true ? "Ready" : "Error"
+            cameraStatus[position] = status
+            print("[ViewModel] ✅ \(position.rawValue) stopped - Status: \(status)")
 
             if let device = AVCaptureDevice.default(position.deviceType, for: .video, position: position.position) {
                 nightModeManager.disableNightMode(for: device)
+            }
+        }
+
+        // Check recorded files
+        if let recordingsPath = storageLocationManager.getRecordingsURL() {
+            print("[ViewModel] Checking recorded files...")
+            do {
+                let files = try FileManager.default.contentsOfDirectory(at: recordingsPath, includingPropertiesForKeys: [.fileSizeKey])
+                for file in files.filter({ $0.lastPathComponent.contains("chunk") }) {
+                    if let fileSize = try file.resourceValues(forKeys: [.fileSizeKey]).fileSize {
+                        print("[ViewModel] File: \(file.lastPathComponent), Size: \(fileSize) bytes")
+                    }
+                }
+            } catch {
+                print("[ViewModel] ⚠️ Error checking files: \(error)")
             }
         }
 

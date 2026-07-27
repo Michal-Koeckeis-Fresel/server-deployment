@@ -38,17 +38,20 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     }
 
     func startLocationUpdates() {
+        print("[Location] Authorization status: \(locationManager.authorizationStatus.rawValue)")
+        print("[Location] Accuracy: \(locationManager.desiredAccuracy)")
         locationManager.startUpdatingLocation()
         locationManager.startUpdatingHeading()
         isLocationAvailable = true
-        logLocation("Location tracking started")
+        logLocation("✅ Location tracking started")
     }
 
     func stopLocationUpdates() {
+        print("[Location] Stopping location and heading updates")
         locationManager.stopUpdatingLocation()
         locationManager.stopUpdatingHeading()
         isLocationAvailable = false
-        logLocation("Location tracking stopped")
+        logLocation("⏹️ Location tracking stopped")
     }
 
     // MARK: - CLLocationManagerDelegate
@@ -57,22 +60,31 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             let status = manager.authorizationStatus
+            print("[Location] Authorization changed: \(status.rawValue)")
             if status == .authorizedWhenInUse || status == .authorizedAlways {
+                print("[Location] ✅ Authorization granted - starting updates")
                 self.startLocationUpdates()
             } else if status == .denied || status == .restricted {
+                print("[Location] ❌ Authorization denied/restricted")
                 self.isLocationAvailable = false
+            } else {
+                print("[Location] ⚠️ Authorization: notDetermined")
             }
         }
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let location = locations.last else { return }
+        guard let location = locations.last else {
+            print("[Location] ⚠️ Received location update but locations array is empty")
+            return
+        }
 
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             self.currentLocation = location
             self.currentSpeed = location.speed > 0 ? location.speed * 3.6 : 0
             self.currentAltitude = location.altitude
+            print("[Location] Update: Lat=\(location.coordinate.latitude), Lon=\(location.coordinate.longitude), Speed=\(self.currentSpeed)km/h")
         }
     }
 
@@ -86,7 +98,8 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            self.logLocation("Location error: \(error.localizedDescription)")
+            print("[Location] ❌ Location error: \(error.localizedDescription)")
+            self.logLocation("❌ Location error: \(error.localizedDescription)")
             self.isLocationAvailable = false
         }
     }

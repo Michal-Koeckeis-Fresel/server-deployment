@@ -18,39 +18,65 @@ class RealtimeVideoWriter {
     }
 
     func startRecording(to url: URL, videoSettings: [String: Any], audioSettings: [String: Any], sourceVideoTrack: AVCaptureDeviceInput?) throws {
-        try? FileManager.default.removeItem(at: url)
+        print("[RealtimeVideoWriter] Starting recording to: \(url.lastPathComponent)")
+        print("[RealtimeVideoWriter] Video settings: \(videoSettings)")
+        print("[RealtimeVideoWriter] Audio settings: \(audioSettings)")
+
+        do {
+            try? FileManager.default.removeItem(at: url)
+            print("[RealtimeVideoWriter] ✅ Cleared existing file at: \(url.lastPathComponent)")
+        } catch {
+            print("[RealtimeVideoWriter] ⚠️ Failed to remove existing file: \(error)")
+        }
 
         assetWriter = try AVAssetWriter(outputURL: url, fileType: .mov)
-        guard let writer = assetWriter else { throw NSError(domain: "RealtimeVideoWriter", code: -1) }
+        guard let writer = assetWriter else {
+            print("[RealtimeVideoWriter] ❌ Failed to create AVAssetWriter")
+            throw NSError(domain: "RealtimeVideoWriter", code: -1)
+        }
+        print("[RealtimeVideoWriter] ✅ AVAssetWriter created")
 
         videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
-        guard let videoInput = videoInput else { throw NSError(domain: "RealtimeVideoWriter", code: -2) }
+        guard let videoInput = videoInput else {
+            print("[RealtimeVideoWriter] ❌ Failed to create video input")
+            throw NSError(domain: "RealtimeVideoWriter", code: -2)
+        }
+        print("[RealtimeVideoWriter] ✅ Video input created")
 
         let pixelBufferAttributes: [String: Any] = [
             kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
             kCVPixelBufferWidthKey as String: 1920,
             kCVPixelBufferHeightKey as String: 1080
         ]
+        print("[RealtimeVideoWriter] Pixel buffer attributes: format=32BGRA, size=1920x1080")
 
         pixelBufferAdapter = AVAssetWriterInputPixelBufferAdaptor(
             assetWriterInput: videoInput,
             sourcePixelBufferAttributes: pixelBufferAttributes
         )
+        print("[RealtimeVideoWriter] ✅ Pixel buffer adapter created")
 
         audioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
-        guard let audioInput = audioInput else { throw NSError(domain: "RealtimeVideoWriter", code: -3) }
+        guard let audioInput = audioInput else {
+            print("[RealtimeVideoWriter] ❌ Failed to create audio input")
+            throw NSError(domain: "RealtimeVideoWriter", code: -3)
+        }
+        print("[RealtimeVideoWriter] ✅ Audio input created")
 
         writer.add(videoInput)
         writer.add(audioInput)
         videoInput.expectsMediaDataInRealTime = true
         audioInput.expectsMediaDataInRealTime = true
+        print("[RealtimeVideoWriter] ✅ Inputs added to writer, real-time mode enabled")
 
         if writer.startWriting() {
             frameCount = 0
             sessionStarted = false
-            print("Video writer started recording to \(url.lastPathComponent)")
+            print("[RealtimeVideoWriter] ✅ Writer started successfully, ready for frames")
         } else {
-            throw writer.error ?? NSError(domain: "RealtimeVideoWriter", code: -4)
+            let error = writer.error ?? NSError(domain: "RealtimeVideoWriter", code: -4)
+            print("[RealtimeVideoWriter] ❌ Writer failed to start: \(error)")
+            throw error
         }
     }
 
@@ -109,17 +135,29 @@ class RealtimeVideoWriter {
     }
 
     func finishWriting(completion: @escaping (Bool, Error?) -> Void) {
+        print("[RealtimeVideoWriter] Requesting writer finish (current frame count: \(frameCount))")
         writeQueue.async { [weak self] in
-            guard let self = self, let writer = self.assetWriter else {
+            guard let self = self else {
+                print("[RealtimeVideoWriter] ❌ Self deallocated during finishWriting")
                 completion(false, nil)
                 return
             }
 
+            guard let writer = self.assetWriter else {
+                print("[RealtimeVideoWriter] ❌ Writer is nil during finishWriting")
+                completion(false, nil)
+                return
+            }
+
+            print("[RealtimeVideoWriter] Writer status before finish: \(writer.status.rawValue)")
             writer.finishWriting {
                 DispatchQueue.main.async {
                     let success = writer.status == .completed
                     let error = writer.error
-                    print("Video writing finished: \(success), frames written: \(self.frameCount)")
+                    print("[RealtimeVideoWriter] ✅ Writer finished - Status: \(writer.status.rawValue), Frames: \(self.frameCount), Success: \(success)")
+                    if let error = error {
+                        print("[RealtimeVideoWriter] ❌ Writer error: \(error.localizedDescription)")
+                    }
                     completion(success, error)
                 }
             }

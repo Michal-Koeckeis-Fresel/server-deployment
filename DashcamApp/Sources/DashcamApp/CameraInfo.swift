@@ -50,6 +50,7 @@ class CameraRecorderDelegate: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     var watermarkGenerator: WatermarkTextGenerator?
     private var videoFrameCount = 0
     private var audioFrameCount = 0
+    private var lastLogTime = Date()
 
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         if CMSampleBufferDataIsReady(sampleBuffer) {
@@ -58,26 +59,61 @@ class CameraRecorderDelegate: NSObject, AVCaptureVideoDataOutputSampleBufferDele
             } else if output is AVCaptureAudioDataOutput {
                 handleAudioSample(sampleBuffer)
             }
+        } else {
+            if videoFrameCount == 0 {
+                print("[CameraRecorder] ⚠️ Received sample buffer that is not ready")
+            }
         }
     }
 
     private func handleVideoSample(_ sampleBuffer: CMSampleBuffer) {
         if videoFrameCount == 0 {
-            print("CameraRecorderDelegate: ✅ Received first video frame")
+            print("[CameraRecorder] ✅ Received first video frame")
+            lastLogTime = Date()
         }
         videoFrameCount += 1
 
+        // Log every 300 frames (roughly every 10 seconds at 30fps)
+        if videoFrameCount % 300 == 0 {
+            print("[CameraRecorder] Video frames captured: \(videoFrameCount)")
+        }
+
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
-            print("CameraRecorderDelegate: ❌ Could not get pixel buffer from sample")
+            if videoFrameCount <= 3 {
+                print("[CameraRecorder] ❌ Could not get pixel buffer from sample \(videoFrameCount)")
+            }
             return
         }
+
         let timestamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
         let watermarkText = watermarkGenerator?.generateFullWatermarkText() ?? ""
-        realtimeVideoWriter?.processAndWriteFrame(pixelBuffer, timestamp: timestamp, watermarkText: watermarkText)
+
+        if realtimeVideoWriter == nil {
+            if videoFrameCount <= 3 {
+                print("[CameraRecorder] ❌ Video writer is nil - cannot write frame \(videoFrameCount)")
+            }
+        } else {
+            realtimeVideoWriter?.processAndWriteFrame(pixelBuffer, timestamp: timestamp, watermarkText: watermarkText)
+        }
     }
 
     private func handleAudioSample(_ sampleBuffer: CMSampleBuffer) {
-        realtimeVideoWriter?.writeAudioSample(sampleBuffer)
+        if audioFrameCount == 0 {
+            print("[CameraRecorder] ✅ Received first audio sample")
+        }
+        audioFrameCount += 1
+
+        if audioFrameCount % 1500 == 0 {
+            print("[CameraRecorder] Audio samples captured: \(audioFrameCount)")
+        }
+
+        if realtimeVideoWriter == nil {
+            if audioFrameCount <= 3 {
+                print("[CameraRecorder] ❌ Video writer is nil - cannot write audio sample \(audioFrameCount)")
+            }
+        } else {
+            realtimeVideoWriter?.writeAudioSample(sampleBuffer)
+        }
     }
 }
 
@@ -184,14 +220,18 @@ class CameraRecorder {
     }
 
     private func configureVideoInput(_ device: AVCaptureDevice, to session: AVCaptureSession) throws {
+        print("[CameraInfo] \(position.rawValue): Creating video input from device: \(device.localizedName)")
         let videoInput = try AVCaptureDeviceInput(device: device)
         self.videoInput = videoInput
+        print("[CameraInfo] \(position.rawValue): Video input created successfully")
 
         guard session.canAddInput(videoInput) else {
+            print("[CameraInfo] \(position.rawValue): ❌ Cannot add video input to session")
             throw CameraSetupError.inputCreationFailed
         }
 
         session.addInput(videoInput)
+        print("[CameraInfo] \(position.rawValue): ✅ Video input added to session")
     }
 
     private func configureVideoOutput(to session: AVCaptureSession, with device: AVCaptureDevice) throws {
@@ -393,37 +433,47 @@ class CameraRecorder {
     }
 
     private func setupDataOutputs() {
-        guard let session = captureSession else { return }
+        guard let session = captureSession else {
+            print("[Recording] ❌ \(position.rawValue): setupDataOutputs called but session is nil!")
+            return
+        }
 
-        print("[Recording] \(position.rawValue): Setting up data outputs")
+        print("[Recording] \(position.rawValue): ========== SETTING UP DATA OUTPUTS ==========")
+        print("[Recording] \(position.rawValue): Session running: \(session.isRunning)")
+        print("[Recording] \(position.rawValue): Recorder delegate: \(recorderDelegate != nil ? "set" : "nil")")
 
         session.beginConfiguration()
+        print("[Recording] \(position.rawValue): Configuration begun")
 
         let videoDataOutput = AVCaptureVideoDataOutput()
         videoDataOutput.setSampleBufferDelegate(recorderDelegate, queue: sessionQueue)
         videoDataOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
         videoDataOutput.alwaysDiscardsLateVideoFrames = true
+        print("[Recording] \(position.rawValue): Video output created - format: 32BGRA, discard late frames: true")
 
         if session.canAddOutput(videoDataOutput) {
             session.addOutput(videoDataOutput)
             self.videoDataOutput = videoDataOutput
-            print("[Recording] \(position.rawValue): ✅ Video output added")
+            print("[Recording] \(position.rawValue): ✅ Video output added to session")
         } else {
-            print("[Recording] \(position.rawValue): ❌ Cannot add video output")
+            print("[Recording] \(position.rawValue): ❌ Cannot add video output to session")
         }
 
         let audioDataOutput = AVCaptureAudioDataOutput()
         audioDataOutput.setSampleBufferDelegate(recorderDelegate, queue: sessionQueue)
+        print("[Recording] \(position.rawValue): Audio output created")
 
         if session.canAddOutput(audioDataOutput) {
             session.addOutput(audioDataOutput)
             self.audioDataOutput = audioDataOutput
-            print("[Recording] \(position.rawValue): ✅ Audio output added")
+            print("[Recording] \(position.rawValue): ✅ Audio output added to session")
         } else {
-            print("[Recording] \(position.rawValue): ❌ Cannot add audio output")
+            print("[Recording] \(position.rawValue): ❌ Cannot add audio output to session")
         }
 
         session.commitConfiguration()
+        print("[Recording] \(position.rawValue): Configuration committed")
+        print("[Recording] \(position.rawValue): ========== DATA OUTPUTS SETUP COMPLETE ==========")
     }
 
     func stopRecording() {

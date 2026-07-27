@@ -51,13 +51,16 @@ class PermissionStatusManager: ObservableObject {
     }
 
     func updatePermissionStatuses() {
+        print("[Permissions] Checking all permissions...")
         cameraStatus = checkCameraPermission()
         microphoneStatus = checkMicrophonePermission()
         photosStatus = checkPhotosPermission()
+        print("[Permissions] Camera: \(cameraStatus.displayText), Microphone: \(microphoneStatus.displayText), Photos: \(photosStatus.displayText)")
     }
 
     private func checkCameraPermission() -> PermissionStatus {
         let status = AVCaptureDevice.authorizationStatus(for: .video)
+        print("[Permissions] Camera permission status: \(status.rawValue)")
         switch status {
         case .authorized:
             return .granted
@@ -72,6 +75,7 @@ class PermissionStatusManager: ObservableObject {
 
     private func checkMicrophonePermission() -> PermissionStatus {
         let status = AVAudioSession.sharedInstance().recordPermission
+        print("[Permissions] Microphone permission status: \(status.rawValue)")
         switch status {
         case .granted:
             return .granted
@@ -86,6 +90,7 @@ class PermissionStatusManager: ObservableObject {
 
     private func checkPhotosPermission() -> PermissionStatus {
         let status = PHPhotoLibrary.authorizationStatus(for: .addOnly)
+        print("[Permissions] Photos permission status: \(status.rawValue)")
         switch status {
         case .authorized:
             return .granted
@@ -101,7 +106,9 @@ class PermissionStatusManager: ObservableObject {
     }
 
     func requestCameraPermission() {
-        AVCaptureDevice.requestAccess(for: .video) { _ in
+        print("[Permissions] Requesting camera permission...")
+        AVCaptureDevice.requestAccess(for: .video) { granted in
+            print("[Permissions] Camera permission result: \(granted ? "GRANTED" : "DENIED")")
             DispatchQueue.main.async {
                 self.updatePermissionStatuses()
             }
@@ -109,7 +116,9 @@ class PermissionStatusManager: ObservableObject {
     }
 
     func requestMicrophonePermission() {
-        AVAudioApplication.requestRecordPermission { _ in
+        print("[Permissions] Requesting microphone permission...")
+        AVAudioApplication.requestRecordPermission { granted in
+            print("[Permissions] Microphone permission result: \(granted ? "GRANTED" : "DENIED")")
             DispatchQueue.main.async {
                 self.updatePermissionStatuses()
             }
@@ -117,7 +126,9 @@ class PermissionStatusManager: ObservableObject {
     }
 
     func requestPhotosPermission() {
-        PHPhotoLibrary.requestAuthorization(for: .addOnly) { _ in
+        print("[Permissions] Requesting photos permission...")
+        PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
+            print("[Permissions] Photos permission result: \(status.rawValue)")
             DispatchQueue.main.async {
                 self.updatePermissionStatuses()
             }
