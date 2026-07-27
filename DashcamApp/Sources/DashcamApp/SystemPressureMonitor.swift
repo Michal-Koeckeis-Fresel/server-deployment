@@ -200,8 +200,6 @@ class SystemPressureMonitor: NSObject, ObservableObject {
         switch thermalWarningLevel {
         case .nominal:
             return "Nominal"
-        case .moderate:
-            return "Moderate"
         case .serious:
             return "Serious"
         case .critical:
