@@ -116,8 +116,8 @@ class AudioEventDetector: NSObject, ObservableObject, AVAudioRecorderDelegate {
         guard let recorder = audioRecorder else { return }
 
         recorder.updateMeters()
-        let averagePower = recorder.averagePowerForChannel(0)
-        let peakPower = recorder.peakPowerForChannel(0)
+        let averagePower = recorder.averagePower(forChannel: 0)
+        let peakPower = recorder.peakPower(forChannel: 0)
 
         DispatchQueue.main.async {
             self.currentAudioLevel = averagePower
