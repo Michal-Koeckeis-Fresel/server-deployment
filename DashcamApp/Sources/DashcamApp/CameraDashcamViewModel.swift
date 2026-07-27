@@ -224,7 +224,7 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         }
 
         chunkURLs.removeAll()
-        for (position, let camera) in cameras {
+        for (position, camera) in cameras {
             guard camera.captureSession?.isRunning == true else {
                 cameraStatus[position] = "Error"
                 continue
@@ -273,7 +273,7 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
     }
 
     func stopRecording() {
-        for (position, let camera) in cameras {
+        for (position, camera) in cameras {
             camera.stopRecording()
             cameras[position] = camera
             cameraStatus[position] = camera.captureSession?.isRunning == true ? "Ready" : "Error"
@@ -354,7 +354,7 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         chunkURLs.removeAll()
         currentChunkNumber += 1
 
-        for (position, let camera) in cameras {
+        for (position, camera) in cameras {
             guard camera.captureSession?.isRunning == true else { continue }
 
             if let videoOutput = camera.videoOutput, videoOutput.isRecording {
