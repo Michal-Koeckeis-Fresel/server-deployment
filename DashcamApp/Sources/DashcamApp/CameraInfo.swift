@@ -48,6 +48,8 @@ enum CameraSetupError: Error {
 class CameraRecorderDelegate: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudioDataOutputSampleBufferDelegate {
     var realtimeVideoWriter: RealtimeVideoWriter?
     var watermarkGenerator: WatermarkTextGenerator?
+    private var videoFrameCount = 0
+    private var audioFrameCount = 0
 
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         if CMSampleBufferDataIsReady(sampleBuffer) {
@@ -60,7 +62,15 @@ class CameraRecorderDelegate: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     }
 
     private func handleVideoSample(_ sampleBuffer: CMSampleBuffer) {
-        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        if videoFrameCount == 0 {
+            print("CameraRecorderDelegate: ✅ Received first video frame")
+        }
+        videoFrameCount += 1
+
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+            print("CameraRecorderDelegate: ❌ Could not get pixel buffer from sample")
+            return
+        }
         let timestamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
         let watermarkText = watermarkGenerator?.generateFullWatermarkText() ?? ""
         realtimeVideoWriter?.processAndWriteFrame(pixelBuffer, timestamp: timestamp, watermarkText: watermarkText)
@@ -310,51 +320,34 @@ class CameraRecorder {
     func startRecording(to url: URL, delegate: AVCaptureFileOutputRecordingDelegate, withWatermark watermarkGenerator: WatermarkTextGenerator? = nil) {
         print("[Recording] Starting recording for \(position.rawValue)")
 
-        // Use sessionQueue to ensure recording starts after session is ready
-        sessionQueue.async {
-            // Wait for session to be ready
-            guard let session = self.captureSession else {
-                print("[Recording] \(self.position.rawValue): ❌ No capture session")
-                return
-            }
-
-            // Give session time to start if it was just queued
-            if !session.isRunning {
-                print("[Recording] \(self.position.rawValue): ⏳ Waiting for session to start...")
-                // Wait up to 2 seconds for session to start
-                let startTime = Date()
-                while !session.isRunning && Date().timeIntervalSince(startTime) < 2.0 {
-                    Thread.sleep(forTimeInterval: 0.05)
-                }
-                print("[Recording] \(self.position.rawValue): isRunning=\(session.isRunning)")
-            }
-
-            guard session.isRunning else {
-                print("[Recording] \(self.position.rawValue): ❌ Session did not start")
-                return
-            }
-
-            if let videoOutput = self.videoOutput, videoOutput.isRecording {
-                videoOutput.stopRecording()
-            }
-
-            self.currentURL = url
-
-            if let watermarkGenerator = watermarkGenerator {
-                let recorderDelegate = CameraRecorderDelegate()
-                recorderDelegate.watermarkGenerator = watermarkGenerator
-                recorderDelegate.realtimeVideoWriter = self.realtimeVideoWriter
-                self.recorderDelegate = recorderDelegate
-
-                self.setupWatermarkedRecording(to: url, delegate: delegate, watermarkGenerator: watermarkGenerator)
-            } else if let videoOutput = self.videoOutput {
-                print("[Recording] \(self.position.rawValue): ✅ Starting MovieFileOutput recording")
-                videoOutput.startRecording(to: url, recordingDelegate: delegate)
-            }
-
-            self.isRecording = true
-            print("[Recording] \(self.position.rawValue): ✅ Recording started")
+        // Start recording synchronously - don't use sessionQueue to avoid potential deadlocks
+        guard let session = self.captureSession else {
+            print("[Recording] \(self.position.rawValue): ❌ No capture session")
+            return
         }
+
+        print("[Recording] \(self.position.rawValue): Session isRunning=\(session.isRunning)")
+
+        if let videoOutput = self.videoOutput, videoOutput.isRecording {
+            videoOutput.stopRecording()
+        }
+
+        self.currentURL = url
+
+        if let watermarkGenerator = watermarkGenerator {
+            let recorderDelegate = CameraRecorderDelegate()
+            recorderDelegate.watermarkGenerator = watermarkGenerator
+            recorderDelegate.realtimeVideoWriter = self.realtimeVideoWriter
+            self.recorderDelegate = recorderDelegate
+
+            self.setupWatermarkedRecording(to: url, delegate: delegate, watermarkGenerator: watermarkGenerator)
+        } else if let videoOutput = self.videoOutput {
+            print("[Recording] \(self.position.rawValue): ✅ Starting MovieFileOutput recording")
+            videoOutput.startRecording(to: url, recordingDelegate: delegate)
+        }
+
+        self.isRecording = true
+        print("[Recording] \(self.position.rawValue): ✅ Recording started")
     }
 
     private func setupWatermarkedRecording(to url: URL, delegate: AVCaptureFileOutputRecordingDelegate, watermarkGenerator: WatermarkTextGenerator) {
@@ -392,6 +385,10 @@ class CameraRecorder {
     private func setupDataOutputs() {
         guard let session = captureSession else { return }
 
+        print("[Recording] \(position.rawValue): Setting up data outputs")
+
+        session.beginConfiguration()
+
         let videoDataOutput = AVCaptureVideoDataOutput()
         videoDataOutput.setSampleBufferDelegate(recorderDelegate, queue: sessionQueue)
         videoDataOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
@@ -400,6 +397,9 @@ class CameraRecorder {
         if session.canAddOutput(videoDataOutput) {
             session.addOutput(videoDataOutput)
             self.videoDataOutput = videoDataOutput
+            print("[Recording] \(position.rawValue): ✅ Video output added")
+        } else {
+            print("[Recording] \(position.rawValue): ❌ Cannot add video output")
         }
 
         let audioDataOutput = AVCaptureAudioDataOutput()
@@ -408,7 +408,12 @@ class CameraRecorder {
         if session.canAddOutput(audioDataOutput) {
             session.addOutput(audioDataOutput)
             self.audioDataOutput = audioDataOutput
+            print("[Recording] \(position.rawValue): ✅ Audio output added")
+        } else {
+            print("[Recording] \(position.rawValue): ❌ Cannot add audio output")
         }
+
+        session.commitConfiguration()
     }
 
     func stopRecording() {

@@ -55,12 +55,18 @@ class RealtimeVideoWriter {
     }
 
     func processAndWriteFrame(_ pixelBuffer: CVPixelBuffer, timestamp: CMTime, watermarkText: String) {
-        guard let writer = assetWriter, writer.status == .writing else { return }
+        guard let writer = assetWriter, writer.status == .writing else {
+            if frameCount == 0 {
+                print("RealtimeVideoWriter: Writer not ready (status: \(assetWriter?.status.rawValue ?? -1))")
+            }
+            return
+        }
 
         if !sessionStarted {
             sessionStarted = true
             startTime = timestamp
             writer.startSession(atSourceTime: .zero)
+            print("RealtimeVideoWriter: Session started at timestamp \(timestamp)")
         }
 
         let adjustedTime = CMTimeSubtract(timestamp, startTime)
@@ -71,8 +77,12 @@ class RealtimeVideoWriter {
             if videoInput.isReadyForMoreMediaData {
                 let watermarkedBuffer = self.addWatermark(to: pixelBuffer, text: watermarkText)
                 if self.pixelBufferAdapter?.append(watermarkedBuffer, withPresentationTime: adjustedTime) == false {
-                    print("Failed to write video frame at time \(adjustedTime)")
+                    print("RealtimeVideoWriter: Failed to write video frame at time \(adjustedTime)")
+                } else if self.frameCount % 30 == 0 {
+                    print("RealtimeVideoWriter: Wrote frame \(self.frameCount) at time \(adjustedTime)")
                 }
+            } else if self.frameCount == 0 {
+                print("RealtimeVideoWriter: Video input not ready for media data")
             }
 
             self.frameCount += 1
