@@ -756,7 +756,6 @@ struct ContentView: View {
                     recordingStartTime = Date()
                 }
             }
-        }
         .alert(
             viewModel.crashDetected ? "⚠️ Crash Detected" : "🛑 Emergency Brake Detected",
             isPresented: $viewModel.showCrashAlert
