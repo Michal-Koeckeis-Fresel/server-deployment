@@ -64,7 +64,7 @@ class PerformanceLogger: NSObject, ObservableObject {
     }
 
     private func getMemoryUsage() -> Double {
-        var info = task_vm_info_data_t()
+        var info = task_vm_info()
         var count = mach_msg_type_number_t(MemoryLayout<task_vm_info>.size)/4
 
         let kerr = withUnsafeMutablePointer(to: &info) {
@@ -92,10 +92,14 @@ class PerformanceLogger: NSObject, ObservableObject {
             var threadInfo = thread_basic_info()
             var count = mach_msg_type_number_t(MemoryLayout<thread_basic_info>.size)/4
 
-            let threadKerr = thread_info(threadList![i],
-                                        thread_flavor_t(THREAD_BASIC_INFO),
-                                        &threadInfo,
-                                        &count)
+            let threadKerr = withUnsafeMutablePointer(to: &threadInfo) {
+                $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
+                    thread_info(threadList![i],
+                               thread_flavor_t(THREAD_BASIC_INFO),
+                               $0,
+                               &count)
+                }
+            }
 
             if threadKerr == KERN_SUCCESS {
                 totalTime += UInt64(threadInfo.cpu_usage)
