@@ -2,7 +2,8 @@ import Foundation
 import CoreLocation
 import SwiftUI
 
-class AutoStartRecordingManager: NSObject, ObservableObject {
+@MainActor
+final class AutoStartRecordingManager: NSObject, ObservableObject {
     static let shared = AutoStartRecordingManager()
 
     @Published var isAutoStartEnabled: Bool = UserDefaults.standard.bool(forKey: "autoStartEnabled") {
