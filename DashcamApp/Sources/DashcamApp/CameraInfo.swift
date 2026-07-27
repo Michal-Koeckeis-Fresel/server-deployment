@@ -100,7 +100,6 @@ class CameraRecorder {
 
     private func configureSession(_ session: AVCaptureSession) throws {
         session.beginConfiguration()
-        defer { session.commitConfiguration() }
 
         try validatePreset()
         session.sessionPreset = .high
@@ -108,6 +107,8 @@ class CameraRecorder {
         let videoDevice = try findAndConfigureVideoDevice()
         try configureVideoInput(videoDevice, to: session)
         try configureVideoOutput(to: session, with: videoDevice)
+
+        session.commitConfiguration()
 
         sessionQueue.async {
             session.startRunning()
