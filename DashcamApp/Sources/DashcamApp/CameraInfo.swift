@@ -143,7 +143,11 @@ class CameraRecorder {
         sessionQueue.async {
             print("[CameraInfo] \(self.position.rawValue): Session starting...")
             session.startRunning()
-            print("[CameraInfo] \(self.position.rawValue): Session started, isRunning=\(session.isRunning)")
+            let isRunning = session.isRunning
+            print("[CameraInfo] \(self.position.rawValue): Session started, isRunning=\(isRunning)")
+            if !isRunning {
+                print("[CameraInfo] ⚠️ \(self.position.rawValue): Session failed to start running. Check if device is available and not already in use.")
+            }
             // Signal that session has started
             self.sessionStartedSemaphore.signal()
         }

@@ -27,7 +27,7 @@ class RealtimeVideoWriter {
         guard let videoInput = videoInput else { throw NSError(domain: "RealtimeVideoWriter", code: -2) }
 
         let pixelBufferAttributes: [String: Any] = [
-            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32ARGB,
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
             kCVPixelBufferWidthKey as String: 1920,
             kCVPixelBufferHeightKey as String: 1080
         ]
@@ -65,27 +65,38 @@ class RealtimeVideoWriter {
         if !sessionStarted {
             sessionStarted = true
             startTime = timestamp
-            writer.startSession(atSourceTime: .zero)
+            writer.startSession(atSourceTime: CMTime.zero)
             print("RealtimeVideoWriter: Session started at timestamp \(timestamp)")
         }
 
         let adjustedTime = CMTimeSubtract(timestamp, startTime)
 
         writeQueue.async { [weak self] in
-            guard let self = self, let videoInput = self.videoInput else { return }
+            guard let self = self else { return }
+            guard let videoInput = self.videoInput else {
+                if self.frameCount == 0 {
+                    print("RealtimeVideoWriter: ERROR - videoInput is nil!")
+                }
+                return
+            }
+            guard let pixelBufferAdapter = self.pixelBufferAdapter else {
+                if self.frameCount == 0 {
+                    print("RealtimeVideoWriter: ERROR - pixelBufferAdapter is nil!")
+                }
+                return
+            }
 
             if videoInput.isReadyForMoreMediaData {
                 let watermarkedBuffer = self.addWatermark(to: pixelBuffer, text: watermarkText)
-                if self.pixelBufferAdapter?.append(watermarkedBuffer, withPresentationTime: adjustedTime) == false {
+                if !pixelBufferAdapter.append(watermarkedBuffer, withPresentationTime: adjustedTime) {
                     print("RealtimeVideoWriter: Failed to write video frame at time \(adjustedTime)")
                 } else if self.frameCount % 30 == 0 {
                     print("RealtimeVideoWriter: Wrote frame \(self.frameCount) at time \(adjustedTime)")
                 }
+                self.frameCount += 1
             } else if self.frameCount == 0 {
-                print("RealtimeVideoWriter: Video input not ready for media data")
+                print("RealtimeVideoWriter: Video input not ready for media data - will wait for buffer availability")
             }
-
-            self.frameCount += 1
         }
     }
 
