@@ -1,7 +1,8 @@
 import Foundation
 import SwiftUI
 
-class PerformanceLogger: NSObject, ObservableObject {
+@MainActor
+final class PerformanceLogger: NSObject, ObservableObject {
     static let shared = PerformanceLogger()
 
     @Published var recordingFPS: Double = 0.0

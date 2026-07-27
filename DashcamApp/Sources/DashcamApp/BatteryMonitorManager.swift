@@ -50,7 +50,8 @@ enum BatteryStateDetail: String {
     }
 }
 
-class BatteryMonitorManager: NSObject, ObservableObject {
+@MainActor
+final class BatteryMonitorManager: NSObject, ObservableObject {
     static let shared = BatteryMonitorManager()
 
     @Published var batteryLevel: Float = UIDevice.current.batteryLevel

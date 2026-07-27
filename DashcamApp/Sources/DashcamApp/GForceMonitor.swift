@@ -2,7 +2,8 @@ import Foundation
 import CoreMotion
 import SwiftUI
 
-class GForceMonitor: NSObject, ObservableObject {
+@MainActor
+final class GForceMonitor: NSObject, ObservableObject {
     static let shared = GForceMonitor()
 
     @Published var currentGForce: Double = 0.0

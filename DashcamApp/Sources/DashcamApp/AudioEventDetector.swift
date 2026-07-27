@@ -2,7 +2,8 @@ import Foundation
 import AVFoundation
 import SwiftUI
 
-class AudioEventDetector: NSObject, ObservableObject, AVAudioRecorderDelegate {
+@MainActor
+final class AudioEventDetector: NSObject, ObservableObject, @preconcurrency AVAudioRecorderDelegate {
     static let shared = AudioEventDetector()
 
     @Published var isMonitoring: Bool = false

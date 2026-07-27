@@ -42,7 +42,8 @@ class DashcamIntentHandler: NSObject, INStartCallIntentHandling {
 }
 
 // Simple Siri Shortcut trigger handler
-class SiriShortcutManager: NSObject, ObservableObject {
+@MainActor
+final class SiriShortcutManager: NSObject, ObservableObject {
     static let shared = SiriShortcutManager()
 
     @Published var lastCommand: String?

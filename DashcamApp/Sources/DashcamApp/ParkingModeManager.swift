@@ -2,7 +2,8 @@ import Foundation
 import CoreMotion
 import SwiftUI
 
-class ParkingModeManager: NSObject, ObservableObject {
+@MainActor
+final class ParkingModeManager: NSObject, ObservableObject {
     static let shared = ParkingModeManager()
 
     @Published var isParkingModeEnabled: Bool = UserDefaults.standard.bool(forKey: "parkingModeEnabled") {
