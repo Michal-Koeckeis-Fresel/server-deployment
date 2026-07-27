@@ -139,6 +139,15 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
     }
 
     private func initializeCameras() {
+        // Initialize the shared multi-camera session BEFORE adding any cameras
+        let multiCamSessionManager = MultiCameraSessionManager.shared
+        if !multiCamSessionManager.setupMultiCameraSession() {
+            print("[ViewModel] ❌ Failed to setup multi-camera session")
+            errorMessage = "Failed to initialize camera session"
+            return
+        }
+        print("[ViewModel] ✅ Multi-camera session initialized")
+
         let capabilityChecker = CameraCapabilityChecker.shared
         capabilityChecker.printCapabilitiesReport()
 
@@ -569,6 +578,8 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
         for (_, camera) in cameras {
             camera.cleanup()
         }
+        // Stop the shared multi-camera session
+        MultiCameraSessionManager.shared.stopSession()
     }
 }
 
