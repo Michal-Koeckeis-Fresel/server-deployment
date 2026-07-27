@@ -956,16 +956,38 @@ struct SettingsView: View {
                             }
 
                             if selectedStorageLocation == .onDevice {
-                                HStack(spacing: 8) {
-                                    Image(systemName: "exclamationmark.triangle.fill")
-                                        .foregroundColor(.red)
-                                    Text("Files will be deleted when app is uninstalled!")
-                                        .font(.caption)
-                                        .foregroundColor(.red)
+                                VStack(spacing: 8) {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "exclamationmark.triangle.fill")
+                                            .foregroundColor(.red)
+                                        Text("Files deleted when app is uninstalled")
+                                            .font(.caption)
+                                            .foregroundColor(.red)
+                                    }
+                                    Text("Recordings are stored only on your device storage. They will be permanently deleted if you uninstall the app.")
+                                        .font(.caption2)
+                                        .foregroundColor(.gray)
                                 }
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 8)
                                 .background(Color.red.opacity(0.1))
+                                .cornerRadius(6)
+                            } else if selectedStorageLocation == .iCloud {
+                                VStack(spacing: 8) {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "icloud.fill")
+                                            .foregroundColor(.blue)
+                                        Text("High upload traffic over cellular")
+                                            .font(.caption)
+                                            .foregroundColor(.blue)
+                                    }
+                                    Text("iCloud automatically uploads files over your mobile network. Large video files will consume significant data. Consider using Wi-Fi for best results.")
+                                        .font(.caption2)
+                                        .foregroundColor(.gray)
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color.blue.opacity(0.1))
                                 .cornerRadius(6)
                             } else {
                                 HStack(spacing: 8) {
