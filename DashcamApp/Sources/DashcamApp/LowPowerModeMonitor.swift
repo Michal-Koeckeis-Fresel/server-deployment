@@ -19,7 +19,7 @@ class LowPowerModeMonitor: NSObject, ObservableObject {
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(powerStateDidChange),
-            name: NSProcessInfo.powerStateDidChangeNotification,
+            name: ProcessInfo.powerStateDidChangeNotification,
             object: nil
         )
     }

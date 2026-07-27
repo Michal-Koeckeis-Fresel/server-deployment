@@ -73,7 +73,7 @@ class NightModeManager: NSObject, ObservableObject {
             try device.lockForConfiguration()
 
             if device.isLowLightBoostSupported {
-                device.automaticallyEnablesLowLightBoost = true
+                device.automaticallyEnablesLowLightBoostWhenAvailable = true
                 isActive = device.isLowLightBoostEnabled
                 logNightMode("Night Mode enabled via Low Light Boost")
             }
@@ -94,7 +94,7 @@ class NightModeManager: NSObject, ObservableObject {
             try device.lockForConfiguration()
 
             if device.isLowLightBoostSupported {
-                device.automaticallyEnablesLowLightBoost = false
+                device.automaticallyEnablesLowLightBoostWhenAvailable = false
             }
 
             device.unlockForConfiguration()
@@ -135,12 +135,12 @@ class NightModeManager: NSObject, ObservableObject {
                 let shouldEnableLowLightBoost = exposure < Float(brightnessThreshold)
 
                 if shouldEnableLowLightBoost && !device.isLowLightBoostEnabled {
-                    device.automaticallyEnablesLowLightBoost = true
+                    device.automaticallyEnablesLowLightBoostWhenAvailable = true
                     isActive = true
                     applyExposureSettings()
                     logNightMode("Auto Night Mode: Scene too dark (exposure: \(String(format: "%.2f", exposure)))")
                 } else if !shouldEnableLowLightBoost && device.isLowLightBoostEnabled && !isEnabled {
-                    device.automaticallyEnablesLowLightBoost = false
+                    device.automaticallyEnablesLowLightBoostWhenAvailable = false
                     isActive = false
                     resetExposureSettings()
                     logNightMode("Auto Night Mode: Scene bright enough (exposure: \(String(format: "%.2f", exposure)))")
