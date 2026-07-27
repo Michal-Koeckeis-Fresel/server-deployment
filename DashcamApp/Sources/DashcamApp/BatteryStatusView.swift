@@ -126,7 +126,8 @@ struct BatteryStatusView: View {
         }
 
         let level = batteryManager.batteryLevel
-        if level < batteryManager.criticalBatteryThreshold {
+        let criticalBatteryThreshold: Double = 0.1  // 10% - hardcoded value
+        if level < criticalBatteryThreshold {
             return .red
         } else if level < 0.20 {
             return .orange

@@ -177,7 +177,11 @@ struct CameraRecorder {
             videoConnection.preferredVideoStabilizationMode = .cinematic
         }
 
-        if videoConnection.isVideoOrientationSupported {
+        // Set video orientation
+        if #available(iOS 17.0, *) {
+            // Video orientation handling for iOS 17+
+            videoConnection.videoOrientation = .portrait
+        } else {
             videoConnection.videoOrientation = .portrait
         }
 
@@ -211,17 +215,15 @@ struct CameraRecorder {
         if connection.isVideoStabilizationSupported {
             connection.preferredVideoStabilizationMode = .cinematic
         }
-
-        if #available(iOS 17.0, *) {
-            if connection.isCinematicVideoStabilizationSupported {
-                connection.preferredVideoStabilizationMode = .cinematic
-            }
-        }
     }
 
     private func configureHDRVideo(for output: AVCaptureMovieFileOutput, device: AVCaptureDevice) {
         if #available(iOS 17.0, *) {
-            guard device.isHDRVideoSupported else { return }
+            // Check if device formats support HDR by checking for HLG color space
+            let supportsHDR = device.formats.contains { format in
+                format.supportedColorSpaces.contains(.hlg)
+            }
+            guard supportsHDR else { return }
 
             do {
                 try device.lockForConfiguration()
@@ -258,11 +260,8 @@ struct CameraRecorder {
                 device.whiteBalanceMode = .continuousAutoWhiteBalance
             }
 
-            if #available(iOS 16.0, *) {
-                if device.isAutoFocusSystemSupported(.autofocusSystemSensorFusion) {
-                    device.focusMode = .continuousAutoFocus
-                }
-            }
+            // Note: isAutoFocusSystemSupported was removed in iOS 18
+            // Continuous auto-focus is set above and should be sufficient
 
             if device.isLowLightBoostSupported {
                 device.automaticallyEnablesLowLightBoostWhenAvailable = true

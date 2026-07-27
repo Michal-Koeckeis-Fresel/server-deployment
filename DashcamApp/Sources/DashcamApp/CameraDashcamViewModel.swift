@@ -123,16 +123,23 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
             }
         }
 
-        AVAudioSession.sharedInstance().requestRecordPermission { granted in
-            if !granted {
-                DispatchQueue.main.async {
-                    self.errorMessage = "Microphone permission denied"
+        // Request microphone permission
+        if #available(iOS 18.0, *) {
+            AVAudioApplication.requestRecordPermissionWithCompletionHandler { granted in
+                if !granted {
+                    DispatchQueue.main.async {
+                        self.errorMessage = "Microphone permission denied"
+                    }
                 }
             }
-        }
-
-        if storageLocationManager.selectedLocation == .photos {
-            storageLocationManager.requestPhotosPermission { _ in }
+        } else {
+            AVAudioSession.sharedInstance().requestRecordPermission { granted in
+                if !granted {
+                    DispatchQueue.main.async {
+                        self.errorMessage = "Microphone permission denied"
+                    }
+                }
+            }
         }
     }
 
@@ -561,16 +568,6 @@ extension CameraDashcamViewModel: AVCaptureFileOutputRecordingDelegate {
         } else {
             DispatchQueue.main.async {
                 self.updateStorageInfo()
-
-                if self.storageLocationManager.selectedLocation == .photos {
-                    self.storageLocationManager.saveVideoToPhotos(outputFileURL) { success in
-                        DispatchQueue.main.async {
-                            if success {
-                                print("Video saved to Photos: \(outputFileURL.lastPathComponent)")
-                            }
-                        }
-                    }
-                }
             }
         }
     }

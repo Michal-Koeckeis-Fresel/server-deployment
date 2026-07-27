@@ -43,20 +43,19 @@ class CameraCapabilityChecker {
 
         let supportsHDR = {
             if #available(iOS 17.0, *) {
-                return device.isHDRVideoSupported
+                let formats = device.formats
+                return formats.contains { format in
+                    format.supportedColorSpaces.contains(.hlg)
+                }
             }
             return false
         }()
 
         let supportsCinematic = {
             if #available(iOS 17.0, *) {
-                do {
-                    let formats = device.formats
-                    return formats.contains { format in
-                        format.supportedColorSpaces.contains(.hlg)
-                    }
-                } catch {
-                    return false
+                let formats = device.formats
+                return formats.contains { format in
+                    format.supportedColorSpaces.contains(.hlg)
                 }
             }
             return false

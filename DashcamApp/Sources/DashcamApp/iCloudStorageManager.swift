@@ -62,9 +62,8 @@ class iCloudStorageManager {
         do {
             try fileManager.copyItem(at: localURL, to: iCloudURL)
 
-            var resourceValues = URLResourceValues()
-            resourceValues.isUbiquitousItem = true
-            try iCloudURL.setResourceValues(resourceValues)
+            // Note: Files in iCloud container are automatically marked as ubiquitous
+            // No need to set isUbiquitousItem as it's read-only and managed by the system
 
             print("✓ Copied to iCloud: \(fileName)")
             return iCloudURL
