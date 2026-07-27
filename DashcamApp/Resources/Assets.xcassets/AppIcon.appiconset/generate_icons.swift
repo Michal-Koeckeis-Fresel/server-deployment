@@ -32,7 +32,7 @@ for (size, filename) in iconSizes {
     let bgRed = CGFloat(25) / CGFloat(255)
     let bgGreen = CGFloat(55) / CGFloat(255)
     let bgBlue = CGFloat(100) / CGFloat(255)
-    let bgColor = NSColor(sRed: bgRed, green: bgGreen, blue: bgBlue, alpha: 1.0)
+    let bgColor = NSColor(srgbRed: bgRed, green: bgGreen, blue: bgBlue, alpha: 1.0)
     bgColor.setFill()
     NSRect(x: 0, y: 0, width: nsSize.width, height: nsSize.height).fill()
 
@@ -40,7 +40,7 @@ for (size, filename) in iconSizes {
     let lensRed = CGFloat(100) / CGFloat(255)
     let lensGreen = CGFloat(180) / CGFloat(255)
     let lensBlue = CGFloat(255) / CGFloat(255)
-    let lensColor = NSColor(sRed: lensRed, green: lensGreen, blue: lensBlue, alpha: 1.0)
+    let lensColor = NSColor(srgbRed: lensRed, green: lensGreen, blue: lensBlue, alpha: 1.0)
     lensColor.setFill()
 
     let margin = CGFloat(size) / 3
