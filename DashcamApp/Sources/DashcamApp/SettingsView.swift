@@ -927,6 +927,10 @@ struct SettingsView: View {
                                         migrationMessage = "Your existing recordings will be migrated to iCloud Drive.\n\nMake sure iCloud is enabled in Settings > [Your Name] > iCloud."
                                         showMigrationAlert = true
                                         StorageLocationManager.shared.migrateRecordings(from: oldLocation)
+                                    } else if oldLocation != location && location == .iCloudLocal {
+                                        migrationMessage = "Your existing recordings will be migrated to the iCloud folder (local only).\n\nFiles persist even if app is uninstalled, with no cloud upload or cellular data usage."
+                                        showMigrationAlert = true
+                                        StorageLocationManager.shared.migrateRecordings(from: oldLocation)
                                     } else if oldLocation != location && location == .filesApp {
                                         migrationMessage = "Your existing recordings will be migrated to the Files app folder.\n\nAccess them in the Files app > On My iPhone > Dashcam > Dashcam Recordings."
                                         showMigrationAlert = true
@@ -989,6 +993,23 @@ struct SettingsView: View {
                                 .padding(.vertical, 8)
                                 .background(Color.blue.opacity(0.1))
                                 .cornerRadius(6)
+                            } else if selectedStorageLocation == .iCloudLocal {
+                                VStack(spacing: 8) {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundColor(.green)
+                                        Text("No cloud upload or cellular data")
+                                            .font(.caption)
+                                            .foregroundColor(.green)
+                                    }
+                                    Text("Files are stored in the iCloud folder but remain local. They persist even if you uninstall the app, with zero cellular data usage.")
+                                        .font(.caption2)
+                                        .foregroundColor(.gray)
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color.green.opacity(0.1))
+                                .cornerRadius(6)
                             } else {
                                 HStack(spacing: 8) {
                                     Image(systemName: "checkmark.circle.fill")
@@ -1009,15 +1030,17 @@ struct SettingsView: View {
                                 .font(.caption2)
                                 .foregroundColor(.orange)
                                 .padding(.top, 4)
+                        } else if selectedStorageLocation == .iCloudLocal {
+                            Text("Files stored locally in iCloud folder - accessible via Xcode or recovered after reinstall")
+                                .font(.caption2)
+                                .foregroundColor(.blue)
+                                .padding(.top, 4)
                         } else if selectedStorageLocation == .filesApp {
                             Text("Access your recordings in Files app > On My iPhone > Dashcam Recordings")
                                 .font(.caption2)
                                 .foregroundColor(.blue)
                                 .padding(.top, 4)
                         }
-                            .font(.caption2)
-                            .foregroundColor(.orange)
-                            .padding(.top, 4)
                     }
                     .padding(16)
                     .background(Color.gray.opacity(0.1))

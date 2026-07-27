@@ -3,6 +3,7 @@ import Foundation
 enum StorageLocation: String, CaseIterable {
     case onDevice = "On Device (Local)"
     case iCloud = "iCloud Drive"
+    case iCloudLocal = "iCloud Folder (Local Only)"
     case filesApp = "Files App Folder"
 
     var displayName: String {
@@ -15,6 +16,8 @@ enum StorageLocation: String, CaseIterable {
             return "Stores on device only. Deleted if app is uninstalled."
         case .iCloud:
             return "Stores in iCloud Drive. Persists even if app is uninstalled."
+        case .iCloudLocal:
+            return "Stores in iCloud folder without uploading. Persists but no cellular data used."
         case .filesApp:
             return "Organized folder in Files app. Access via Files, iCloud Drive, or Mac."
         }
@@ -26,6 +29,8 @@ enum StorageLocation: String, CaseIterable {
             return "⚠️ Files will be deleted when app is uninstalled!"
         case .iCloud:
             return "✅ Files persist in iCloud even if app is uninstalled."
+        case .iCloudLocal:
+            return "✅ Files persist but stay local - no cloud sync or cellular data used."
         case .filesApp:
             return "✅ Files persist in Files app folder. Accessible after uninstall."
         }
@@ -73,6 +78,27 @@ class StorageLocationManager {
                 return dashcamFolder
             } catch {
                 print("Failed to create iCloud directory: \(error)")
+                return nil
+            }
+
+        case .iCloudLocal:
+            guard let iCloudContainerURL = fileManager.url(
+                forUbiquityContainerIdentifier: nil
+            ) else {
+                return nil
+            }
+
+            let dashcamFolder = iCloudContainerURL.appendingPathComponent("Dashcam Recordings Local", isDirectory: true)
+
+            do {
+                try fileManager.createDirectory(
+                    at: dashcamFolder,
+                    withIntermediateDirectories: true,
+                    attributes: nil
+                )
+                return dashcamFolder
+            } catch {
+                print("Failed to create iCloud local directory: \(error)")
                 return nil
             }
 
@@ -159,6 +185,14 @@ class StorageLocationManager {
                 return nil
             }
             return iCloudContainerURL.appendingPathComponent("Dashcam Recordings", isDirectory: true)
+
+        case .iCloudLocal:
+            guard let iCloudContainerURL = fileManager.url(
+                forUbiquityContainerIdentifier: nil
+            ) else {
+                return nil
+            }
+            return iCloudContainerURL.appendingPathComponent("Dashcam Recordings Local", isDirectory: true)
 
         case .filesApp:
             return fileManager.urls(for: .documentDirectory, in: .userDomainMask).first
