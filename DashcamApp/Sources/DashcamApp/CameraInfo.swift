@@ -210,6 +210,7 @@ class CameraRecorder {
             do {
                 try device.lockForConfiguration()
                 defer { device.unlockForConfiguration() }
+                device.automaticallyAdjustsVideoHDREnabled = false
                 device.isVideoHDREnabled = true
             } catch {
                 print("Warning: Could not enable HDR video: \(error)")
