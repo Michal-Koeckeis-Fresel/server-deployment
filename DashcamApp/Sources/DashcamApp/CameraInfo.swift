@@ -1,28 +1,28 @@
 import AVFoundation
 
 enum CameraPosition: String, CaseIterable {
-    case frontWide = "Front Wide"
-    case frontTelephoto = "Front Zoom"
+    case backWide = "Back Wide"
+    case backTelephoto = "Back Zoom"
 
     var position: AVCaptureDevice.Position {
-        return .front
+        return .back
     }
 
     var deviceType: AVCaptureDevice.DeviceType {
         switch self {
-        case .frontWide:
+        case .backWide:
             return .builtInWideAngleCamera
-        case .frontTelephoto:
+        case .backTelephoto:
             return .builtInTelephotoCamera
         }
     }
 
     var filePrefix: String {
         switch self {
-        case .frontWide:
-            return "front_wide"
-        case .frontTelephoto:
-            return "front_zoom"
+        case .backWide:
+            return "back_wide"
+        case .backTelephoto:
+            return "back_zoom"
         }
     }
 }
@@ -181,7 +181,7 @@ class CameraRecorder {
             videoConnection.videoOrientation = .portrait
         }
 
-        videoConnection.isVideoMirrored = (position == .frontWide || position == .frontTelephoto)
+        videoConnection.isVideoMirrored = false
 
         if !videoConnection.isActive {
             throw CameraSetupError.configurationFailed
