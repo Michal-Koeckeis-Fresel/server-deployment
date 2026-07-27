@@ -106,7 +106,7 @@ class CameraDashcamViewModel: NSObject, ObservableObject {
             try audioSession.setCategory(
                 .record,
                 mode: .default,
-                options: [.duckOthers, .defaultToSpeaker]
+                options: [.duckOthers]
             )
             try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
         } catch {

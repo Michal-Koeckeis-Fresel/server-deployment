@@ -109,7 +109,7 @@ class CameraRecorder {
         try configureVideoInput(videoDevice, to: session)
         try configureVideoOutput(to: session, with: videoDevice)
 
-        sessionQueue.asyncAfter(deadline: .now() + 0.1) {
+        sessionQueue.async {
             session.startRunning()
         }
     }
